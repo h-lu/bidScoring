@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bid_scoring"
+version = "0.1.0"
+description = "Bid Scoring System"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bid_scoring*", "mcp_servers*"]
