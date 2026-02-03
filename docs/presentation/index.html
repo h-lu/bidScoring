@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投标评分系统 - 实施计划</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        code, .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 50%, #06B6D4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px -12px rgba(59, 130, 246, 0.2);
+        }
+        .step-line::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: -2rem;
+            width: 2px;
+            height: 2rem;
+            background: linear-gradient(to bottom, #3B82F6, transparent);
+        }
+        .step-line:last-child::after {
+            display: none;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .float-animation {
+            animation: float 3s ease-in-out infinite;
+        }
+        .tech-badge {
+            backdrop-filter: blur(8px);
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <span class="font-semibold text-slate-800">投标评分系统</span>
+            </div>
+            <nav class="hidden md:flex items-center gap-6 text-sm text-slate-600">
+                <a href="#background" class="hover:text-blue-600 transition-colors">项目背景</a>
+                <a href="#architecture" class="hover:text-blue-600 transition-colors">技术架构</a>
+                <a href="#steps" class="hover:text-blue-600 transition-colors">实施步骤</a>
+                <a href="#challenges" class="hover:text-blue-600 transition-colors">核心难点</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="min-h-screen flex items-center justify-center relative overflow-hidden pt-20">
+        <div class="absolute inset-0 bg-gradient-to-br from-blue-50 via-slate-50 to-cyan-50"></div>
+        <div class="absolute top-20 right-20 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-20 left-20 w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl"></div>
+
+        <div class="relative z-10 text-center px-6 max-w-4xl mx-auto">
+            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 text-sm font-medium mb-8">
+                <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                实施计划 v1.0
+            </div>
+
+            <h1 class="text-4xl md:text-6xl font-bold mb-6">
+                <span class="gradient-text">AI辅助投标评分系统</span>
+            </h1>
+
+            <p class="text-xl md:text-2xl text-slate-600 mb-8 leading-relaxed">
+                搭建一个本地文档检索+AI评分系统<br>
+                <span class="text-slate-500">让AI帮你给投标文档打分，每个分数都能追溯到原文</span>
+            </p>
+
+            <div class="flex flex-wrap justify-center gap-4 mb-12">
+                <div class="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span class="text-sm">智能检索</span>
+                </div>
+                <div class="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span class="text-sm">AI评分</span>
+                </div>
+                <div class="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span class="text-sm">引用溯源</span>
+                </div>
+            </div>
+
+            <a href="#steps" class="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-medium rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/25 cursor-pointer">
+                查看实施步骤
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </a>
+        </div>
+    </section>
+
+    <!-- Background Section -->
+    <section id="background" class="py-24 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-blue-600 font-medium text-sm tracking-wide">PROJECT BACKGROUND</span>
+                <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-4">项目背景</h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Problem -->
+                <div class="bg-white rounded-2xl p-8 shadow-lg border border-red-100 card-hover cursor-pointer">
+                    <div class="w-14 h-14 rounded-xl bg-red-100 flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4 text-slate-800">当前痛点</h3>
+                    <ul class="space-y-3 text-slate-600">
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-red-600 text-xs font-bold">1</span>
+                            </span>
+                            <span>工作量大，容易疲劳漏看</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-red-600 text-xs font-bold">2</span>
+                            </span>
+                            <span>主观性强，不同人评分标准不一致</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-red-600 text-xs font-bold">3</span>
+                            </span>
+                            <span>难以追溯，不知道分数从哪来</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Solution -->
+                <div class="bg-white rounded-2xl p-8 shadow-lg border border-green-100 card-hover cursor-pointer">
+                    <div class="w-14 h-14 rounded-xl bg-green-100 flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-4 text-slate-800">解决方案</h3>
+                    <ul class="space-y-3 text-slate-600">
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-green-600 text-xs font-bold">1</span>
+                            </span>
+                            <span>文档入库：MineRU解析后存入数据库</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-green-600 text-xs font-bold">2</span>
+                            </span>
+                            <span>智能检索：全文+向量混合检索</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span class="text-green-600 text-xs font-bold">3</span>
+                            </span>
+                            <span>AI评分+引用验证：每个分数可溯源</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section id="architecture" class="py-24 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-blue-600 font-medium text-sm tracking-wide">TECHNICAL ARCHITECTURE</span>
+                <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-4">技术架构</h2>
+            </div>
+
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 md:p-12 text-white">
+                <!-- Architecture Diagram -->
+                <div class="grid grid-cols-5 gap-4 items-center mb-8">
+                    <!-- Input -->
+                    <div class="text-center">
+                        <div class="bg-slate-700/50 rounded-xl p-4 mb-2">
+                            <svg class="w-8 h-8 mx-auto text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <span class="text-sm text-slate-400">投标文档</span>
+                    </div>
+
+                    <!-- Arrow -->
+                    <div class="flex justify-center">
+                        <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
+                    </div>
+
+                    <!-- MineRU -->
+                    <div class="text-center">
+                        <div class="bg-blue-600/20 border border-blue-500/30 rounded-xl p-4 mb-2">
+                            <span class="mono text-sm text-blue-400">MineRU</span>
+                        </div>
+                        <span class="text-sm text-slate-400">PDF解析</span>
+                    </div>
+
+                    <!-- Arrow -->
+                    <div class="flex justify-center">
+                        <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
+                    </div>
+
+                    <!-- DB -->
+                    <div class="text-center">
+                        <div class="bg-cyan-600/20 border border-cyan-500/30 rounded-xl p-4 mb-2">
+                            <svg class="w-8 h-8 mx-auto text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                            </svg>
+                        </div>
+                        <span class="text-sm text-slate-400">PostgreSQL</span>
+                    </div>
+                </div>
+
+                <!-- Tech Stack -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-slate-700/30 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-400 mb-1">PostgreSQL</div>
+                        <div class="text-xs text-slate-400">+ pgvector</div>
+                    </div>
+                    <div class="bg-slate-700/30 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-green-400 mb-1">OpenAI</div>
+                        <div class="text-xs text-slate-400">Embeddings</div>
+                    </div>
+                    <div class="bg-slate-700/30 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-400 mb-1">GPT-4</div>
+                        <div class="text-xs text-slate-400">AI评分</div>
+                    </div>
+                    <div class="bg-slate-700/30 rounded-xl p-4 text-center">
+                        <div class="text-2xl font-bold text-orange-400 mb-1">MCP</div>
+                        <div class="text-xs text-slate-400">Server</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Implementation Steps -->
+    <section id="steps" class="py-24 px-6 bg-slate-50">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-blue-600 font-medium text-sm tracking-wide">IMPLEMENTATION STEPS</span>
+                <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-4">实施步骤</h2>
+                <p class="text-slate-600">8个步骤，从0到1构建完整系统</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Step 1 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">1</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">搭骨架</h3>
+                    <p class="text-sm text-slate-500 mb-3">初始化项目</p>
+                    <p class="text-sm text-slate-600">创建项目目录结构，配置环境变量</p>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">2</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">建仓库</h3>
+                    <p class="text-sm text-slate-500 mb-3">数据库设计</p>
+                    <p class="text-sm text-slate-600">创建7张核心表，支持版本管理和溯源</p>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">3</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">存内容</h3>
+                    <p class="text-sm text-slate-500 mb-3">文档入库</p>
+                    <p class="text-sm text-slate-600">MineRU解析JSON，存入数据库</p>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">4</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">算向量</h3>
+                    <p class="text-sm text-slate-500 mb-3">向量化</p>
+                    <p class="text-sm text-slate-600">OpenAI Embeddings生成向量</p>
+                </div>
+
+                <!-- Step 5 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">5</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">能检索</h3>
+                    <p class="text-sm text-slate-500 mb-3">混合检索</p>
+                    <p class="text-sm text-slate-600">BM25全文 + 向量检索 + RRF融合</p>
+                </div>
+
+                <!-- Step 6 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-lg">6</div>
+                    <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">对外接口</h3>
+                    <p class="text-sm text-slate-500 mb-3">MCP Server</p>
+                    <p class="text-sm text-slate-600">封装检索工具，Claude可调用</p>
+                </div>
+
+                <!-- Step 7 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative step-line">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center text-white font-bold shadow-lg">7</div>
+                    <div class="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">AI评分</h3>
+                    <p class="text-sm text-slate-500 mb-3">核心功能</p>
+                    <p class="text-sm text-slate-600">GPT按规则打分，生成引用</p>
+                </div>
+
+                <!-- Step 8 -->
+                <div class="bg-white rounded-2xl p-6 shadow-lg border border-slate-100 card-hover cursor-pointer relative">
+                    <div class="absolute -top-3 -right-3 w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold shadow-lg">8</div>
+                    <div class="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2">质量保证</h3>
+                    <p class="text-sm text-slate-500 mb-3">评测回归</p>
+                    <p class="text-sm text-slate-600">pytest + deepeval测试</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Challenge Section -->
+    <section id="challenges" class="py-24 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-blue-600 font-medium text-sm tracking-wide">CORE CHALLENGE</span>
+                <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-4">核心难点：Chunk语义完整性</h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Problem -->
+                <div class="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-8 border border-red-100">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        问题
+                    </h3>
+                    <p class="text-slate-600 mb-6">MineRU按物理布局切分文档，可能打断语义边界</p>
+
+                    <div class="bg-white rounded-xl p-4 mono text-sm">
+                        <div class="text-red-500 mb-2"># Chunk 1</div>
+                        <div class="text-slate-600">本产品提供三年</div>
+
+                        <div class="text-red-500 mb-2 mt-4"># Chunk 2</div>
+                        <div class="text-slate-600">质保服务，包含免费维修</div>
+
+                        <div class="flex items-center gap-2 mt-4 text-orange-500">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>语义被打断，检索匹配度降低</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Solution -->
+                <div class="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-8 border border-blue-100">
+                    <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                        解决方案：Parent-Child Chunking
+                    </h3>
+                    <p class="text-slate-600 mb-6">小chunk用于检索，大chunk提供上下文</p>
+
+                    <div class="bg-white rounded-xl p-4">
+                        <div class="text-blue-500 mb-2 font-medium">Parent Chunk (提供上下文)</div>
+                        <div class="text-slate-600 text-sm mb-4 p-3 bg-blue-50 rounded-lg">
+                            本产品提供三年质保服务，包含免费维修。响应时间：24小时内到达现场。
+                        </div>
+
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/>
+                            </svg>
+                            <span class="text-sm text-slate-500">检索时匹配Child，返回Parent</span>
+                        </div>
+
+                        <div class="text-cyan-500 mb-2 font-medium">Child Chunks (精确匹配)</div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 bg-cyan-50 text-cyan-700 rounded-full text-xs">本产品提供</span>
+                            <span class="px-3 py-1 bg-cyan-50 text-cyan-700 rounded-full text-xs">三年质保服务</span>
+                            <span class="px-3 py-1 bg-cyan-50 text-cyan-700 rounded-full text-xs">24小时到达</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Project Structure -->
+    <section class="py-24 px-6 bg-slate-50">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-blue-600 font-medium text-sm tracking-wide">PROJECT STRUCTURE</span>
+                <h2 class="text-3xl md:text-4xl font-bold mt-2 mb-4">项目结构</h2>
+            </div>
+
+            <div class="bg-slate-900 rounded-2xl p-6 md:p-8 overflow-x-auto">
+                <pre class="mono text-sm text-slate-300"><span class="text-slate-500">bid_scoring/</span>
+├── <span class="text-blue-400">bid_scoring/</span>          <span class="text-slate-500"># 核心代码</span>
+│   ├── config.py            <span class="text-slate-500"># 配置管理</span>
+│   ├── ingest.py            <span class="text-slate-500"># 文档入库</span>
+│   ├── embeddings.py        <span class="text-slate-500"># 向量生成</span>
+│   ├── search.py            <span class="text-slate-500"># 检索与RRF</span>
+│   ├── llm.py               <span class="text-slate-500"># LLM客户端</span>
+│   ├── scoring.py           <span class="text-slate-500"># 评分逻辑</span>
+│   └── verify.py            <span class="text-slate-500"># 引用验证</span>
+│
+├── <span class="text-green-400">mcp_servers/</span>          <span class="text-slate-500"># MCP服务</span>
+│   └── bid_documents/
+│       └── server.py        <span class="text-slate-500"># MCP工具定义</span>
+│
+├── <span class="text-orange-400">scripts/</span>              <span class="text-slate-500"># 命令行脚本</span>
+│   ├── apply_migrations.py
+│   ├── ingest_mineru.py
+│   ├── build_embeddings.py
+│   └── score_dimension.py
+│
+├── <span class="text-purple-400">tests/</span>                <span class="text-slate-500"># 测试代码</span>
+│   └── test_*.py
+│
+├── <span class="text-cyan-400">migrations/</span>            <span class="text-slate-500"># 数据库迁移</span>
+│   └── 001_init.sql
+│
+├── .env.example             <span class="text-slate-500"># 环境变量模板</span>
+└── requirements.txt         <span class="text-slate-500"># 依赖列表</span></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-6 bg-slate-900 text-white">
+        <div class="max-w-6xl mx-auto text-center">
+            <div class="flex justify-center gap-8 mb-8">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-400">7</div>
+                    <div class="text-sm text-slate-400">核心数据表</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-400">8</div>
+                    <div class="text-sm text-slate-400">实施步骤</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-purple-400">100%</div>
+                    <div class="text-sm text-slate-400">可追溯性</div>
+                </div>
+            </div>
+            <p class="text-slate-400 text-sm">投标评分系统实施计划 · AI辅助评审</p>
+        </div>
+    </footer>
+
+</body>
+</html>

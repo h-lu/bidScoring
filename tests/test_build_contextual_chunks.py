@@ -14,11 +14,127 @@ from build_contextual_chunks import (
     _get_surrounding_chunks,
     process_batch,
     format_duration,
+    reset_contextual_chunks,
     DEFAULT_BATCH_SIZE,
 )
 
 # Also need to mock the imports in the module
 import build_contextual_chunks as bcc_module
+
+
+class TestResetContextualChunks:
+    """Test reset functionality."""
+
+    def test_reset_all_versions_with_confirmation(self):
+        """Should reset all records after confirmation."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        # Mock count query returns 5 records
+        mock_cur.fetchone.return_value = (5,)
+        
+        with patch('builtins.input', return_value='yes'):
+            result = reset_contextual_chunks(mock_conn, force=False)
+        
+        assert result is True
+        mock_cur.execute.assert_any_call("SELECT COUNT(*) FROM contextual_chunks")
+        mock_cur.execute.assert_any_call("DELETE FROM contextual_chunks")
+        mock_conn.commit.assert_called_once()
+
+    def test_reset_all_versions_cancelled(self):
+        """Should not reset when user cancels."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        mock_cur.fetchone.return_value = (5,)
+        
+        with patch('builtins.input', return_value='no'):
+            result = reset_contextual_chunks(mock_conn, force=False)
+        
+        assert result is False
+        # DELETE should not be called
+        delete_calls = [call for call in mock_cur.execute.call_args_list if 'DELETE' in str(call)]
+        assert len(delete_calls) == 0
+
+    def test_reset_with_version_id(self):
+        """Should reset only specified version."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        mock_cur.fetchone.return_value = (3,)
+        
+        with patch('builtins.input', return_value='yes'):
+            result = reset_contextual_chunks(mock_conn, version_id="test-version", force=False)
+        
+        assert result is True
+        # Check version-specific count query
+        count_calls = [call for call in mock_cur.execute.call_args_list 
+                      if 'SELECT COUNT(*)' in str(call) and 'version_id' in str(call)]
+        assert len(count_calls) > 0
+        # Check version-specific delete
+        delete_calls = [call for call in mock_cur.execute.call_args_list 
+                       if 'DELETE' in str(call) and 'version_id' in str(call)]
+        assert len(delete_calls) > 0
+
+    def test_reset_force_skips_confirmation(self):
+        """Should reset without confirmation when force=True."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        mock_cur.fetchone.return_value = (10,)
+        
+        result = reset_contextual_chunks(mock_conn, force=True)
+        
+        assert result is True
+        # input should not be called, but we can't easily test that without more patching
+        mock_cur.execute.assert_any_call("DELETE FROM contextual_chunks")
+        mock_conn.commit.assert_called_once()
+
+    def test_reset_empty_table(self):
+        """Should handle empty table gracefully."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        mock_cur.fetchone.return_value = (0,)
+        
+        result = reset_contextual_chunks(mock_conn, force=False)
+        
+        assert result is True
+        # DELETE should not be called for empty table
+        delete_calls = [call for call in mock_cur.execute.call_args_list if 'DELETE' in str(call)]
+        assert len(delete_calls) == 0
+
+    def test_reset_specific_version_sql(self):
+        """Should generate correct SQL for version-specific reset."""
+        mock_conn = Mock()
+        mock_cur = Mock()
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        
+        mock_cur.fetchone.return_value = (5,)
+        
+        with patch('builtins.input', return_value='yes'):
+            reset_contextual_chunks(mock_conn, version_id="v-123", force=False)
+        
+        # Find the DELETE call with version_id
+        delete_call = None
+        for call in mock_cur.execute.call_args_list:
+            if 'DELETE' in str(call) and 'v-123' in str(call):
+                delete_call = call
+                break
+        
+        assert delete_call is not None
+        assert 'v-123' in str(delete_call)
 
 
 class TestGetStats:

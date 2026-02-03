@@ -34,8 +34,59 @@ DEFAULT_LIMIT = 500          # 每次运行最大处理数量
 DEFAULT_MAX_TOKENS = 50000   # 每批最大 token 数（上下文生成）
 
 
+def reset_contextual_chunks(conn, version_id: str | None = None, force: bool = False) -> bool:
+    """重置/清空 contextual_chunks 表
+    
+    Args:
+        conn: 数据库连接
+        version_id: 版本 ID，如果指定则只删除该版本的记录，否则删除所有
+        force: 是否跳过确认提示
+    
+    Returns:
+        True 表示已重置，False 表示用户取消
+    """
+    with conn.cursor() as cur:
+        # 先查询将要删除的记录数
+        if version_id:
+            cur.execute(
+                "SELECT COUNT(*) FROM contextual_chunks WHERE version_id = %s",
+                (version_id,)
+            )
+        else:
+            cur.execute("SELECT COUNT(*) FROM contextual_chunks")
+        
+        count = cur.fetchone()[0]
+        
+        if count == 0:
+            print("ℹ️  contextual_chunks 表为空，无需重置")
+            return True
+        
+        # 确认提示
+        if not force:
+            scope = f"版本 '{version_id}'" if version_id else "所有版本"
+            print(f"\n⚠️  警告: 这将删除 {scope} 的 {count} 条 contextual_chunks 记录！")
+            response = input("确认重置? 输入 'yes' 继续: ")
+            if response.lower() != 'yes':
+                print("❌ 操作已取消")
+                return False
+        
+        # 执行删除
+        if version_id:
+            cur.execute(
+                "DELETE FROM contextual_chunks WHERE version_id = %s",
+                (version_id,)
+            )
+        else:
+            cur.execute("DELETE FROM contextual_chunks")
+        
+        conn.commit()
+        
+        scope = f"版本 '{version_id}'" if version_id else "所有版本"
+        print(f"✅ 已重置 {scope} 的 {count} 条记录")
+        return True
+
+
 def get_stats(conn, version_id: str | None = None) -> dict[str, Any]:
-    """获取上下文增强统计信息"""
     with conn.cursor() as cur:
         # 基础查询：统计 chunks 表
         base_query = """
@@ -312,6 +363,8 @@ def main():
     parser.add_argument("--llm-model", default="gpt-4", help="LLM 模型（默认 gpt-4）")
     parser.add_argument("--show-detail", action="store_true", help="显示详细进度")
     parser.add_argument("--dry-run", action="store_true", help="干运行模式（不实际写入数据库）")
+    parser.add_argument("--reset", "-r", action="store_true", help="重置/清空 contextual_chunks 表后重新生成")
+    parser.add_argument("--force", action="store_true", help="强制重置，跳过确认提示（配合 --reset 使用）")
     args = parser.parse_args()
     
     # 检查 API Key
@@ -359,6 +412,12 @@ def main():
     # 连接数据库
     with psycopg.connect(dsn) as conn:
         register_vector(conn)
+        
+        # 处理重置请求
+        if args.reset:
+            if not reset_contextual_chunks(conn, args.version_id, args.force):
+                sys.exit(0)  # 用户取消，正常退出
+            print()
         
         # 获取初始统计
         stats = get_stats(conn, args.version_id)
