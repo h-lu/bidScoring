@@ -4,7 +4,12 @@
 import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
+
+from openai import OpenAI
+
+from bid_scoring.config import load_settings
 
 
 def get_model_for_task(settings: dict, task: str) -> str:
@@ -254,3 +259,34 @@ class LLMClient:
         elif schema_type == "integer":
             if not isinstance(data, int):
                 raise ValueError(f"Expected integer at {path}, got {type(data).__name__}")
+
+
+def get_llm_client() -> OpenAI:
+    """Get configured OpenAI client.
+    
+    Returns:
+        Configured OpenAI client instance
+    """
+    settings = load_settings()
+    timeout = settings["OPENAI_TIMEOUT"] or None
+    max_retries = settings["OPENAI_MAX_RETRIES"] or None
+    return OpenAI(
+        api_key=settings["OPENAI_API_KEY"],
+        base_url=settings["OPENAI_BASE_URL"],
+        timeout=timeout,
+        max_retries=max_retries,
+    )
+
+
+def select_llm_model(task: str) -> str:
+    """Select appropriate LLM model for a task.
+    
+    Args:
+        task: Task name to look up
+        
+    Returns:
+        Model name to use for the task
+    """
+    settings = load_settings()
+    models = settings["OPENAI_LLM_MODELS"]
+    return models.get(task.lower(), settings["OPENAI_LLM_MODEL_DEFAULT"])

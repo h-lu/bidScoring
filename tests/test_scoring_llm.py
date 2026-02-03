@@ -3,9 +3,9 @@
 
 import json
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, mock_open
 
-from bid_scoring.scoring import ScoringEngine, load_scoring_rules
+from bid_scoring.scoring import ScoringEngine, load_scoring_rules, build_scoring_request
 from bid_scoring.llm import ScoreResult, Citation
 
 
@@ -126,3 +126,144 @@ class TestScoringEngineBatchScore:
         assert len(results) == 2
         assert results[0].dimension == "培训方案"
         assert results[1].dimension == "技术支持"
+
+
+class TestBuildScoringRequest:
+    """Test build_scoring_request function."""
+
+    def test_returns_dict_with_required_keys(self):
+        """Should return dict with model, input, and response_format."""
+        schema = {
+            "type": "object",
+            "properties": {"dimension": {"type": "string"}},
+            "required": ["dimension"]
+        }
+        with patch("builtins.open", mock_open(read_data=json.dumps(schema))):
+            with patch("bid_scoring.scoring.Path") as mock_path:
+                mock_path.return_value.read_text.return_value = json.dumps(schema)
+                with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                    mock_select.return_value = "gpt-4"
+                    
+                    result = build_scoring_request(
+                        dimension="培训方案",
+                        max_score=10,
+                        evidence=["培训时间：2天"],
+                        rules=["详细说明培训内容"]
+                    )
+        
+        assert "model" in result
+        assert "input" in result
+        assert "response_format" in result
+        assert result["model"] == "gpt-4"
+        assert result["response_format"]["type"] == "json_schema"
+
+    def test_includes_dimension_and_max_score_in_prompt(self):
+        """Should include dimension and max_score in the prompt."""
+        schema = {"type": "object", "properties": {}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="技术支持",
+                    max_score=20,
+                    evidence=["提供24小时支持"]
+                )
+        
+        prompt = result["input"]
+        assert "技术支持" in prompt
+        assert "20" in prompt
+
+    def test_formats_evidence_with_numbers(self):
+        """Should format evidence with numbered references."""
+        schema = {"type": "object", "properties": {}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="培训方案",
+                    max_score=10,
+                    evidence=["证据1", "证据2", "证据3"]
+                )
+        
+        prompt = result["input"]
+        assert "[1] 证据1" in prompt
+        assert "[2] 证据2" in prompt
+        assert "[3] 证据3" in prompt
+
+    def test_handles_empty_evidence(self):
+        """Should handle empty evidence list."""
+        schema = {"type": "object", "properties": {}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="培训方案",
+                    max_score=10,
+                    evidence=[]
+                )
+        
+        prompt = result["input"]
+        assert "（无证据）" in prompt
+
+    def test_handles_none_rules(self):
+        """Should handle None rules."""
+        schema = {"type": "object", "properties": {}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="培训方案",
+                    max_score=10,
+                    evidence=["证据"],
+                    rules=None
+                )
+        
+        prompt = result["input"]
+        assert "（无明确规则，需谨慎评分）" in prompt
+
+    def test_includes_rules_in_prompt(self):
+        """Should include rules in the prompt."""
+        schema = {"type": "object", "properties": {}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="培训方案",
+                    max_score=10,
+                    evidence=["证据"],
+                    rules=["规则1", "规则2"]
+                )
+        
+        prompt = result["input"]
+        assert "规则1" in prompt
+        assert "规则2" in prompt
+
+    def test_response_format_has_json_schema(self):
+        """Should include proper JSON schema in response_format."""
+        schema = {"type": "object", "properties": {"test": {"type": "string"}}}
+        with patch("bid_scoring.scoring.Path") as mock_path:
+            mock_path.return_value.read_text.return_value = json.dumps(schema)
+            with patch("bid_scoring.scoring.select_llm_model") as mock_select:
+                mock_select.return_value = "gpt-4"
+                
+                result = build_scoring_request(
+                    dimension="培训方案",
+                    max_score=10,
+                    evidence=["证据"]
+                )
+        
+        response_format = result["response_format"]
+        assert response_format["type"] == "json_schema"
+        assert response_format["json_schema"]["name"] == "bid_score"
+        assert response_format["json_schema"]["strict"] is True
+        assert response_format["json_schema"]["schema"] == schema

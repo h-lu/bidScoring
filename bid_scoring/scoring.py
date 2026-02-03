@@ -3,11 +3,12 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
-from bid_scoring.llm import LLMClient, ScoreResult, get_model_for_task
+from bid_scoring.llm import LLMClient, ScoreResult, get_model_for_task, select_llm_model
 
 
 def load_scoring_rules(rules_path: str) -> dict:
@@ -305,3 +306,74 @@ class ScoringEngine:
                 )
                 for dim, _ in dimensions
             ]
+
+
+def build_scoring_request(
+    dimension: str,
+    max_score: int,
+    evidence: list[str],
+    rules: list[str] | None = None,
+) -> dict:
+    """Build a scoring request for LLM.
+    
+    Args:
+        dimension: Dimension name to score
+        max_score: Maximum possible score
+        evidence: List of evidence text strings
+        rules: Optional list of scoring rules
+        
+    Returns:
+        Dictionary with model, input, and response_format for LLM call
+    """
+    schema = json.loads(Path("references/output_schema.json").read_text(encoding="utf-8"))
+    evidence_lines = [f"[{i + 1}] {text}" for i, text in enumerate(evidence)]
+    evidence_block = "\n".join(evidence_lines) if evidence_lines else "（无证据）"
+    rules_block = "\n- ".join(rules) if rules else "（无明确规则，需谨慎评分）"
+    prompt = (
+        "你是投标评分专家，只能依据给定证据评分。\n"
+        "请严格输出符合 JSON Schema 的结果，只输出 JSON。\n"
+        "\n"
+        f"评分维度：{dimension}\n"
+        f"满分：{max_score}\n"
+        "评分规则：\n"
+        f"- {rules_block}\n"
+        "\n"
+        "证据（按编号引用）：\n"
+        f"{evidence_block}\n"
+        "\n"
+        "输出要求：\n"
+        "- 输出字段必须包含：dimension, score, max_score, reasoning, citations, evidence_found\n"
+        "- score 为 0 到 max_score 的数值\n"
+        "- evidence_found 无证据则为 false；有有效证据才可为 true\n"
+        "- citations 为数组；每条引用必须包含 source_number（证据编号）、cited_text（原文片段）、supports_claim\n"
+        "- cited_text 必须是对应证据的子串\n"
+        "- 无证据时 citations 为空数组\n"
+        "\n"
+        "示例输出（仅示例，不代表最终评分）：\n"
+        "{\n"
+        '  "dimension": "培训方案",\n'
+        '  "score": 8,\n'
+        '  "max_score": 10,\n'
+        '  "reasoning": "证据[1]表明包含培训时长与内容，因此方案较完整。",\n'
+        '  "citations": [\n'
+        "    {\n"
+        '      "source_number": 1,\n'
+        '      "cited_text": "培训时间：2天，含安装培训、操作培训",\n'
+        '      "supports_claim": "包含培训时长与内容"\n'
+        "    }\n"
+        "  ],\n"
+        '  "evidence_found": true\n'
+        "}\n"
+    )
+    return {
+        "model": select_llm_model("scoring"),
+        "input": prompt,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "bid_score",
+                "schema": schema,
+                "strict": True,
+            },
+        },
+    }
