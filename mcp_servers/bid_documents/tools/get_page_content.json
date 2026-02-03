@@ -1,0 +1,12 @@
+{
+  "name": "get_page_content",
+  "description": "获取页面内容及其 bbox。",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "document_id": {"type": "string"},
+      "page_idx": {"type": "integer"}
+    },
+    "required": ["document_id", "page_idx"]
+  }
+}

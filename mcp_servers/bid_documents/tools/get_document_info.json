@@ -1,0 +1,11 @@
+{
+  "name": "get_document_info",
+  "description": "获取文档元信息。",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "document_id": {"type": "string"}
+    },
+    "required": ["document_id"]
+  }
+}
