@@ -11,6 +11,8 @@ def test_tables_exist():
         "document_versions",
         "chunks",
         "contextual_chunks",
+        "hierarchical_nodes",
+        "multi_vector_mappings",
         "scoring_runs",
         "scoring_results",
         "citations",
