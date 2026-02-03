@@ -1,0 +1,8 @@
+# requirements.txt
+psycopg[binary]
+pgvector
+openai
+python-dotenv
+fastmcp
+pytest
+deepeval
