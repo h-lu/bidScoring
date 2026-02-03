@@ -14,6 +14,7 @@ Key Design Decisions:
 
 from dataclasses import dataclass, field
 from typing import Optional
+import re
 import uuid
 
 
@@ -95,11 +96,9 @@ class HiChunkBuilder:
     def __init__(self):
         """初始化构建器"""
         self.nodes: list[HiChunkNode] = []
-        self._node_counter = 0
 
     def _generate_node_id(self) -> str:
         """生成唯一节点 ID"""
-        self._node_counter += 1
         return str(uuid.uuid4())
 
     def _is_heading(self, item: dict) -> bool:
@@ -179,7 +178,6 @@ class HiChunkBuilder:
                 # 去除 HTML 标签
                 body = item["table_body"]
                 if isinstance(body, str):
-                    import re
                     body = re.sub(r'<[^>]+>', ' ', body)
                     body = re.sub(r'\s+', ' ', body).strip()
                 texts.append(body)
@@ -556,8 +554,8 @@ class HiChunkBuilder:
         if not root:
             return {}
         
-        def build_subtree(node: HiChunkNode) -> dict:
-            children = [
+        def build_subtree(node: HiChunkNode) -> dict[str, any]:
+            children: list[dict[str, any]] = [
                 build_subtree(child) 
                 for child in self.nodes 
                 if child.node_id in node.children_ids
