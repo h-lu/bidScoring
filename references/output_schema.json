@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "dimension": {"type": "string"},
+    "score": {"type": "number"},
+    "max_score": {"type": "number"},
+    "reasoning": {"type": "string"},
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_number": {"type": "integer"},
+          "cited_text": {"type": "string"},
+          "supports_claim": {"type": "string"}
+        },
+        "required": ["source_number", "cited_text", "supports_claim"]
+      }
+    },
+    "evidence_found": {"type": "boolean"}
+  },
+  "required": ["dimension", "score", "max_score", "reasoning", "citations", "evidence_found"]
+}

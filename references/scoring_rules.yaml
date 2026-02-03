@@ -1,0 +1,12 @@
+# references/scoring_rules.yaml
+dimensions:
+  - name: 培训方案
+    max_score: 10
+    keywords: ["培训", "培训时间", "培训内容", "培训师"]
+    rules:
+      - condition: "培训方案详细，师资明确"
+        score_range: [9, 10]
+      - condition: "培训方案基本完整"
+        score_range: [6, 8]
+      - condition: "培训方案简略"
+        score_range: [0, 5]
