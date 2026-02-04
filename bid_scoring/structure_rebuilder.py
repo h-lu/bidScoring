@@ -1,7 +1,100 @@
 """Structure rebuilder module for merging chunks into natural paragraphs."""
 
 import re
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+
+
+@dataclass
+class RebuiltNode:
+    """重建后的文档树节点"""
+    node_type: str  # 'document', 'section', 'paragraph'
+    level: int = 0
+    heading: str = ""
+    content: str = ""
+    page_range: Tuple[int, int] = (0, 0)
+    source_chunks: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    children: List["RebuiltNode"] = field(default_factory=list)
+
+
+class TreeBuilder:
+    """树构建器 - 从段落构建章节层次结构"""
+    
+    def build_sections(self, paragraphs: List[Dict]) -> List[RebuiltNode]:
+        """构建章节树"""
+        sections = []
+        current_section = None
+        current_paragraphs = []
+        
+        for para in paragraphs:
+            if para.get('is_heading'):
+                # Save previous section
+                if current_section and current_paragraphs:
+                    current_section.children = self._create_paragraph_nodes(current_paragraphs)
+                    sections.append(current_section)
+                    current_paragraphs = []
+                
+                # Create new section
+                current_section = RebuiltNode(
+                    node_type='section',
+                    level=1,
+                    heading=para['content'],
+                    content=para['content'],
+                    page_range=(para['page_idx'], para['page_idx']),
+                    metadata={'heading_level': para.get('level', 1)}
+                )
+            else:
+                # Regular paragraph
+                if current_section is None:
+                    # Create default section for content before first heading
+                    current_section = RebuiltNode(
+                        node_type='section',
+                        level=1,
+                        heading='文档开头',
+                        content='文档开头内容',
+                        page_range=(para.get('page_idx', 0), para.get('page_idx', 0)),
+                        metadata={'is_default': True}
+                    )
+                current_paragraphs.append(para)
+        
+        # Handle last section
+        if current_section:
+            if current_paragraphs:
+                current_section.children = self._create_paragraph_nodes(current_paragraphs)
+            sections.append(current_section)
+        
+        return sections
+    
+    def _create_paragraph_nodes(self, paragraphs: List[Dict]) -> List[RebuiltNode]:
+        """Convert paragraph dicts to RebuiltNode objects"""
+        return [
+            RebuiltNode(
+                node_type='paragraph',
+                level=0,
+                content=p['content'],
+                page_range=p.get('page_range', (p['page_idx'], p['page_idx'])),
+                source_chunks=p.get('source_chunks', []),
+                metadata={'merged_count': p.get('merged_count', 1)}
+            )
+            for p in paragraphs
+        ]
+    
+    def build_document_tree(self, sections: List[RebuiltNode], document_title: str) -> RebuiltNode:
+        """Build complete document tree"""
+        all_pages = []
+        for section in sections:
+            all_pages.extend([section.page_range[0], section.page_range[1]])
+        
+        return RebuiltNode(
+            node_type='document',
+            level=2,
+            heading=document_title,
+            content=document_title,
+            page_range=(min(all_pages) if all_pages else 0, max(all_pages) if all_pages else 0),
+            children=sections,
+            metadata={'section_count': len(sections)}
+        )
 
 
 class ParagraphMerger:

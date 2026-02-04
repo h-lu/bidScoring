@@ -184,3 +184,60 @@ def test_single_chunk():
     assert paragraphs[0]["content"] == "只有一个短句"
     assert paragraphs[0]["merged_count"] == 1
     assert paragraphs[0]["source_chunk_ids"] == ["1"]
+
+
+def test_build_section_tree_from_headings():
+    """测试从标题构建章节树"""
+    from bid_scoring.structure_rebuilder import TreeBuilder, RebuiltNode
+    
+    paragraphs = [
+        {"type": "heading", "content": "一、技术规格", "level": 1, "page_idx": 1, "is_heading": True, "source_chunks": ["1"]},
+        {"type": "paragraph", "content": "激光共聚焦显微镜参数如下", "level": 0, "page_idx": 1, "is_heading": False, "source_chunks": ["2"]},
+        {"type": "paragraph", "content": "分辨率: 0.5微米", "level": 0, "page_idx": 1, "is_heading": False, "source_chunks": ["3"]},
+        {"type": "heading", "content": "二、商务条款", "level": 1, "page_idx": 2, "is_heading": True, "source_chunks": ["4"]},
+        {"type": "paragraph", "content": "质保期5年", "level": 0, "page_idx": 2, "is_heading": False, "source_chunks": ["5"]},
+    ]
+    
+    builder = TreeBuilder()
+    sections = builder.build_sections(paragraphs)
+    
+    assert len(sections) == 2
+    assert sections[0].heading == "一、技术规格"
+    assert sections[0].node_type == "section"
+    assert len(sections[0].children) == 2  # 两个段落
+    assert sections[1].heading == "二、商务条款"
+    assert len(sections[1].children) == 1
+
+
+def test_build_document_tree():
+    """测试构建完整文档树"""
+    from bid_scoring.structure_rebuilder import TreeBuilder, RebuiltNode
+    
+    # Create sections manually
+    section1 = RebuiltNode(
+        node_type="section",
+        level=1,
+        heading="技术规格",
+        content="技术规格",
+        page_range=(1, 1),
+        children=[
+            RebuiltNode(node_type="paragraph", level=0, content="参数1"),
+            RebuiltNode(node_type="paragraph", level=0, content="参数2"),
+        ]
+    )
+    section2 = RebuiltNode(
+        node_type="section",
+        level=1,
+        heading="商务条款",
+        content="商务条款",
+        page_range=(2, 2),
+        children=[RebuiltNode(node_type="paragraph", level=0, content="质保")]
+    )
+    
+    builder = TreeBuilder()
+    doc_root = builder.build_document_tree([section1, section2], "测试文档")
+    
+    assert doc_root.node_type == "document"
+    assert doc_root.heading == "测试文档"
+    assert doc_root.level == 2
+    assert len(doc_root.children) == 2
