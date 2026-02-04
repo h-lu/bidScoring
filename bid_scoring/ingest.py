@@ -11,8 +11,11 @@
 
 import hashlib
 import json
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _hash_text(text: str) -> str:
@@ -80,9 +83,20 @@ def _prepare_chunk_data(item: dict, chunk_index: int) -> dict[str, Any] | None:
     if item_type == "page_number":
         return None
     
+    # ★ FIX: 跳过 header 和 footer，避免污染正文
+    if item_type in ["header", "footer"]:
+        return None
+    
     # 提取可索引文本
     text_content = _extract_text_from_item(item)
     text_content = text_content.strip()
+    
+    # ★ FIX: 处理空标题情况
+    # 如果 text_level=1 但文本为空，降级为普通文本（避免创建无效章节）
+    text_level = item.get("text_level")
+    if text_level == 1 and not text_content:
+        logger.warning(f"[Ingest] Empty heading at index {chunk_index}, demoting to body text")
+        text_level = None
     
     # 生成 tsvector（如果有文本内容）
     text_tsv = text_content if text_content else None
@@ -106,7 +120,7 @@ def _prepare_chunk_data(item: dict, chunk_index: int) -> dict[str, Any] | None:
         "table_footnote": item.get("table_footnote"),
         "list_items": item.get("list_items"),
         "sub_type": item.get("sub_type"),
-        "text_level": item.get("text_level"),
+        "text_level": text_level,
     }
     
     return data
@@ -178,6 +192,14 @@ def ingest_content_list(
             """,
             (version_id, document_id, source_uri, None, parser_version, status),
         )
+        
+        # ★ FIX: 先删除该 version 的现有 chunks，防止重复导入
+        cur.execute(
+            "DELETE FROM chunks WHERE version_id = %s",
+            (version_id,)
+        )
+        if cur.rowcount > 0:
+            logger.warning(f"[Ingest] Deleted {cur.rowcount} existing chunks for version {version_id}")
         
         # 批量插入 chunks
         for data in chunks_data:

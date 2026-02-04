@@ -588,14 +588,16 @@ class CPCPipeline:
             node_id = str(uuid.uuid4())
             node_map[id(node)] = node_id
             
-            # 获取页码范围
-            if node.page_range and node.page_range[0] is not None:
-                start_page, end_page = node.page_range
-            else:
-                start_page = end_page = 0
-            
             # 获取上下文（如果已生成）
             context = getattr(node, 'context', None)
+            
+            # 获取 source_chunks 和 merged_chunk_count
+            source_chunks = getattr(node, 'source_chunks', []) or []
+            merged_chunk_count = node.metadata.get('merged_count', 1) if node.metadata else 1
+            
+            # 获取 chunk_id 范围
+            start_chunk_id = source_chunks[0] if source_chunks else None
+            end_chunk_id = source_chunks[-1] if source_chunks else None
             
             # 先插入节点（children_ids 暂时为空，稍后更新）
             with conn.cursor() as cur:
@@ -603,9 +605,11 @@ class CPCPipeline:
                     """
                     INSERT INTO hierarchical_nodes (
                         node_id, version_id, parent_id, level, node_type,
-                        content, heading, context, start_page, end_page,
+                        content, heading, context,
+                        start_chunk_id, end_chunk_id,
+                        source_chunk_ids, merged_chunk_count,
                         metadata, children_ids
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (node_id) DO NOTHING
                     """,
                     (
@@ -617,11 +621,13 @@ class CPCPipeline:
                         node.content[:5000],  # 限制长度防止溢出
                         node.heading,
                         context,
-                        start_page,
-                        end_page,
+                        start_chunk_id,  # ★ 起始 chunk
+                        end_chunk_id,    # ★ 结束 chunk
+                        source_chunks,   # ★ source_chunk_ids 数组
+                        merged_chunk_count,  # ★ merged_chunk_count
                         json.dumps({
                             **node.metadata,
-                            'source_chunks': node.source_chunks,
+                            'source_chunks': source_chunks,
                         }),
                         [],  # children_ids 稍后更新
                     ),
