@@ -408,7 +408,7 @@ def create_small_to_big_sections(
     This is the main entry point for the small-to-big strategy.
     
     Args:
-        raw_chunks: Raw chunks from MinerU
+        raw_chunks: Raw chunks from MinerU (uses 'text' key) or converted format (uses 'text_raw' key)
         document_title: Document title
         min_chunk_size: Minimum chunk size for merging
         max_chunk_size: Maximum chunk size
@@ -418,12 +418,30 @@ def create_small_to_big_sections(
     """
     from bid_scoring.structure_rebuilder import ParagraphMerger
     
+    # Convert MinerU format to ParagraphMerger format if needed
+    # MinerU uses 'text', ParagraphMerger expects 'text_raw'
+    converted_chunks = []
+    for i, item in enumerate(raw_chunks):
+        # Check if already converted
+        if 'text_raw' in item:
+            converted_chunks.append(item)
+        else:
+            converted = {
+                'chunk_id': item.get('chunk_id', f'chunk_{i}'),
+                'text_raw': item.get('text', ''),
+                'text_level': item.get('text_level'),
+                'page_idx': item.get('page_idx', 0),
+                'chunk_index': i,
+                'element_type': item.get('type'),
+            }
+            converted_chunks.append(converted)
+    
     # Step 1: Merge raw chunks into paragraphs using existing logic
     paragraph_merger = ParagraphMerger(
         min_length=min_chunk_size,
         max_length=max_chunk_size
     )
-    paragraphs = paragraph_merger.merge(raw_chunks)
+    paragraphs = paragraph_merger.merge(converted_chunks)
     
     # Step 2: Build sections with smart chunking
     builder = SectionChunkBuilder(
