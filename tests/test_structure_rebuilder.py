@@ -47,7 +47,11 @@ def test_heading_stops_merging():
 
 
 def test_page_change_stops_merging():
-    """测试页面变化时停止合并: [page1短句, page2短句] → [para1, para2]"""
+    """测试页面变化时停止合并: [page1短句, page2短句] → [para1, para2]
+    
+    ParagraphMerger 只负责基本的 chunks → paragraphs 转换，
+    不合并短内容。短内容会在 TreeBuilder 阶段按 Section 合并。
+    """
     from bid_scoring.structure_rebuilder import ParagraphMerger
     
     chunks = [
@@ -60,19 +64,18 @@ def test_page_change_stops_merging():
     merger = ParagraphMerger(min_length=80, max_length=500)
     paragraphs = merger.merge(chunks)
     
+    # ParagraphMerger 不合并短内容，所以应该有 2 个 paragraphs（按 page 分组）
     assert len(paragraphs) == 2
-    # First paragraph: chunks from page 1
-    assert paragraphs[0]["page_idx"] == 1
-    assert paragraphs[0]["merged_count"] == 2
     assert "第一页的短句" in paragraphs[0]["content"]
-    # Second paragraph: chunks from page 2
-    assert paragraphs[1]["page_idx"] == 2
-    assert paragraphs[1]["merged_count"] == 2
     assert "第二页的短句" in paragraphs[1]["content"]
 
 
-def test_long_text_stays_independent():
-    """测试长文本保持独立: [长文本(>80char)] → [para1]"""
+def test_long_text_with_short_following():
+    """测试长文本后的短内容处理: [长文本, 短句] → [长文本 para], [短句 para]
+    
+    ParagraphMerger 不合并短内容，保持独立 paragraphs。
+    短内容会在 TreeBuilder 阶段按 Section 合并。
+    """
     from bid_scoring.structure_rebuilder import ParagraphMerger
     
     long_text = (
@@ -89,17 +92,17 @@ def test_long_text_stays_independent():
     merger = ParagraphMerger(min_length=80, max_length=500)
     paragraphs = merger.merge(chunks)
     
+    # ParagraphMerger 不合并短内容，所以应该有 2 个 paragraphs
     assert len(paragraphs) == 2
-    # First paragraph: the long text alone
-    assert paragraphs[0]["merged_count"] == 1
     assert paragraphs[0]["content"] == long_text
-    # Second paragraph: the short chunk alone
-    assert paragraphs[1]["merged_count"] == 1
     assert paragraphs[1]["content"] == "短句"
 
 
-def test_sentence_punctuation_stops_merging():
-    """测试句子结束标点停止合并"""
+def test_sentence_punctuation_keeps_separate():
+    """测试句子结束标点保持独立 paragraphs
+    
+    ParagraphMerger 不合并短内容，每个 chunk 成为一个独立的 paragraph。
+    """
     from bid_scoring.structure_rebuilder import ParagraphMerger
     
     chunks = [
@@ -111,7 +114,7 @@ def test_sentence_punctuation_stops_merging():
     merger = ParagraphMerger(min_length=80, max_length=500)
     paragraphs = merger.merge(chunks)
     
-    # Each chunk ends with sentence punctuation, so each becomes its own paragraph
+    # ParagraphMerger 不合并短内容，所以应该有 3 个 paragraphs
     assert len(paragraphs) == 3
     assert paragraphs[0]["content"] == "这是第一句。"
     assert paragraphs[1]["content"] == "这是第二句！"
@@ -147,8 +150,11 @@ def test_all_headings():
         assert para["merged_count"] == 1
 
 
-def test_element_type_handling():
-    """测试表格/图片等特殊元素不被合并"""
+def test_element_type_handling_keeps_separate():
+    """测试表格/图片等特殊元素保持独立
+    
+    ParagraphMerger 不合并短内容，特殊元素保持独立的 paragraphs。
+    """
     from bid_scoring.structure_rebuilder import ParagraphMerger
     
     chunks = [
@@ -161,7 +167,7 @@ def test_element_type_handling():
     merger = ParagraphMerger(min_length=80, max_length=500)
     paragraphs = merger.merge(chunks)
     
-    # Should have 4 paragraphs: [para1], [table], [para2], [image]
+    # ParagraphMerger 不合并短内容，应该有 4 个 paragraphs
     assert len(paragraphs) == 4
     assert paragraphs[0]["content"] == "短句1"
     assert paragraphs[1]["content"] == "表格内容"
@@ -187,26 +193,37 @@ def test_single_chunk():
 
 
 def test_build_section_tree_from_headings():
-    """测试从标题构建章节树"""
+    """测试从标题构建章节树 - 每个 section 合并为一个 paragraph"""
     from bid_scoring.structure_rebuilder import TreeBuilder, RebuiltNode
     
     paragraphs = [
-        {"type": "heading", "content": "一、技术规格", "level": 1, "page_idx": 1, "is_heading": True, "source_chunks": ["1"]},
-        {"type": "paragraph", "content": "激光共聚焦显微镜参数如下", "level": 0, "page_idx": 1, "is_heading": False, "source_chunks": ["2"]},
-        {"type": "paragraph", "content": "分辨率: 0.5微米", "level": 0, "page_idx": 1, "is_heading": False, "source_chunks": ["3"]},
-        {"type": "heading", "content": "二、商务条款", "level": 1, "page_idx": 2, "is_heading": True, "source_chunks": ["4"]},
-        {"type": "paragraph", "content": "质保期5年", "level": 0, "page_idx": 2, "is_heading": False, "source_chunks": ["5"]},
+        {"type": "heading", "content": "一、技术规格", "level": 1, "page_idx": 1, "is_heading": True, "source_chunk_ids": ["1"]},
+        {"type": "paragraph", "content": "激光共聚焦显微镜参数如下", "level": 0, "page_idx": 1, "is_heading": False, "source_chunk_ids": ["2"]},
+        {"type": "paragraph", "content": "分辨率: 0.5微米", "level": 0, "page_idx": 1, "is_heading": False, "source_chunk_ids": ["3"]},
+        {"type": "heading", "content": "二、商务条款", "level": 1, "page_idx": 2, "is_heading": True, "source_chunk_ids": ["4"]},
+        {"type": "paragraph", "content": "质保期5年", "level": 0, "page_idx": 2, "is_heading": False, "source_chunk_ids": ["5"]},
     ]
     
     builder = TreeBuilder()
     sections = builder.build_sections(paragraphs)
     
     assert len(sections) == 2
+    
+    # First section
     assert sections[0].heading == "一、技术规格"
     assert sections[0].node_type == "section"
-    assert len(sections[0].children) == 2  # 两个段落
+    assert len(sections[0].children) == 1  # 合并为一个 paragraph
+    # 验证内容合并
+    assert "激光共聚焦显微镜参数如下" in sections[0].children[0].content
+    assert "分辨率: 0.5微米" in sections[0].children[0].content
+    # 验证 source_chunks 合并（包括 heading 的 chunk）
+    assert set(sections[0].children[0].source_chunks) == {"1", "2", "3"}
+    
+    # Second section
     assert sections[1].heading == "二、商务条款"
     assert len(sections[1].children) == 1
+    assert sections[1].children[0].content == "质保期5年"
+    assert sections[1].children[0].source_chunks == ["4", "5"]
 
 
 def test_build_document_tree():
@@ -315,3 +332,233 @@ def test_rule_based_context_generation():
     # 无章节标题
     context = generator._generate_rule_based_context(None)
     assert "显微镜文档" in context
+
+
+# =============================================================================
+# Tests for _merge_short_paragraphs_forward
+# =============================================================================
+
+
+def test_merge_short_paragraphs_forward_basic():
+    """测试基本的向前合并功能: [短句, 长句] → [合并后的长句]"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "短句", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "这是一个比较长的段落内容，用于测试向前合并功能", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 1
+    assert "短句" in result[0]["content"]
+    assert "这是一个比较长的段落" in result[0]["content"]
+    assert result[0]["merged_count"] == 2
+    assert set(result[0]["source_chunk_ids"]) == {"1", "2"}
+
+
+def test_merge_short_paragraphs_empty_filtered():
+    """测试空内容被过滤"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "有效内容", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 1
+    assert result[0]["content"] == "有效内容"
+
+
+def test_merge_short_paragraphs_heading_not_merged():
+    """测试标题不会被合并"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "短句1", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1, "is_heading": False},
+        {"content": "标题", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1, "is_heading": True},
+        {"content": "短句2", "source_chunk_ids": ["3"], "merged_count": 1, "page_idx": 1, "is_heading": False},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 3
+    # 短句1 无法向前合并到标题，只能保留
+    assert result[0]["content"] == "短句1"
+    assert result[1]["content"] == "标题"
+    assert result[1].get("is_heading") is True
+    # 短句2 可以向后合并
+    assert "短句2" in result[2]["content"]
+
+
+def test_merge_short_paragraphs_consecutive_short():
+    """测试连续短段落合并: [短1, 短2, 长] → [短1+短2+长]"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "短A", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "短B", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+        {"content": "这是一个很长的段落内容用于测试合并", "source_chunk_ids": ["3"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 1
+    assert "短A" in result[0]["content"]
+    assert "短B" in result[0]["content"]
+    assert "这是一个很长的段落" in result[0]["content"]
+    assert result[0]["merged_count"] == 3
+
+
+def test_merge_short_paragraphs_last_short_backward():
+    """测试最后一个短段落向后合并: [长, 短] → [长+短]"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "这是一个很长的段落内容用于测试", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "短句", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 1
+    assert "这是一个很长的段落" in result[0]["content"]
+    assert "短句" in result[0]["content"]
+
+
+def test_merge_short_paragraphs_last_short_after_heading():
+    """测试标题后的最后一个短段落: [heading, 短] → [heading, 短]（无法合并）"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "标题", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1, "is_heading": True},
+        {"content": "短句", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1, "is_heading": False},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    # 短句无法向前合并到标题，也无法向后合并（因为是最后一个），只能保留
+    assert len(result) == 2
+    assert result[0]["content"] == "标题"
+    assert result[1]["content"] == "短句"
+
+
+def test_merge_short_paragraphs_whitespace_stripped():
+    """测试空白字符被正确处理"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "  短句  ", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "长段落内容用于测试空白字符处理", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert len(result) == 1
+    # 空白应该被 strip 处理
+    assert "  短句  " not in result[0]["content"]
+    assert "短句" in result[0]["content"]
+
+
+def test_merge_short_paragraphs_normal_length_preserved():
+    """测试正常长度的段落保持不变（内容长度 >= short_threshold）"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    # 使用长度 >= 20 的段落，应该保持不变
+    paragraphs = [
+        {"content": "这是一个长度超过二十字符的段落内容用于测试", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "这是另一个长度超过二十字符的段落内容用于测试", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    # 正常长度的段落（>=20字符）应该保持不变
+    assert len(result) == 2
+    assert "这是一个长度超过二十字符" in result[0]["content"]
+    assert "这是另一个长度超过二十字符" in result[1]["content"]
+
+
+def test_merge_short_paragraphs_empty_input():
+    """测试空输入"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    result = merger._merge_short_paragraphs_forward([])
+    
+    assert result == []
+
+
+def test_merge_short_paragraphs_all_empty():
+    """测试全空内容"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1},
+        {"content": "", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    assert result == []
+
+
+def test_merge_short_paragraphs_integration_with_merge():
+    """测试与主 merge 方法集成的端到端场景"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    # 模拟真实场景：标题 + 短正文 + 长正文
+    chunks = [
+        {"chunk_id": "1", "text_raw": "一、投标函", "text_level": 1, "page_idx": 1, "chunk_index": 0},
+        {"chunk_id": "2", "text_raw": "有限公司", "text_level": None, "page_idx": 1, "chunk_index": 1},  # 短内容
+        {"chunk_id": "3", "text_raw": "这是一个很长的段落内容用于测试向前合并功能，包含了详细的投标信息", "text_level": None, "page_idx": 1, "chunk_index": 2},
+    ]
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = merger.merge(chunks)
+    
+    # 应该有 2 个段落：heading + merged paragraph
+    assert len(paragraphs) == 2
+    assert paragraphs[0].get("is_heading") is True
+    assert paragraphs[0]["content"] == "一、投标函"
+    # 短内容 "有限公司" 应该被合并到后面的长段落
+    assert "有限公司" in paragraphs[1]["content"]
+    assert "这是一个很长的段落" in paragraphs[1]["content"]
+
+
+def test_merge_short_paragraphs_complex_scenario():
+    """测试复杂场景：多个短内容和长内容混合"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500, short_threshold=20)
+    paragraphs = [
+        {"content": "标题A", "source_chunk_ids": ["1"], "merged_count": 1, "page_idx": 1, "is_heading": True},
+        {"content": "短1", "source_chunk_ids": ["2"], "merged_count": 1, "page_idx": 1},  # 短，无法向前合并到标题
+        {"content": "这是长段落A的内容用于测试", "source_chunk_ids": ["3"], "merged_count": 1, "page_idx": 1},  # 长，会合并短1
+        {"content": "标题B", "source_chunk_ids": ["4"], "merged_count": 1, "page_idx": 1, "is_heading": True},
+        {"content": "短2", "source_chunk_ids": ["5"], "merged_count": 1, "page_idx": 1},  # 短，无法向前合并到标题
+        {"content": "短3", "source_chunk_ids": ["6"], "merged_count": 1, "page_idx": 1},  # 短，会合并到短2
+        {"content": "这是长段落B的内容", "source_chunk_ids": ["7"], "merged_count": 1, "page_idx": 1},  # 长，会合并短2+短3
+    ]
+    
+    result = merger._merge_short_paragraphs_forward(paragraphs)
+    
+    # 预期结果: [标题A, 长段落A(含短1), 标题B, 长段落B(含短2+短3)]
+    assert len(result) == 4
+    assert result[0]["content"] == "标题A"
+    assert result[0].get("is_heading") is True
+    assert "短1" in result[1]["content"]
+    assert result[2]["content"] == "标题B"
+    assert result[2].get("is_heading") is True
+    assert "短2" in result[3]["content"]
+    assert "短3" in result[3]["content"]

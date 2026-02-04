@@ -25,20 +25,51 @@ class TreeBuilder:
     """树构建器 - 从段落构建章节层次结构"""
     
     def build_sections(self, paragraphs: List[Dict]) -> List[RebuiltNode]:
-        """构建章节树"""
+        """构建章节树，每个 section 合并为一个 paragraph
+        
+        策略：
+        1. 每个 section 只包含一个 paragraph
+        2. 该 paragraph 包含 section 下所有内容的合并文本
+        3. 保留所有 source_chunk_ids 用于精准溯源
+        4. 适合大上下文窗口的 LLM 和现代 RAG 系统
+        """
         sections = []
         current_section = None
-        current_paragraphs = []
+        current_content_parts = []
+        current_source_chunks = []
+        current_page_range = [0, 0]
+        
+        def finalize_section():
+            """Finalize current section with merged content"""
+            if current_section is None:
+                return
+            
+            if current_content_parts:
+                # Merge all content into a single paragraph
+                merged_content = "\n\n".join(current_content_parts)
+                
+                paragraph_node = RebuiltNode(
+                    node_type='paragraph',
+                    level=0,
+                    content=merged_content,
+                    page_range=(current_page_range[0], current_page_range[1]),
+                    source_chunks=current_source_chunks.copy(),
+                    metadata={'merged_count': len(current_source_chunks)}
+                )
+                current_section.children = [paragraph_node]
+                
+                # Update section content to include all text
+                current_section.content = merged_content
+                current_section.page_range = (current_page_range[0], current_page_range[1])
+            
+            sections.append(current_section)
         
         for para in paragraphs:
             if para.get('is_heading'):
-                # Save previous section
-                if current_section and current_paragraphs:
-                    current_section.children = self._create_paragraph_nodes(current_paragraphs)
-                    sections.append(current_section)
-                    current_paragraphs = []
+                # Finalize previous section
+                finalize_section()
                 
-                # Create new section
+                # Start new section
                 current_section = RebuiltNode(
                     node_type='section',
                     level=1,
@@ -47,41 +78,130 @@ class TreeBuilder:
                     page_range=(para['page_idx'], para['page_idx']),
                     metadata={'heading_level': para.get('level', 1)}
                 )
+                current_content_parts = []
+                current_source_chunks = para.get('source_chunk_ids', []) or para.get('source_chunks', [])
+                current_page_range = [para['page_idx'], para['page_idx']]
             else:
-                # Regular paragraph
+                # Regular paragraph - accumulate content
                 if current_section is None:
                     # Create default section for content before first heading
                     current_section = RebuiltNode(
                         node_type='section',
                         level=1,
                         heading='文档开头',
-                        content='文档开头内容',
+                        content='',
                         page_range=(para.get('page_idx', 0), para.get('page_idx', 0)),
                         metadata={'is_default': True}
                     )
-                current_paragraphs.append(para)
+                    current_content_parts = []
+                    current_source_chunks = []
+                    current_page_range = [para.get('page_idx', 0), para.get('page_idx', 0)]
+                
+                # Accumulate content
+                if para.get('content'):
+                    current_content_parts.append(para['content'])
+                
+                # Accumulate source chunks
+                para_sources = para.get('source_chunk_ids', []) or para.get('source_chunks', [])
+                current_source_chunks.extend(para_sources)
+                
+                # Update page range
+                page_idx = para.get('page_idx', 0)
+                current_page_range[0] = min(current_page_range[0], page_idx) if current_page_range[0] else page_idx
+                current_page_range[1] = max(current_page_range[1], page_idx)
         
-        # Handle last section
-        if current_section:
-            if current_paragraphs:
-                current_section.children = self._create_paragraph_nodes(current_paragraphs)
-            sections.append(current_section)
+        # Finalize last section
+        finalize_section()
         
-        return sections
+        # Filter out empty sections (those with no content or only headings)
+        # Empty sections occur when:
+        # 1. A heading is followed immediately by another heading
+        # 2. A heading is at the end of document with no following content
+        # 3. Duplicate headings in marketing materials
+        filtered_sections = [s for s in sections if s.children]
+        
+        logger.info(f"Built {len(filtered_sections)} sections ({len(sections) - len(filtered_sections)} empty sections filtered)")
+        
+        return filtered_sections
     
     def _create_paragraph_nodes(self, paragraphs: List[Dict]) -> List[RebuiltNode]:
-        """Convert paragraph dicts to RebuiltNode objects"""
-        return [
-            RebuiltNode(
+        """Convert paragraph dicts to RebuiltNode objects
+        
+        Filters out empty paragraphs and attempts to merge very short ones
+        with adjacent content.
+        """
+        nodes = []
+        pending_short = None  # For merging very short paragraphs
+        
+        for i, p in enumerate(paragraphs):
+            content = p.get('content', '').strip()
+            
+            # Skip empty paragraphs (from image/table captions)
+            if not content:
+                continue
+            
+            # Handle very short content (<= 10 chars) - try to merge with next
+            if len(content) <= 10 and i < len(paragraphs) - 1:
+                # Store for potential merge
+                if pending_short is None:
+                    pending_short = p
+                    continue
+                else:
+                    # Merge with previous short paragraph
+                    prev_content = pending_short.get('content', '')
+                    merged_content = prev_content + ' ' + content if prev_content else content
+                    
+                    # Get combined source chunks
+                    prev_sources = pending_short.get('source_chunk_ids') or pending_short.get('source_chunks', [])
+                    curr_sources = p.get('source_chunk_ids') or p.get('source_chunks', [])
+                    
+                    p['content'] = merged_content
+                    p['source_chunk_ids'] = prev_sources + curr_sources
+                    p['merged_count'] = pending_short.get('merged_count', 1) + p.get('merged_count', 1)
+                    pending_short = None
+            
+            # If we have a pending short paragraph and current is normal, save both
+            if pending_short is not None:
+                # Save the pending short paragraph as-is
+                prev_content = pending_short.get('content', '')
+                if len(prev_content) > 0:  # Only save if not empty
+                    prev_source_ids = pending_short.get('source_chunk_ids') or pending_short.get('source_chunks', [])
+                    nodes.append(RebuiltNode(
+                        node_type='paragraph',
+                        level=0,
+                        content=prev_content,
+                        page_range=pending_short.get('page_range', (pending_short.get('page_idx', 0), pending_short.get('page_idx', 0))),
+                        source_chunks=prev_source_ids,
+                        metadata={'merged_count': pending_short.get('merged_count', 1)}
+                    ))
+                pending_short = None
+            
+            # Create node for current paragraph
+            source_ids = p.get('source_chunk_ids') or p.get('source_chunks', [])
+            nodes.append(RebuiltNode(
                 node_type='paragraph',
                 level=0,
-                content=p['content'],
-                page_range=p.get('page_range', (p['page_idx'], p['page_idx'])),
-                source_chunks=p.get('source_chunks', []),
+                content=content,
+                page_range=p.get('page_range', (p.get('page_idx', 0), p.get('page_idx', 0))),
+                source_chunks=source_ids,
                 metadata={'merged_count': p.get('merged_count', 1)}
-            )
-            for p in paragraphs
-        ]
+            ))
+        
+        # Handle any remaining pending short paragraph
+        if pending_short is not None:
+            prev_content = pending_short.get('content', '')
+            if len(prev_content) > 0:
+                prev_source_ids = pending_short.get('source_chunk_ids') or pending_short.get('source_chunks', [])
+                nodes.append(RebuiltNode(
+                    node_type='paragraph',
+                    level=0,
+                    content=prev_content,
+                    page_range=pending_short.get('page_range', (pending_short.get('page_idx', 0), pending_short.get('page_idx', 0))),
+                    source_chunks=prev_source_ids,
+                    metadata={'merged_count': pending_short.get('merged_count', 1)}
+                ))
+        
+        return nodes
     
     def build_document_tree(self, sections: List[RebuiltNode], document_title: str) -> RebuiltNode:
         """Build complete document tree"""
@@ -103,17 +223,42 @@ class TreeBuilder:
 class ParagraphMerger:
     """Merge short chunks into natural paragraphs based on length and context rules."""
     
-    def __init__(self, min_length: int = 80, max_length: int = 500):
+    def __init__(self, min_length: int = 80, max_length: int = 500, short_threshold: int = 20):
         """Initialize the merger with length thresholds.
         
         Args:
             min_length: Minimum paragraph length before merging (default: 80)
             max_length: Maximum paragraph length to stop merging (default: 500)
+            short_threshold: Content length below this is considered "short" and will be merged forward (default: 20)
         """
         self.min_length = min_length
         self.max_length = max_length
+        self.short_threshold = short_threshold
         self._sentence_end_pattern = re.compile(r'[.!?。！？]$')
     
+    def _is_valid_heading(self, chunk: dict[str, Any]) -> bool:
+        """检查 chunk 是否是有效的标题。
+        
+        有效标题的条件：
+        - text_level = 1
+        - 内容非空
+        - element_type 不为 'table', 'image' 等特殊类型
+        """
+        if chunk.get("text_level") != 1:
+            return False
+        
+        text = chunk.get("text_raw", "").strip()
+        if not text:
+            return False
+        
+        # 过滤掉特殊 element_type（如图片、表格标记）
+        # 但允许 element_type 为 None 或 'text' 的情况
+        element_type = chunk.get("element_type")
+        if element_type in {"table", "image", "header", "footer"}:
+            return False
+        
+        return True
+
     def merge(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Merge short chunks into paragraphs.
         
@@ -143,7 +288,7 @@ class ParagraphMerger:
         
         for chunk in sorted_chunks:
             # Heading stops merging - flush buffer first
-            if chunk.get("text_level") == 1:
+            if self._is_valid_heading(chunk):
                 if buffer:
                     paragraphs.append(self._create_paragraph(buffer))
                     buffer = []
@@ -219,6 +364,92 @@ class ParagraphMerger:
             "is_heading": True,
             "text_level": chunk.get("text_level"),
         }
+    
+    def _merge_short_paragraphs_forward(self, paragraphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Merge short paragraphs forward into adjacent paragraphs.
+        
+        Strategy:
+        1. Headings are never merged - they always remain independent
+        2. For short body paragraphs (content < short_threshold), merge with NEXT paragraph
+        3. If next paragraph doesn't exist or is a heading, merge with PREVIOUS paragraph
+        4. Empty paragraphs are filtered out entirely
+        5. Preserve source_chunk_ids tracking for all merges
+        
+        Args:
+            paragraphs: List of paragraph dictionaries from merge()
+            
+        Returns:
+            List of paragraphs with short content merged forward
+        """
+        if not paragraphs:
+            return []
+        
+        result: list[dict[str, Any]] = []
+        
+        for i, para in enumerate(paragraphs):
+            content = para.get("content", "").strip()
+            is_heading = para.get("is_heading", False)
+            
+            # Skip empty paragraphs entirely
+            if not content:
+                continue
+            
+            # Headings are never merged - always keep them independent
+            if is_heading:
+                result.append(para)
+                continue
+            
+            # Check if this is a short paragraph (at or below threshold)
+            is_short = len(content) <= self.short_threshold
+            
+            if not is_short:
+                # Normal length paragraph - keep as-is
+                result.append(para)
+                continue
+            
+            # This is a short paragraph - try to merge with adjacent paragraphs
+            # Priority 1: Try to merge FORWARD with next paragraph
+            if i < len(paragraphs) - 1:
+                next_para = paragraphs[i + 1]
+                next_is_heading = next_para.get("is_heading", False)
+                
+                if not next_is_heading:
+                    # Merge forward into next paragraph
+                    next_content = next_para.get("content", "").strip()
+                    merged_content = content + " " + next_content if next_content else content
+                    
+                    current_sources = para.get("source_chunk_ids", [])
+                    next_sources = next_para.get("source_chunk_ids", [])
+                    
+                    next_para["content"] = merged_content
+                    next_para["source_chunk_ids"] = current_sources + next_sources
+                    next_para["merged_count"] = para.get("merged_count", 1) + next_para.get("merged_count", 1)
+                    # Skip adding this short para to result - it's merged into next
+                    continue
+            
+            # Priority 2: Try to merge BACKWARD with previous paragraph
+            if result:
+                prev_para = result[-1]
+                prev_is_heading = prev_para.get("is_heading", False)
+                
+                if not prev_is_heading:
+                    # Merge backward into previous paragraph
+                    prev_content = prev_para.get("content", "").strip()
+                    merged_content = prev_content + " " + content if prev_content else content
+                    
+                    prev_sources = prev_para.get("source_chunk_ids", [])
+                    current_sources = para.get("source_chunk_ids", [])
+                    
+                    prev_para["content"] = merged_content
+                    prev_para["source_chunk_ids"] = prev_sources + current_sources
+                    prev_para["merged_count"] = prev_para.get("merged_count", 1) + para.get("merged_count", 1)
+                    # Skip adding this short para to result - it's merged into prev
+                    continue
+            
+            # Can't merge anywhere - keep the short paragraph as-is
+            result.append(para)
+        
+        return result
 
 
 class HierarchicalContextGenerator:
