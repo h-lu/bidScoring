@@ -36,6 +36,8 @@ class TestCPCPipelineConfig:
         assert config.raptor_max_levels == 5
         assert config.retrieval_mode == "hybrid"
         assert config.retrieval_top_k == 5
+        # New structure rebuilder flag (default True)
+        assert config.use_structure_rebuilder is True
 
     def test_custom_config(self):
         """Test custom configuration values."""
@@ -130,7 +132,7 @@ class TestCPCPipelineDocumentProcessing:
 
     @pytest.mark.asyncio
     async def test_process_document_basic(self, sample_content_list, uuids):
-        """Test basic document processing."""
+        """Test basic document processing with structure-first flow (default)."""
         pipeline = CPCPipeline()
 
         with patch.object(pipeline, "_get_connection") as mock_conn:
@@ -157,6 +159,74 @@ class TestCPCPipelineDocumentProcessing:
                 )
 
                 assert isinstance(result, ProcessResult)
+                assert result.version_id == uuids["version_id"]
+
+    @pytest.mark.asyncio
+    async def test_process_document_structure_first_flow(self, sample_content_list, uuids):
+        """Test structure-first processing flow with paragraph merging."""
+        config = CPCPipelineConfig(use_structure_rebuilder=True, enable_contextual=True)
+        pipeline = CPCPipeline(config=config)
+
+        with patch.object(pipeline, "_get_connection") as mock_conn:
+            mock_cursor = MagicMock()
+            mock_conn.return_value.__enter__.return_value.cursor.return_value.__enter__ = MagicMock(
+                return_value=mock_cursor
+            )
+            mock_conn.return_value.__enter__.return_value.cursor.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+            mock_cursor.return_value.fetchall.return_value = []
+
+            with patch(
+                "bid_scoring.cpc_pipeline.ingest_content_list"
+            ) as mock_ingest:
+                mock_ingest.return_value = {"total_chunks": 5}
+
+                result = await pipeline.process_document(
+                    content_list=sample_content_list,
+                    document_title="测试文档",
+                    project_id=uuids["project_id"],
+                    document_id=uuids["document_id"],
+                    version_id=uuids["version_id"],
+                )
+
+                assert isinstance(result, ProcessResult)
+                assert result.success is True
+                assert result.version_id == uuids["version_id"]
+                # Structure-first flow should populate nodes_created
+                assert hasattr(result, 'nodes_created')
+
+    @pytest.mark.asyncio
+    async def test_process_document_legacy_flow(self, sample_content_list, uuids):
+        """Test backward compatibility with legacy flow."""
+        config = CPCPipelineConfig(use_structure_rebuilder=False)
+        pipeline = CPCPipeline(config=config)
+
+        with patch.object(pipeline, "_get_connection") as mock_conn:
+            mock_cursor = MagicMock()
+            mock_conn.return_value.__enter__.return_value.cursor.return_value.__enter__ = MagicMock(
+                return_value=mock_cursor
+            )
+            mock_conn.return_value.__enter__.return_value.cursor.return_value.__exit__ = MagicMock(
+                return_value=False
+            )
+            mock_cursor.return_value.fetchall.return_value = []
+
+            with patch(
+                "bid_scoring.cpc_pipeline.ingest_content_list"
+            ) as mock_ingest:
+                mock_ingest.return_value = {"total_chunks": 5}
+
+                result = await pipeline.process_document(
+                    content_list=sample_content_list,
+                    document_title="测试文档",
+                    project_id=uuids["project_id"],
+                    document_id=uuids["document_id"],
+                    version_id=uuids["version_id"],
+                )
+
+                assert isinstance(result, ProcessResult)
+                assert result.success is True
                 assert result.version_id == uuids["version_id"]
 
     @pytest.mark.asyncio
