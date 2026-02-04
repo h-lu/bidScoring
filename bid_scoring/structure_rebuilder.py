@@ -59,9 +59,24 @@ class ParagraphMerger:
                 paragraphs.append(self._create_paragraph(buffer))
                 buffer = []
             
+            # Check for special element types that should not be merged
+            element_type = chunk.get("element_type")
+            if element_type in {"table", "image", "header", "footer"}:
+                if buffer:
+                    paragraphs.append(self._create_paragraph(buffer))
+                    buffer = []
+                paragraphs.append(self._create_paragraph([chunk]))
+                continue
+            
             # Current buffer content length
             current_length = sum(len(c.get("text_raw", "")) for c in buffer)
             chunk_text = chunk.get("text_raw", "")
+            
+            # Check if current text ends with sentence punctuation - flush before adding new chunk
+            if buffer and self._sentence_end_pattern.search(buffer[-1].get("text_raw", "")):
+                paragraphs.append(self._create_paragraph(buffer))
+                buffer = []
+                current_length = 0
             
             # If buffer is empty or chunk is short and buffer won't exceed max, add to buffer
             if not buffer:
@@ -72,11 +87,6 @@ class ParagraphMerger:
                 # Flush current buffer and start new one
                 paragraphs.append(self._create_paragraph(buffer))
                 buffer = [chunk]
-            
-            # Check if current text ends with sentence punctuation - flush if so
-            if buffer and self._sentence_end_pattern.search(buffer[-1].get("text_raw", "")):
-                paragraphs.append(self._create_paragraph(buffer))
-                buffer = []
             
             # Check if buffer reached max length - flush if so
             current_length = sum(len(c.get("text_raw", "")) for c in buffer)

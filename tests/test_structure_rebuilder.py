@@ -116,3 +116,71 @@ def test_sentence_punctuation_stops_merging():
     assert paragraphs[0]["content"] == "这是第一句。"
     assert paragraphs[1]["content"] == "这是第二句！"
     assert paragraphs[2]["content"] == "这是第三句？"
+
+
+def test_empty_chunks_list():
+    """测试空输入返回空列表"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    merger = ParagraphMerger(min_length=80, max_length=500)
+    paragraphs = merger.merge([])
+    
+    assert paragraphs == []
+
+
+def test_all_headings():
+    """测试所有块都是标题的情况"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    chunks = [
+        {"chunk_id": "1", "text_raw": "第一章", "text_level": 1, "page_idx": 1, "chunk_index": 0},
+        {"chunk_id": "2", "text_raw": "第二章", "text_level": 1, "page_idx": 1, "chunk_index": 1},
+        {"chunk_id": "3", "text_raw": "第三章", "text_level": 1, "page_idx": 1, "chunk_index": 2},
+    ]
+    
+    merger = ParagraphMerger(min_length=80, max_length=500)
+    paragraphs = merger.merge(chunks)
+    
+    assert len(paragraphs) == 3
+    for i, para in enumerate(paragraphs):
+        assert para.get("is_heading") is True
+        assert para["merged_count"] == 1
+
+
+def test_element_type_handling():
+    """测试表格/图片等特殊元素不被合并"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    chunks = [
+        {"chunk_id": "1", "text_raw": "短句1", "text_level": None, "page_idx": 1, "chunk_index": 0},
+        {"chunk_id": "2", "text_raw": "表格内容", "text_level": None, "page_idx": 1, "chunk_index": 1, "element_type": "table"},
+        {"chunk_id": "3", "text_raw": "短句2", "text_level": None, "page_idx": 1, "chunk_index": 2},
+        {"chunk_id": "4", "text_raw": "图片说明", "text_level": None, "page_idx": 1, "chunk_index": 3, "element_type": "image"},
+    ]
+    
+    merger = ParagraphMerger(min_length=80, max_length=500)
+    paragraphs = merger.merge(chunks)
+    
+    # Should have 4 paragraphs: [para1], [table], [para2], [image]
+    assert len(paragraphs) == 4
+    assert paragraphs[0]["content"] == "短句1"
+    assert paragraphs[1]["content"] == "表格内容"
+    assert paragraphs[2]["content"] == "短句2"
+    assert paragraphs[3]["content"] == "图片说明"
+
+
+def test_single_chunk():
+    """测试单一块输入"""
+    from bid_scoring.structure_rebuilder import ParagraphMerger
+    
+    chunks = [
+        {"chunk_id": "1", "text_raw": "只有一个短句", "text_level": None, "page_idx": 1, "chunk_index": 0},
+    ]
+    
+    merger = ParagraphMerger(min_length=80, max_length=500)
+    paragraphs = merger.merge(chunks)
+    
+    assert len(paragraphs) == 1
+    assert paragraphs[0]["content"] == "只有一个短句"
+    assert paragraphs[0]["merged_count"] == 1
+    assert paragraphs[0]["source_chunk_ids"] == ["1"]
