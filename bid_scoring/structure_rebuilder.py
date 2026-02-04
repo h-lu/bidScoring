@@ -1,8 +1,11 @@
 """Structure rebuilder module for merging chunks into natural paragraphs."""
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -215,4 +218,101 @@ class ParagraphMerger:
             "page_idx": chunk.get("page_idx"),
             "is_heading": True,
             "text_level": chunk.get("text_level"),
+        }
+
+
+class HierarchicalContextGenerator:
+    """分层上下文生成器 - 根据节点类型和长度采用不同策略"""
+    
+    SHORT_THRESHOLD = 50
+    MEDIUM_THRESHOLD = 500
+    
+    def __init__(self, llm_client=None, document_title: str = ""):
+        self.llm_client = llm_client
+        self.document_title = document_title
+        self.stats = {'short_skipped': 0, 'medium_processed': 0, 'long_processed': 0}
+    
+    def generate_for_tree(self, root: RebuiltNode) -> None:
+        """为整棵树生成上下文"""
+        for section in root.children:
+            self._generate_for_section(section)
+    
+    def _generate_for_section(self, section: RebuiltNode) -> None:
+        """为章节及其段落生成上下文"""
+        for para in section.children:
+            para.context = self.generate_for_node(para, section.heading)
+        
+        # 为章节生成摘要
+        if section.children:
+            combined = ' '.join([p.content for p in section.children[:3]])
+            section.context = self._generate_summary(combined[:400], section.heading)
+    
+    def generate_for_node(self, node: RebuiltNode, section_title: str) -> str:
+        """为单个节点生成上下文"""
+        content = node.content
+        content_len = len(content)
+        
+        # 策略1: 超短文本 - 跳过LLM
+        if content_len < self.SHORT_THRESHOLD:
+            self.stats['short_skipped'] += 1
+            return self._generate_rule_based_context(section_title)
+        
+        # 策略2: 中等文本 - 使用LLM
+        if content_len <= self.MEDIUM_THRESHOLD:
+            if self.llm_client:
+                self.stats['medium_processed'] += 1
+                return self._call_llm_for_context(content, section_title)
+            return self._generate_rule_based_context(section_title)
+        
+        # 策略3: 长文本 - 摘要模式
+        self.stats['long_processed'] += 1
+        return self._generate_summary(content[:600], section_title)
+    
+    def _generate_rule_based_context(self, section_title: str) -> str:
+        """基于规则的上下文（无LLM）"""
+        if section_title and section_title != "文档开头":
+            return f"此内容来自《{self.document_title}》的「{section_title}」部分。"
+        return f"此内容来自《{self.document_title}》。"
+    
+    def _call_llm_for_context(self, content: str, section_title: str) -> str:
+        """调用LLM生成上下文"""
+        if not self.llm_client:
+            return self._generate_rule_based_context(section_title)
+        
+        prompt = f"""为以下文档片段生成简洁上下文（1-2句话）：
+文档：《{self.document_title}》
+章节：{section_title}
+内容：{content[:300]}
+要求：说明核心信息和在文档中的作用。"""
+        
+        try:
+            # Note: This is a simplified version. In production, use proper OpenAI API
+            if hasattr(self.llm_client, 'chat'):
+                response = self.llm_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "你是专业的文档分析助手。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0,
+                    max_tokens=100
+                )
+                return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.warning(f"LLM调用失败: {e}")
+        
+        return self._generate_rule_based_context(section_title)
+    
+    def _generate_summary(self, content: str, section_title: str) -> str:
+        """生成摘要"""
+        preview = content[:150] + "..." if len(content) > 150 else content
+        return f"来自《{self.document_title}》「{section_title}」：{preview}"
+    
+    def get_stats(self) -> dict:
+        """获取统计"""
+        total = sum(self.stats.values())
+        return {
+            **self.stats,
+            'total': total,
+            'llm_savings_percent': (self.stats['short_skipped'] / total * 100) if total > 0 else 0
         }

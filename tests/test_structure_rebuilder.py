@@ -241,3 +241,77 @@ def test_build_document_tree():
     assert doc_root.heading == "测试文档"
     assert doc_root.level == 2
     assert len(doc_root.children) == 2
+
+
+def test_skip_short_content_for_llm():
+    """测试跳过短内容的LLM调用"""
+    from bid_scoring.structure_rebuilder import HierarchicalContextGenerator, RebuiltNode
+    
+    # Mock LLM to track calls - matches llm_client.chat.completions.create interface
+    class MockCompletions:
+        def __init__(self):
+            self.call_count = 0
+        def create(self, *args, **kwargs):
+            self.call_count += 1
+            return type('Response', (), {'choices': [type('Choice', (), {'message': type('Message', (), {'content': 'mocked'})()})()]})()
+    
+    class MockChat:
+        def __init__(self):
+            self.completions = MockCompletions()
+        @property
+        def call_count(self):
+            return self.completions.call_count
+    
+    class MockLLM:
+        def __init__(self):
+            self.chat = MockChat()
+        @property
+        def call_count(self):
+            return self.chat.call_count
+    
+    mock_llm = MockLLM()
+    generator = HierarchicalContextGenerator(llm_client=mock_llm, document_title="测试文档")
+    
+    # 短内容 (<50字符) - 不应该调用LLM
+    short_node = RebuiltNode(
+        node_type="paragraph",
+        level=0,
+        content="细胞",  # 2 chars
+        heading="技术规格"
+    )
+    context = generator.generate_for_node(short_node, "技术规格")
+    assert mock_llm.call_count == 0
+    assert "测试文档" in context
+    assert "技术规格" in context
+    
+    # 中等内容 (50-500字符) - 应该调用LLM
+    medium_node = RebuiltNode(
+        node_type="paragraph",
+        level=0,
+        content="细胞和组织本身会发出荧光，这种自体荧光会干扰观察。共聚焦显微镜可以有效解决这个问题，提供更清晰的成像效果。",  # >50 chars
+        heading="技术规格"
+    )
+    context = generator.generate_for_node(medium_node, "技术规格")
+    assert mock_llm.call_count == 1
+    assert context == "mocked"
+    
+    # 验证统计
+    stats = generator.get_stats()
+    assert stats['short_skipped'] == 1
+    assert stats['medium_processed'] == 1
+
+
+def test_rule_based_context_generation():
+    """测试基于规则的上下文生成"""
+    from bid_scoring.structure_rebuilder import HierarchicalContextGenerator
+    
+    generator = HierarchicalContextGenerator(document_title="显微镜文档")
+    
+    # 有章节标题
+    context = generator._generate_rule_based_context("技术规格")
+    assert "显微镜文档" in context
+    assert "技术规格" in context
+    
+    # 无章节标题
+    context = generator._generate_rule_based_context(None)
+    assert "显微镜文档" in context
