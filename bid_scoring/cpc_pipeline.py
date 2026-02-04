@@ -327,16 +327,22 @@ class CPCPipeline:
                 logger.info(f"[CPC Pipeline] 构建 {len(sections)} 个章节")
                 
                 # ========== 阶段3: 上下文生成（对完整段落）==========
-                if self.config.enable_contextual:
-                    logger.info("[CPC Pipeline] 阶段3: 生成分层上下文...")
-                    context_gen = HierarchicalContextGenerator(
-                        llm_client=self._llm_client,
-                        document_title=document_title
-                    )
-                    context_gen.generate_for_tree(doc_root)
-                    
-                    stats = context_gen.get_stats()
-                    logger.info(f"[CPC Pipeline] 上下文统计: {stats}")
+                context_gen = None
+                if self.config.enable_contextual and self._llm_client:
+                    try:
+                        logger.info("[CPC Pipeline] 阶段3: 生成分层上下文...")
+                        context_gen = HierarchicalContextGenerator(
+                            llm_client=self._llm_client,
+                            document_title=document_title
+                        )
+                        context_gen.generate_for_tree(doc_root)
+                        
+                        stats = context_gen.get_stats()
+                        logger.info(f"[CPC Pipeline] 上下文生成统计: {stats}")
+                    except Exception as e:
+                        logger.warning(f"[CPC Pipeline] 上下文生成失败: {e}")
+                        errors.append(f"Context generation failed: {e}")
+                        # 继续处理，不中断流程
                 
                 # ========== 阶段4: 存储到数据库 ==========
                 logger.info("[CPC Pipeline] 阶段4: 存储结构到数据库...")
@@ -558,7 +564,7 @@ class CPCPipeline:
         version_id: str,
         root,
     ) -> int:
-        """存储重建后的结构到数据库
+        """存储重建后的结构到数据库（修复版 - 使用递归设置 parent_id）
         
         Args:
             conn: 数据库连接
@@ -569,53 +575,77 @@ class CPCPipeline:
             存储的节点数量
         """
         from bid_scoring.structure_rebuilder import RebuiltNode
+        import json
         
         count = 0
         node_map: dict[int, str] = {}  # id(node) -> node_id
         
-        with conn.cursor() as cur:
-            # 先存储根节点和章节节点
-            nodes_to_store = self._flatten_tree(root)
+        def store_recursive(node: RebuiltNode, parent_id: Optional[str]) -> str:
+            """递归存储节点并返回 node_id"""
+            nonlocal count
             
-            for node in nodes_to_store:
-                node_id = str(uuid.uuid4())
-                node_map[id(node)] = node_id
-                
-                # 确定父节点 ID
-                parent_id = None
-                # 这里需要找到父节点的引用，简化起见暂时为 None
-                
-                # 获取上下文（如果已生成）
-                context = getattr(node, 'context', None)
-                
+            # 生成唯一 node_id
+            node_id = str(uuid.uuid4())
+            node_map[id(node)] = node_id
+            
+            # 获取页码范围
+            if node.page_range and node.page_range[0] is not None:
+                start_page, end_page = node.page_range
+            else:
+                start_page = end_page = 0
+            
+            # 获取上下文（如果已生成）
+            context = getattr(node, 'context', None)
+            
+            # 先插入节点（children_ids 暂时为空，稍后更新）
+            with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO hierarchical_nodes (
-                        version_id, parent_id, level, node_type, content,
-                        children_ids, metadata, page_start, page_end
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
-                    RETURNING node_id
+                        node_id, version_id, parent_id, level, node_type,
+                        content, heading, context, start_page, end_page,
+                        metadata, children_ids
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (node_id) DO NOTHING
                     """,
                     (
+                        node_id,
                         version_id,
                         parent_id,
                         node.level,
                         node.node_type,
-                        node.content,
-                        [node_map.get(id(child)) for child in node.children if id(child) in node_map],
-                        {
+                        node.content[:5000],  # 限制长度防止溢出
+                        node.heading,
+                        context,
+                        start_page,
+                        end_page,
+                        json.dumps({
                             **node.metadata,
-                            'heading': node.heading,
-                            'context': context,
                             'source_chunks': node.source_chunks,
-                        },
-                        node.page_range[0],
-                        node.page_range[1],
+                        }),
+                        [],  # children_ids 稍后更新
                     ),
                 )
-                if cur.fetchone():
-                    count += 1
+                count += 1
+            
+            # 递归存储子节点，并收集子节点 ID
+            children_ids: list[str] = []
+            for child in node.children:
+                child_id = store_recursive(child, node_id)
+                children_ids.append(child_id)
+            
+            # 更新当前节点的 children_ids
+            if children_ids:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE hierarchical_nodes SET children_ids = %s WHERE node_id = %s",
+                        (children_ids, node_id)
+                    )
+            
+            return node_id
+        
+        # 从根节点开始递归存储
+        store_recursive(root, None)
         
         return count
 
@@ -697,35 +727,93 @@ class CPCPipeline:
         version_id: str,
         root,
     ) -> None:
-        """为重建后的结构节点生成 embeddings
+        """为重建后的结构节点生成 embeddings（修复版 - 正确存储到数据库）
         
         Args:
             conn: 数据库连接
             version_id: 版本 ID
             root: RebuiltNode 根节点
         """
-        # 收集需要生成 embedding 的文本
-        texts_to_embed = []
-        nodes_to_update = []
+        from bid_scoring.structure_rebuilder import RebuiltNode
         
-        for node in self._flatten_tree(root):
-            # 使用上下文增强的文本（如果可用）
-            text = getattr(node, 'context', '') + '\n\n' + node.content if hasattr(node, 'context') else node.content
-            if text.strip():
-                texts_to_embed.append(text)
-                nodes_to_update.append(node)
+        # 收集需要生成 embedding 的节点（段落和章节）
+        nodes_to_embed: list[RebuiltNode] = []
         
-        if not texts_to_embed:
+        def collect_nodes(node: RebuiltNode):
+            """递归收集需要 embedding 的节点"""
+            # 为段落和章节生成 embedding
+            if node.node_type in ('paragraph', 'section'):
+                nodes_to_embed.append(node)
+            for child in node.children:
+                collect_nodes(child)
+        
+        collect_nodes(root)
+        
+        if not nodes_to_embed:
+            logger.info("[CPC Pipeline] 没有需要生成 embedding 的节点")
             return
         
-        # 批量生成 embeddings
-        embeddings = embed_texts(texts_to_embed)
+        logger.info(f"[CPC Pipeline] 为 {len(nodes_to_embed)} 个节点生成 embeddings...")
         
-        # 更新数据库
+        # 构建文本（使用上下文增强）
+        texts_to_embed: list[str] = []
+        for node in nodes_to_embed:
+            context = getattr(node, 'context', None)
+            if context:
+                text = f"{context}\n\n{node.content}"
+            else:
+                text = node.content
+            texts_to_embed.append(text)
+        
+        # 批量生成 embeddings
+        embedding_client = self._get_embedding_client()
+        embeddings = embed_texts(
+            texts_to_embed,
+            client=embedding_client,
+            batch_size=10,
+            show_progress=False
+        )
+        
+        # 存储 embeddings 到数据库
+        # 需要通过内容匹配来更新（因为节点没有持久化 ID）
+        updated_count = 0
         with conn.cursor() as cur:
-            for node, embedding in zip(nodes_to_update, embeddings):
-                # 这里简化处理，实际应该通过 node_id 更新
-                pass  # 已在 _store_rebuilt_structure 中处理
+            # 获取该版本下所有段落和章节节点
+            cur.execute(
+                """
+                SELECT node_id, content, context 
+                FROM hierarchical_nodes 
+                WHERE version_id = %s AND node_type IN ('paragraph', 'section')
+                AND embedding IS NULL
+                """,
+                (version_id,)
+            )
+            db_nodes = cur.fetchall()
+            
+            # 创建内容到 embedding 的映射
+            content_to_embedding: dict[str, list[float]] = {}
+            for node, embedding in zip(nodes_to_embed, embeddings):
+                if embedding:
+                    # 使用内容前 100 字符作为键
+                    key = node.content[:100].strip()
+                    content_to_embedding[key] = embedding
+            
+            # 更新数据库中的节点
+            for db_node_id, db_content, db_context in db_nodes:
+                content_key = db_content[:100].strip() if db_content else ""
+                if content_key in content_to_embedding:
+                    embedding = content_to_embedding[content_key]
+                    cur.execute(
+                        """
+                        UPDATE hierarchical_nodes 
+                        SET embedding = %s::vector 
+                        WHERE node_id = %s
+                        """,
+                        (embedding, db_node_id)
+                    )
+                    updated_count += 1
+        
+        logger.info(f"[CPC Pipeline] Embeddings 生成完成，更新了 {updated_count} 个节点")
 
     async def _build_contextual_chunks(
         self,
