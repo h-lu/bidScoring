@@ -12,6 +12,7 @@ import json
 from functools import lru_cache
 from typing import Any
 
+import tiktoken
 from openai import OpenAI
 from bid_scoring.config import load_settings
 
@@ -21,26 +22,90 @@ DEFAULT_MODEL = "text-embedding-3-small"
 DEFAULT_DIM = 1536
 MAX_BATCH_SIZE = 2048  # OpenAI API 限制
 MAX_TOKENS_PER_BATCH = 600000  # 约 600k tokens/分钟限制
+MAX_INPUT_TOKENS = 8191  # OpenAI embedding 模型输入限制
+
+# tiktoken 编码器缓存
+_encoding_cache: dict[str, tiktoken.Encoding] = {}
 
 
-def estimate_tokens(text: str) -> int:
-    """估算文本的 token 数量
+def get_encoding(model: str = DEFAULT_MODEL) -> tiktoken.Encoding:
+    """获取 tiktoken 编码器（带缓存）
     
-    简单估算:
-    - 中文: 约 1.5 字符/token
-    - 英文: 约 4 字符/token
-    - 保守估计: 平均 2 字符/token
+    Args:
+        model: 模型名称
+        
+    Returns:
+        tiktoken 编码器
+    """
+    if model not in _encoding_cache:
+        try:
+            _encoding_cache[model] = tiktoken.encoding_for_model(model)
+        except KeyError:
+            # 如果模型未知，使用 cl100k_base（OpenAI 最新模型的编码）
+            _encoding_cache[model] = tiktoken.get_encoding("cl100k_base")
+    return _encoding_cache[model]
+
+
+def count_tokens(text: str, model: str = DEFAULT_MODEL) -> int:
+    """精确计算文本的 token 数量
+    
+    使用 tiktoken 进行精确计算，支持所有 OpenAI 模型。
     
     Args:
         text: 输入文本
+        model: 模型名称
     
     Returns:
-        估算的 token 数量
+        精确的 token 数量
     """
     if not text:
         return 0
-    # 保守估计: 每个字符约 0.5 token
-    return len(text) // 2 + 1
+    encoding = get_encoding(model)
+    return len(encoding.encode(text))
+
+
+def truncate_to_max_tokens(
+    text: str, 
+    max_tokens: int = MAX_INPUT_TOKENS,
+    model: str = DEFAULT_MODEL
+) -> str:
+    """将文本截断到最大 token 数量
+    
+    使用 tiktoken 精确截断，确保不超过模型输入限制。
+    
+    Args:
+        text: 输入文本
+        max_tokens: 最大 token 数（默认 8191）
+        model: 模型名称
+    
+    Returns:
+        截断后的文本
+    """
+    if not text:
+        return text
+    
+    encoding = get_encoding(model)
+    tokens = encoding.encode(text)
+    
+    if len(tokens) <= max_tokens:
+        return text
+    
+    # 截断并添加提示
+    truncated = encoding.decode(tokens[:max_tokens])
+    return truncated
+
+
+def estimate_tokens(text: str, model: str = DEFAULT_MODEL) -> int:
+    """估算文本的 token 数量（向后兼容，推荐使用 count_tokens）
+    
+    Args:
+        text: 输入文本
+        model: 模型名称
+    
+    Returns:
+        token 数量
+    """
+    return count_tokens(text, model)
 
 
 def get_embedding_client() -> OpenAI:
@@ -82,12 +147,14 @@ def embed_texts(
     model: str | None = None,
     batch_size: int = 100,
     show_progress: bool = False,
+    truncate: bool = True,
 ) -> list[list[float]]:
     """批量生成文本向量
     
     最佳实践:
     - 批量处理: 50-100条/批
     - Token限制: 每批不超过 100k tokens
+    - 输入限制: 单条文本最多 8191 tokens
     - 自动重试: 使用 OpenAI 客户端内置重试
     - 进度显示: 可选显示处理进度
     
@@ -97,6 +164,7 @@ def embed_texts(
         model: 模型名称（为 None 时使用配置）
         batch_size: 每批大小（默认 100）
         show_progress: 是否显示进度
+        truncate: 是否自动截断超长文本（默认 True）
     
     Returns:
         向量列表（与输入顺序一致）
@@ -113,7 +181,8 @@ def embed_texts(
     
     if not valid_texts:
         # 全部为空，返回空向量
-        return [[0.0] * (model or DEFAULT_DIM)] * len(texts)
+        dim = get_embedding_config()["dim"] if model is None else DEFAULT_DIM
+        return [[0.0] * dim] * len(texts)
     
     # 初始化客户端
     if client is None:
@@ -122,13 +191,29 @@ def embed_texts(
     if model is None:
         model = get_embedding_config()["model"]
     
+    # 检查并截断超长文本
+    processed_texts = []
+    for orig_idx, text in valid_texts:
+        token_count = count_tokens(text, model)
+        if token_count > MAX_INPUT_TOKENS:
+            if truncate:
+                if show_progress:
+                    print(f"  ⚠️ 文本 {orig_idx} 超出 {MAX_INPUT_TOKENS} tokens，自动截断")
+                text = truncate_to_max_tokens(text, MAX_INPUT_TOKENS, model)
+            else:
+                raise ValueError(
+                    f"文本 {orig_idx} 包含 {token_count} tokens，"
+                    f"超过最大限制 {MAX_INPUT_TOKENS}"
+                )
+        processed_texts.append((orig_idx, text))
+    
     # 按 token 数量分批
     batches = []
     current_batch = []
     current_tokens = 0
     
-    for orig_idx, text in valid_texts:
-        tokens = estimate_tokens(text)
+    for orig_idx, text in processed_texts:
+        tokens = count_tokens(text, model)
         
         # 如果加入当前文本会超出限制，先保存当前批次
         if (len(current_batch) >= batch_size or 

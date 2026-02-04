@@ -255,24 +255,23 @@ class CPCPipeline:
         source_type: str = "mineru",
         source_uri: Optional[str] = None,
     ) -> ProcessResult:
-        """处理文档 - 新结构优先流程
+        """处理文档 - Small-to-Big Chunking 流程
         
         执行步骤:
         1. 文档入库
-        2. 段落合并 (ParagraphMerger)
-        3. 章节树构建 (TreeBuilder)
-        4. 分层上下文生成 (HierarchicalContextGenerator)
-        5. 存储重建结构
+        2. 智能 Chunk 合并 (SmartChunkMerger) - Small-to-Big 策略
+        3. 构建章节树 + Chunks (SectionWithChunks)
+        4. 存储 Section 和 Chunk 节点到数据库
+        5. 生成 Chunk-level Embeddings
         6. 可选的 RAPTOR 构建
         """
-        from bid_scoring.structure_rebuilder import (
-            ParagraphMerger, TreeBuilder, HierarchicalContextGenerator, RebuiltNode
+        from bid_scoring.chunk_processor import (
+            create_small_to_big_sections, SectionWithChunks, ProcessedChunk
         )
         
         errors: list[str] = []
         chunks_count = 0
-        context_gen: Optional[HierarchicalContextGenerator] = None
-        doc_root: Optional[RebuiltNode] = None
+        sections: List[SectionWithChunks] = []
         
         try:
             with self._get_connection() as conn:
@@ -309,65 +308,52 @@ class CPCPipeline:
                         message="文档为空，无内容需要处理",
                     )
                 
-                # ========== 阶段2: 结构重建 ==========
-                logger.info("[CPC Pipeline] 阶段2: 重建文档结构...")
+                # ========== 阶段2: Small-to-Big Chunking ==========
+                logger.info("[CPC Pipeline] 阶段2: Small-to-Big 智能分块...")
                 
-                # 2.1 合并段落
-                merger = ParagraphMerger(
-                    min_length=80,  # MIN_PARAGRAPH_LENGTH
-                    max_length=500  # MAX_PARAGRAPH_LENGTH
+                sections = create_small_to_big_sections(
+                    raw_chunks=content_list,
+                    document_title=document_title,
+                    min_chunk_size=200,  # 合并小于 200 chars 的 chunks
+                    max_chunk_size=800   # 最大 800 chars 用于 embedding
                 )
-                paragraphs = merger.merge(content_list)
-                logger.info(f"[CPC Pipeline] 合并为 {len(paragraphs)} 个段落/标题")
                 
-                # 2.2 构建章节树
-                tree_builder = TreeBuilder()
-                sections = tree_builder.build_sections(paragraphs)
-                doc_root = tree_builder.build_document_tree(sections, document_title)
-                logger.info(f"[CPC Pipeline] 构建 {len(sections)} 个章节")
+                total_processed_chunks = sum(len(s.chunks) for s in sections)
+                logger.info(
+                    f"[CPC Pipeline] 构建 {len(sections)} 个章节，"
+                    f"{total_processed_chunks} 个处理后的 chunks"
+                )
                 
-                # ========== 阶段3: 上下文生成（对完整段落）==========
-                context_gen = None
-                if self.config.enable_contextual and self._llm_client:
-                    try:
-                        logger.info("[CPC Pipeline] 阶段3: 生成分层上下文...")
-                        context_gen = HierarchicalContextGenerator(
-                            llm_client=self._llm_client,
-                            document_title=document_title
-                        )
-                        context_gen.generate_for_tree(doc_root)
-                        
-                        stats = context_gen.get_stats()
-                        logger.info(f"[CPC Pipeline] 上下文生成统计: {stats}")
-                    except Exception as e:
-                        logger.warning(f"[CPC Pipeline] 上下文生成失败: {e}")
-                        errors.append(f"Context generation failed: {e}")
-                        # 继续处理，不中断流程
+                # ========== 阶段3: 存储到数据库 (Small-to-Big 结构) ==========
+                logger.info("[CPC Pipeline] 阶段3: 存储 Small-to-Big 结构...")
+                await self._store_small_to_big_structure(
+                    conn, str(version_id), str(document_id), sections
+                )
                 
-                # ========== 阶段4: 存储到数据库 ==========
-                logger.info("[CPC Pipeline] 阶段4: 存储结构到数据库...")
-                await self._store_rebuilt_structure(conn, str(version_id), doc_root)
+                # ========== 阶段4: 生成 Chunk-level Embeddings ==========
+                logger.info("[CPC Pipeline] 阶段4: 生成 chunk-level embeddings...")
+                await self._generate_chunk_embeddings(conn, str(version_id), sections)
                 
                 # ========== 阶段5: 可选的 RAPTOR ==========
                 if self.config.enable_raptor:
                     logger.info("[CPC Pipeline] 阶段5: 构建 RAPTOR 树...")
-                    await self._build_raptor_on_structure(conn, str(version_id), doc_root)
-                
-                # ========== 阶段6: 生成 Embeddings ==========
-                logger.info("[CPC Pipeline] 阶段6: 生成 embeddings...")
-                await self._generate_embeddings_for_structure(conn, str(version_id), doc_root)
+                    await self._build_raptor_on_chunks(conn, str(version_id), sections)
                 
                 conn.commit()
                 
-                nodes_created = len(self._flatten_tree(doc_root))
+                # 计算统计信息
+                total_chunks = sum(len(s.chunks) for s in sections)
                 return ProcessResult(
                     success=True,
                     version_id=str(version_id),
                     chunks_count=chunks_count,
-                    nodes_created=nodes_created,
-                    root_node_id=str(uuid.uuid4()),  # 实际存储时生成
-                    stats=getattr(context_gen, 'stats', {}),
-                    message="文档处理成功（结构优先流程）",
+                    nodes_created=total_chunks + len(sections),  # chunks + sections
+                    stats={
+                        "sections": len(sections),
+                        "processed_chunks": total_chunks,
+                        "strategy": "small_to_big"
+                    },
+                    message="文档处理成功（Small-to-Big 策略）",
                 )
                 
         except Exception as e:
@@ -558,130 +544,231 @@ class CPCPipeline:
         traverse(root)
         return result
 
-    async def _store_rebuilt_structure(
+    async def _store_small_to_big_structure(
         self,
         conn: psycopg.Connection,
         version_id: str,
-        root,
+        document_id: str,
+        sections: list,
     ) -> int:
-        """存储重建后的结构到数据库（修复版 - 使用递归设置 parent_id）
+        """存储 Small-to-Big 结构到数据库
+        
+        存储策略:
+        1. Section 节点: 存储完整内容（用于 LLM 上下文）
+        2. Chunk 节点: 存储处理后的内容（用于 embedding 和搜索）
+        3. 建立 parent_id 关系
         
         Args:
             conn: 数据库连接
             version_id: 版本 ID
-            root: RebuiltNode 根节点
+            document_id: 文档 ID
+            sections: SectionWithChunks 列表
             
         Returns:
             存储的节点数量
         """
-        from bid_scoring.structure_rebuilder import RebuiltNode
+        from bid_scoring.chunk_processor import SectionWithChunks, ProcessedChunk
         import json
         
         count = 0
-        node_map: dict[int, str] = {}  # id(node) -> node_id
         
-        def store_recursive(node: RebuiltNode, parent_id: Optional[str]) -> str:
-            """递归存储节点并返回 node_id"""
-            nonlocal count
+        with conn.cursor() as cur:
+            # 先清空该版本的现有 hierarchical_nodes
+            cur.execute(
+                "DELETE FROM hierarchical_nodes WHERE version_id = %s",
+                (version_id,)
+            )
+            if cur.rowcount > 0:
+                logger.info(f"[CPC Pipeline] 清除 {cur.rowcount} 个旧节点")
             
-            # 生成唯一 node_id
-            node_id = str(uuid.uuid4())
-            node_map[id(node)] = node_id
-            
-            # 获取上下文（如果已生成）
-            context = getattr(node, 'context', None)
-            
-            # 获取 source_chunks 和 merged_chunk_count
-            source_chunks = getattr(node, 'source_chunks', []) or []
-            merged_chunk_count = node.metadata.get('merged_count', 1) if node.metadata else 1
-            
-            # 获取 chunk_id 范围
-            start_chunk_id = source_chunks[0] if source_chunks else None
-            end_chunk_id = source_chunks[-1] if source_chunks else None
-            
-            # 先插入节点（children_ids 暂时为空，稍后更新）
-            with conn.cursor() as cur:
+            for section in sections:
+                # 创建 Section 节点
+                section_id = str(uuid.uuid4())
+                
+                # Convert source_chunk_ids to valid UUIDs if needed
+                source_ids = section.source_chunk_ids or []
+                # If IDs are not valid UUIDs, convert them to nil UUIDs for storage
+                valid_source_ids = []
+                for sid in source_ids:
+                    try:
+                        uuid.UUID(sid)  # Validate
+                        valid_source_ids.append(sid)
+                    except (ValueError, TypeError):
+                        # Generate deterministic UUID from string
+                        valid_source_ids.append(str(uuid.uuid5(uuid.NAMESPACE_DNS, str(sid))))
+                
                 cur.execute(
                     """
                     INSERT INTO hierarchical_nodes (
-                        node_id, version_id, parent_id, level, node_type,
-                        content, heading, context,
-                        start_chunk_id, end_chunk_id,
-                        source_chunk_ids, merged_chunk_count,
-                        metadata, children_ids
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (node_id) DO NOTHING
+                        node_id, version_id, document_id, parent_id, level, node_type,
+                        heading, content, content_for_embedding,
+                        page_range, source_chunk_ids, metadata
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        node_id,
+                        section_id,
                         version_id,
-                        parent_id,
-                        node.level,
-                        node.node_type,
-                        node.content[:5000],  # 限制长度防止溢出
-                        node.heading,
-                        context,
-                        start_chunk_id,  # ★ 起始 chunk
-                        end_chunk_id,    # ★ 结束 chunk
-                        source_chunks,   # ★ source_chunk_ids 数组
-                        merged_chunk_count,  # ★ merged_chunk_count
-                        json.dumps({
-                            **node.metadata,
-                            'source_chunks': source_chunks,
-                        }),
-                        [],  # children_ids 稍后更新
-                    ),
+                        document_id,
+                        None,  # parent_id
+                        1,  # level
+                        'section',
+                        section.heading,
+                        section.content,  # Full content for LLM
+                        None,  # Section doesn't have embedding content
+                        json.dumps(section.page_range),
+                        valid_source_ids,
+                        json.dumps(section.metadata),
+                    )
                 )
                 count += 1
-            
-            # 递归存储子节点，并收集子节点 ID
-            children_ids: list[str] = []
-            for child in node.children:
-                child_id = store_recursive(child, node_id)
-                children_ids.append(child_id)
-            
-            # 更新当前节点的 children_ids
-            if children_ids:
-                with conn.cursor() as cur:
+                
+                # 创建 Chunk 节点（用于搜索）
+                for idx, chunk in enumerate(section.chunks):
+                    chunk_id = str(uuid.uuid4())
+                    
+                    # Convert source_chunk_ids to valid UUIDs if needed
+                    chunk_source_ids = chunk.source_chunk_ids or []
+                    valid_chunk_source_ids = []
+                    for sid in chunk_source_ids:
+                        try:
+                            uuid.UUID(sid)
+                            valid_chunk_source_ids.append(sid)
+                        except (ValueError, TypeError):
+                            valid_chunk_source_ids.append(str(uuid.uuid5(uuid.NAMESPACE_DNS, str(sid))))
+                    
                     cur.execute(
-                        "UPDATE hierarchical_nodes SET children_ids = %s WHERE node_id = %s",
-                        (children_ids, node_id)
+                        """
+                        INSERT INTO hierarchical_nodes (
+                            node_id, version_id, document_id, parent_id, level, node_type,
+                            heading, content, content_for_embedding, char_count,
+                            page_range, source_chunk_ids, metadata, order_index
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            chunk_id,
+                            version_id,
+                            document_id,
+                            section_id,  # parent_id -> section
+                            2,  # level
+                            'chunk',
+                            section.heading,  # Inherit heading from section
+                            chunk.content,  # Full content
+                            chunk.content_for_embedding,  # For embedding
+                            chunk.char_count,
+                            json.dumps([chunk.page_start, chunk.page_end]),
+                            valid_chunk_source_ids,
+                            json.dumps(chunk.metadata),
+                            idx,  # order_index
+                        )
                     )
-            
-            return node_id
+                    count += 1
         
-        # 从根节点开始递归存储
-        store_recursive(root, None)
-        
+        logger.info(f"[CPC Pipeline] 存储 {count} 个节点 ({len(sections)} sections)")
         return count
-
-    async def _build_raptor_on_structure(
+    
+    async def _generate_chunk_embeddings(
         self,
         conn: psycopg.Connection,
         version_id: str,
-        root,
+        sections: list,
     ) -> int:
-        """在结构上构建 RAPTOR 树
+        """为 chunks 生成 embeddings
         
         Args:
             conn: 数据库连接
             version_id: 版本 ID
-            root: RebuiltNode 根节点
+            sections: SectionWithChunks 列表
+            
+        Returns:
+            更新的节点数量
+        """
+        from bid_scoring.chunk_processor import SectionWithChunks, ProcessedChunk
+        
+        # 收集所有需要 embedding 的 chunks
+        chunks_to_embed = []
+        for section in sections:
+            for chunk in section.chunks:
+                chunks_to_embed.append((section, chunk))
+        
+        if not chunks_to_embed:
+            logger.info("[CPC Pipeline] 没有需要 embedding 的 chunks")
+            return 0
+        
+        logger.info(f"[CPC Pipeline] 为 {len(chunks_to_embed)} 个 chunks 生成 embeddings...")
+        
+        # 准备文本（使用 content_for_embedding）
+        texts = [chunk.content_for_embedding for _, chunk in chunks_to_embed]
+        
+        # 批量生成 embeddings
+        embedding_client = self._get_embedding_client()
+        embeddings = embed_texts(
+            texts,
+            client=embedding_client,
+            batch_size=50,  # Larger batch for chunks
+            show_progress=True
+        )
+        
+        # 更新数据库
+        updated_count = 0
+        with conn.cursor() as cur:
+            # 获取所有 chunk 节点的 ID
+            cur.execute(
+                """
+                SELECT node_id, content_for_embedding
+                FROM hierarchical_nodes
+                WHERE version_id = %s AND node_type = 'chunk' AND embedding IS NULL
+                """,
+                (version_id,)
+            )
+            db_chunks = {row[1][:100]: row[0] for row in cur.fetchall()}
+            
+            for (section, chunk), embedding in zip(chunks_to_embed, embeddings):
+                if not embedding:
+                    continue
+                
+                # 通过 content_for_embedding 匹配
+                content_key = chunk.content_for_embedding[:100]
+                if content_key in db_chunks:
+                    chunk_id = db_chunks[content_key]
+                    cur.execute(
+                        """
+                        UPDATE hierarchical_nodes
+                        SET embedding = %s::vector
+                        WHERE node_id = %s
+                        """,
+                        (embedding, chunk_id)
+                    )
+                    updated_count += 1
+        
+        logger.info(f"[CPC Pipeline] Embeddings 生成完成，更新了 {updated_count} 个 chunks")
+        return updated_count
+    
+    async def _build_raptor_on_chunks(
+        self,
+        conn: psycopg.Connection,
+        version_id: str,
+        sections: list,
+    ) -> int:
+        """在 chunks 上构建 RAPTOR 树
+        
+        Args:
+            conn: 数据库连接
+            version_id: 版本 ID
+            sections: SectionWithChunks 列表
             
         Returns:
             创建的 RAPTOR 节点数量
         """
-        # 获取所有段落文本
-        paragraphs = []
-        for section in root.children:
-            for para in section.children:
-                if para.node_type == 'paragraph':
-                    paragraphs.append(para.content)
+        # 收集所有 chunk 内容
+        chunk_contents = []
+        for section in sections:
+            for chunk in section.chunks:
+                chunk_contents.append(chunk.content_for_embedding)
         
-        if len(paragraphs) < 2:
+        if len(chunk_contents) < 2:
             return 0
         
-        # 使用现有的 RAPTOR 构建器
+        # 使用 RAPTOR 构建器
         builder = RAPTORBuilder(
             max_levels=self.config.raptor_max_levels,
             cluster_size=self.config.raptor_cluster_size,
@@ -691,7 +778,7 @@ class CPCPipeline:
         )
         
         try:
-            nodes = builder.build_tree(paragraphs)
+            nodes = builder.build_tree(chunk_contents)
         except ValueError:
             return 0
         
@@ -702,124 +789,31 @@ class CPCPipeline:
                 metadata = {
                     **node.metadata,
                     'raptor': True,
-                    'source': 'structure_rebuilder',
+                    'source': 'small_to_big_chunks',
                 }
                 
                 cur.execute(
                     """
                     INSERT INTO hierarchical_nodes (
-                        version_id, level, node_type, content,
+                        version_id, document_id, level, node_type, content,
                         children_ids, metadata, embedding
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s::vector)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::vector)
                     ON CONFLICT DO NOTHING
                     """,
                     (
                         version_id,
-                        node.level + 10,  # RAPTOR 节点使用 level 10+ 避免冲突
+                        None,  # document_id
+                        node.level + 10,
                         'raptor_' + node.node_type,
                         node.content,
                         node.children_ids,
-                        metadata,
+                        json.dumps(metadata),
                         node.embedding,
                     ),
                 )
                 count += 1
         
         return count
-
-    async def _generate_embeddings_for_structure(
-        self,
-        conn: psycopg.Connection,
-        version_id: str,
-        root,
-    ) -> None:
-        """为重建后的结构节点生成 embeddings（修复版 - 正确存储到数据库）
-        
-        Args:
-            conn: 数据库连接
-            version_id: 版本 ID
-            root: RebuiltNode 根节点
-        """
-        from bid_scoring.structure_rebuilder import RebuiltNode
-        
-        # 收集需要生成 embedding 的节点（段落和章节）
-        nodes_to_embed: list[RebuiltNode] = []
-        
-        def collect_nodes(node: RebuiltNode):
-            """递归收集需要 embedding 的节点"""
-            # 为段落和章节生成 embedding
-            if node.node_type in ('paragraph', 'section'):
-                nodes_to_embed.append(node)
-            for child in node.children:
-                collect_nodes(child)
-        
-        collect_nodes(root)
-        
-        if not nodes_to_embed:
-            logger.info("[CPC Pipeline] 没有需要生成 embedding 的节点")
-            return
-        
-        logger.info(f"[CPC Pipeline] 为 {len(nodes_to_embed)} 个节点生成 embeddings...")
-        
-        # 构建文本（使用上下文增强）
-        texts_to_embed: list[str] = []
-        for node in nodes_to_embed:
-            context = getattr(node, 'context', None)
-            if context:
-                text = f"{context}\n\n{node.content}"
-            else:
-                text = node.content
-            texts_to_embed.append(text)
-        
-        # 批量生成 embeddings
-        embedding_client = self._get_embedding_client()
-        embeddings = embed_texts(
-            texts_to_embed,
-            client=embedding_client,
-            batch_size=10,
-            show_progress=False
-        )
-        
-        # 存储 embeddings 到数据库
-        # 需要通过内容匹配来更新（因为节点没有持久化 ID）
-        updated_count = 0
-        with conn.cursor() as cur:
-            # 获取该版本下所有段落和章节节点
-            cur.execute(
-                """
-                SELECT node_id, content, context 
-                FROM hierarchical_nodes 
-                WHERE version_id = %s AND node_type IN ('paragraph', 'section')
-                AND embedding IS NULL
-                """,
-                (version_id,)
-            )
-            db_nodes = cur.fetchall()
-            
-            # 创建内容到 embedding 的映射
-            content_to_embedding: dict[str, list[float]] = {}
-            for node, embedding in zip(nodes_to_embed, embeddings):
-                if embedding:
-                    # 使用内容前 100 字符作为键
-                    key = node.content[:100].strip()
-                    content_to_embedding[key] = embedding
-            
-            # 更新数据库中的节点
-            for db_node_id, db_content, db_context in db_nodes:
-                content_key = db_content[:100].strip() if db_content else ""
-                if content_key in content_to_embedding:
-                    embedding = content_to_embedding[content_key]
-                    cur.execute(
-                        """
-                        UPDATE hierarchical_nodes 
-                        SET embedding = %s::vector 
-                        WHERE node_id = %s
-                        """,
-                        (embedding, db_node_id)
-                    )
-                    updated_count += 1
-        
-        logger.info(f"[CPC Pipeline] Embeddings 生成完成，更新了 {updated_count} 个节点")
 
     async def _build_contextual_chunks(
         self,
