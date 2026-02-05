@@ -13,7 +13,7 @@ class TestHiChunkNode:
             level=0,
             node_type="sentence",
             content="Test content",
-            metadata={"page_idx": 1}
+            metadata={"page_idx": 1},
         )
         assert node.level == 0
         assert node.node_type == "sentence"
@@ -33,7 +33,7 @@ class TestHiChunkNode:
         """Test that invalid level raises error."""
         with pytest.raises(ValueError, match="Level must be 0-3"):
             HiChunkNode(level=4, node_type="sentence")
-        
+
         with pytest.raises(ValueError, match="Level must be 0-3"):
             HiChunkNode(level=-1, node_type="sentence")
 
@@ -50,7 +50,7 @@ class TestHiChunkNode:
             content="Paragraph text",
             parent_id="parent-uuid",
             children_ids=["child-uuid"],
-            metadata={"key": "value"}
+            metadata={"key": "value"},
         )
         d = node.to_dict()
         assert d["level"] == 1
@@ -87,7 +87,7 @@ class TestHiChunkBuilderBasic:
         """Test building hierarchy with empty content list."""
         builder = HiChunkBuilder()
         nodes = builder.build_hierarchy([], "Empty Doc")
-        
+
         assert len(nodes) == 1
         assert nodes[0].level == 3
         assert nodes[0].node_type == "document"
@@ -107,15 +107,15 @@ class TestHiChunkBuilderBasic:
             {"type": "text", "text": "Hello world", "page_idx": 1, "text_level": 0}
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         # Should have: 1 leaf + 1 para + 1 section + 1 root = 4 nodes
         assert len(nodes) == 4
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         para_nodes = [n for n in nodes if n.level == 1]
         section_nodes = [n for n in nodes if n.level == 2]
         root_nodes = [n for n in nodes if n.level == 3]
-        
+
         assert len(leaf_nodes) == 1
         assert len(para_nodes) == 1
         assert len(section_nodes) == 1
@@ -130,14 +130,19 @@ class TestHiChunkParagraphMerging:
         builder = HiChunkBuilder()
         content_list = [
             {"type": "text", "text": "First sentence.", "page_idx": 1, "text_level": 0},
-            {"type": "text", "text": "Second sentence.", "page_idx": 1, "text_level": 0},
+            {
+                "type": "text",
+                "text": "Second sentence.",
+                "page_idx": 1,
+                "text_level": 0,
+            },
             {"type": "text", "text": "Third sentence.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         para_nodes = [n for n in nodes if n.level == 1]
-        
+
         # 3 leaf nodes
         assert len(leaf_nodes) == 3
         # Should be merged into 1 paragraph
@@ -154,9 +159,9 @@ class TestHiChunkParagraphMerging:
             {"type": "text", "text": "After heading.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para_nodes = [n for n in nodes if n.level == 1]
-        
+
         # Should have 3 paragraphs: normal text, heading, after heading
         assert len(para_nodes) == 3
 
@@ -168,9 +173,9 @@ class TestHiChunkParagraphMerging:
             {"type": "text", "text": "Page 2 text.", "page_idx": 2, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para_nodes = [n for n in nodes if n.level == 1]
-        
+
         # Should be 2 paragraphs
         assert len(para_nodes) == 2
 
@@ -179,13 +184,18 @@ class TestHiChunkParagraphMerging:
         builder = HiChunkBuilder()
         content_list = [
             {"type": "text", "text": "Before table.", "page_idx": 1, "text_level": 0},
-            {"type": "table", "table_body": "Table content", "page_idx": 1, "text_level": 0},
+            {
+                "type": "table",
+                "table_body": "Table content",
+                "page_idx": 1,
+                "text_level": 0,
+            },
             {"type": "text", "text": "After table.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para_nodes = [n for n in nodes if n.level == 1]
-        
+
         # Should be 3 paragraphs: text, table, text
         assert len(para_nodes) == 3
 
@@ -194,12 +204,17 @@ class TestHiChunkParagraphMerging:
         builder = HiChunkBuilder()
         content_list = [
             {"type": "text", "text": "Some text.", "page_idx": 1, "text_level": 0},
-            {"type": "list", "list_items": ["Item 1", "Item 2"], "page_idx": 1, "text_level": 0},
+            {
+                "type": "list",
+                "list_items": ["Item 1", "Item 2"],
+                "page_idx": 1,
+                "text_level": 0,
+            },
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para_nodes = [n for n in nodes if n.level == 1]
-        
+
         # Should be 2 paragraphs
         assert len(para_nodes) == 2
 
@@ -215,9 +230,9 @@ class TestHiChunkSectionDetection:
             {"type": "text", "text": "Paragraph 2.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         section_nodes = [n for n in nodes if n.level == 2]
-        
+
         # Should have 1 default section
         assert len(section_nodes) == 1
         assert section_nodes[0].content == "默认章节"
@@ -227,14 +242,24 @@ class TestHiChunkSectionDetection:
         builder = HiChunkBuilder()
         content_list = [
             {"type": "text", "text": "Chapter 1", "page_idx": 1, "text_level": 1},
-            {"type": "text", "text": "Content in chapter 1.", "page_idx": 1, "text_level": 0},
+            {
+                "type": "text",
+                "text": "Content in chapter 1.",
+                "page_idx": 1,
+                "text_level": 0,
+            },
             {"type": "text", "text": "Chapter 2", "page_idx": 2, "text_level": 1},
-            {"type": "text", "text": "Content in chapter 2.", "page_idx": 2, "text_level": 0},
+            {
+                "type": "text",
+                "text": "Content in chapter 2.",
+                "page_idx": 2,
+                "text_level": 0,
+            },
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         section_nodes = [n for n in nodes if n.level == 2]
-        
+
         # Should have 2 sections
         assert len(section_nodes) == 2
         assert section_nodes[0].content == "Chapter 1"
@@ -249,9 +274,9 @@ class TestHiChunkSectionDetection:
             {"type": "text", "text": "Content.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         section_nodes = [n for n in nodes if n.level == 2]
-        
+
         # Both level 1 and level 2 headings create sections
         assert len(section_nodes) == 2
 
@@ -272,7 +297,7 @@ class TestHiChunkTextExtraction:
             }
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         assert len(leaf_nodes) == 1
         assert "Table 1" in leaf_nodes[0].content
@@ -291,7 +316,7 @@ class TestHiChunkTextExtraction:
             }
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         assert len(leaf_nodes) == 1
         assert "Figure 1" in leaf_nodes[0].content
@@ -308,7 +333,7 @@ class TestHiChunkTextExtraction:
             }
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         assert len(leaf_nodes) == 1
         assert "First item" in leaf_nodes[0].content
@@ -323,7 +348,7 @@ class TestHiChunkTextExtraction:
             {"type": "text", "text": "More content.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         # Should only have 2 leaf nodes (page_number skipped)
         assert len(leaf_nodes) == 2
@@ -340,24 +365,24 @@ class TestHiChunkParentChildRelationships:
             {"type": "text", "text": "Sentence 2.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         root = [n for n in nodes if n.level == 3][0]
         section = [n for n in nodes if n.level == 2][0]
         para_nodes = [n for n in nodes if n.level == 1]
         leaves = [n for n in nodes if n.level == 0]
-        
+
         # Both sentences should be in same paragraph
         assert len(para_nodes) == 1
         para = para_nodes[0]
-        
+
         # Check root -> section
         assert section.node_id in root.children_ids
         assert section.parent_id == root.node_id
-        
+
         # Check section -> paragraph
         assert para.node_id in section.children_ids
         assert para.parent_id == section.node_id
-        
+
         # Check paragraph -> leaves
         assert len(leaves) == 2
         for leaf in leaves:
@@ -372,10 +397,16 @@ class TestHiChunkMetadata:
         """Test that leaf nodes preserve metadata."""
         builder = HiChunkBuilder()
         content_list = [
-            {"type": "text", "text": "Content.", "page_idx": 5, "text_level": 2, "bbox": [100, 200, 300, 400]}
+            {
+                "type": "text",
+                "text": "Content.",
+                "page_idx": 5,
+                "text_level": 2,
+                "bbox": [100, 200, 300, 400],
+            }
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf = [n for n in nodes if n.level == 0][0]
         assert leaf.metadata["page_idx"] == 5
         assert leaf.metadata["text_level"] == 2
@@ -391,7 +422,7 @@ class TestHiChunkMetadata:
             {"type": "text", "text": "Sentence 2.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para = [n for n in nodes if n.level == 1][0]
         assert para.metadata["start_page"] == 1
         assert para.metadata["end_page"] == 1
@@ -405,7 +436,7 @@ class TestHiChunkMetadata:
             {"type": "text", "text": "Sentence 2.", "page_idx": 2, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         para_nodes = [n for n in nodes if n.level == 1]
         # Page change creates 2 separate paragraphs
         assert len(para_nodes) == 2
@@ -423,7 +454,7 @@ class TestHiChunkMetadata:
             {"type": "text", "text": "Chapter 2", "page_idx": 5, "text_level": 1},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         root = [n for n in nodes if n.level == 3][0]
         assert root.metadata["document_title"] == "Test Doc"
         assert root.metadata["section_count"] == 2
@@ -441,7 +472,7 @@ class TestHiChunkBuilderHelpers:
             {"type": "text", "text": "Content.", "page_idx": 1, "text_level": 0},
         ]
         builder.build_hierarchy(content_list, "Test Doc")
-        
+
         # 2 leaf nodes (title and content)
         assert len(builder.get_nodes_by_level(0)) == 2
         # 2 paragraph nodes (title is separate paragraph, content is separate)
@@ -458,7 +489,7 @@ class TestHiChunkBuilderHelpers:
             {"type": "text", "text": "Content.", "page_idx": 1, "text_level": 0},
         ]
         builder.build_hierarchy(content_list, "Test Doc")
-        
+
         root = builder.get_root_node()
         assert root is not None
         assert root.level == 3
@@ -472,7 +503,7 @@ class TestHiChunkBuilderHelpers:
             {"type": "text", "text": "Content.", "page_idx": 1, "text_level": 0},
         ]
         builder.build_hierarchy(content_list, "Test Doc")
-        
+
         tree = builder.get_tree_structure()
         assert tree["type"] == "document"
         assert tree["level"] == 3
@@ -490,7 +521,7 @@ class TestHiChunkEdgeCases:
             {"type": "text", "text": "Real content.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         # Whitespace-only items should be filtered out
         leaf_nodes = [n for n in nodes if n.level == 0]
         assert len(leaf_nodes) == 1
@@ -504,7 +535,7 @@ class TestHiChunkEdgeCases:
             {"type": "text", "text": "Content.", "page_idx": 1, "text_level": 0},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         leaf_nodes = [n for n in nodes if n.level == 0]
         assert len(leaf_nodes) == 1
 
@@ -516,12 +547,12 @@ class TestHiChunkEdgeCases:
             {"type": "text", "text": "Chapter 2", "page_idx": 2, "text_level": 1},
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         # Each heading is its own leaf and paragraph
         leaf_nodes = [n for n in nodes if n.level == 0]
         para_nodes = [n for n in nodes if n.level == 1]
         section_nodes = [n for n in nodes if n.level == 2]
-        
+
         assert len(leaf_nodes) == 2
         assert len(para_nodes) == 2
         assert len(section_nodes) == 2
@@ -530,27 +561,68 @@ class TestHiChunkEdgeCases:
         """Test with a realistic sample similar to actual MineRU output."""
         builder = HiChunkBuilder()
         content_list = [
-            {"type": "text", "text": "1. 项目概述", "page_idx": 1, "text_level": 1, "bbox": [100, 100, 300, 140]},
-            {"type": "text", "text": "本项目旨在建设一个智能招投标评分系统。", "page_idx": 1, "text_level": 0, "bbox": [100, 150, 500, 190]},
-            {"type": "text", "text": "系统需要支持多种评分标准和自动化处理。", "page_idx": 1, "text_level": 0, "bbox": [100, 200, 500, 240]},
-            {"type": "text", "text": "2. 技术要求", "page_idx": 2, "text_level": 1, "bbox": [100, 100, 300, 140]},
-            {"type": "list", "list_items": ["支持PDF解析", "支持表格识别", "支持OCR"], "page_idx": 2, "sub_type": "ordered"},
-            {"type": "text", "text": "3. 交付要求", "page_idx": 3, "text_level": 1, "bbox": [100, 100, 300, 140]},
-            {"type": "text", "text": "交付周期：6个月", "page_idx": 3, "text_level": 0, "bbox": [100, 150, 300, 190]},
+            {
+                "type": "text",
+                "text": "1. 项目概述",
+                "page_idx": 1,
+                "text_level": 1,
+                "bbox": [100, 100, 300, 140],
+            },
+            {
+                "type": "text",
+                "text": "本项目旨在建设一个智能招投标评分系统。",
+                "page_idx": 1,
+                "text_level": 0,
+                "bbox": [100, 150, 500, 190],
+            },
+            {
+                "type": "text",
+                "text": "系统需要支持多种评分标准和自动化处理。",
+                "page_idx": 1,
+                "text_level": 0,
+                "bbox": [100, 200, 500, 240],
+            },
+            {
+                "type": "text",
+                "text": "2. 技术要求",
+                "page_idx": 2,
+                "text_level": 1,
+                "bbox": [100, 100, 300, 140],
+            },
+            {
+                "type": "list",
+                "list_items": ["支持PDF解析", "支持表格识别", "支持OCR"],
+                "page_idx": 2,
+                "sub_type": "ordered",
+            },
+            {
+                "type": "text",
+                "text": "3. 交付要求",
+                "page_idx": 3,
+                "text_level": 1,
+                "bbox": [100, 100, 300, 140],
+            },
+            {
+                "type": "text",
+                "text": "交付周期：6个月",
+                "page_idx": 3,
+                "text_level": 0,
+                "bbox": [100, 150, 300, 190],
+            },
         ]
         nodes = builder.build_hierarchy(content_list, "Test Doc")
-        
+
         # Verify structure
         leaf_nodes = [n for n in nodes if n.level == 0]
         para_nodes = [n for n in nodes if n.level == 1]
         section_nodes = [n for n in nodes if n.level == 2]
         root_nodes = [n for n in nodes if n.level == 3]
-        
+
         assert len(root_nodes) == 1
         assert len(section_nodes) == 3  # 三个章节标题
         assert len(para_nodes) >= 3  # 多个段落
         assert len(leaf_nodes) >= 5  # 多个叶子节点
-        
+
         # Verify section titles
         section_titles = [s.content for s in section_nodes]
         assert "1. 项目概述" in section_titles

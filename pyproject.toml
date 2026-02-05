@@ -20,4 +20,12 @@ include = ["bid_scoring*", "mcp_servers*"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "psycopg[binary]",
+    "pgvector",
+    "openai",
+    "tiktoken",
+    "fastmcp",
+    "deepeval",
+    "scikit-learn>=1.3.0",
+    "pyyaml",
 ]

@@ -39,8 +39,16 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv pip install -e ".[dev]" --system
+        uv pip install -e . --system
+        uv pip install --group dev --system
         uv pip install ruff --system
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
+      run: |
+        # Run merged schema for CI
+        psql "$DATABASE_URL" -f migrations/000_init.sql
 
     - name: Lint with ruff
       run: |

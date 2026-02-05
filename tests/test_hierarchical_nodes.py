@@ -42,7 +42,7 @@ class TestHierarchicalNodesTable:
             "created_at": "timestamp with time zone",
             "updated_at": "timestamp with time zone",
         }
-        
+
         with conn.cursor() as cur:
             # Check standard columns
             cur.execute(
@@ -54,9 +54,11 @@ class TestHierarchicalNodesTable:
                 """
             )
             columns = {row[0]: row[1] for row in cur.fetchall()}
-            
+
             for col_name, expected_type in expected_columns.items():
-                assert col_name in columns, f"Column '{col_name}' not found in hierarchical_nodes"
+                assert col_name in columns, (
+                    f"Column '{col_name}' not found in hierarchical_nodes"
+                )
                 if expected_type == "array":
                     # Arrays show as 'ARRAY' in information_schema (case insensitive)
                     assert "array" in columns[col_name].lower(), (
@@ -84,9 +86,11 @@ class TestHierarchicalNodesTable:
                 """
             )
             result = cur.fetchone()
-            assert result is not None, "Column 'embedding' not found in hierarchical_nodes"
+            assert result is not None, (
+                "Column 'embedding' not found in hierarchical_nodes"
+            )
             embedding_type = result[0]
-            assert embedding_type.startswith('vector'), (
+            assert embedding_type.startswith("vector"), (
                 f"Column 'embedding' has type '{embedding_type}', expected 'vector'"
             )
 
@@ -107,9 +111,11 @@ class TestHierarchicalNodesTable:
                 """
             )
             result = cur.fetchone()
-            assert result is not None, "Column 'children_ids' not found in hierarchical_nodes"
+            assert result is not None, (
+                "Column 'children_ids' not found in hierarchical_nodes"
+            )
             column_type = result[0]
-            assert column_type == 'uuid[]', (
+            assert column_type == "uuid[]", (
                 f"Column 'children_ids' has type '{column_type}', expected 'uuid[]'"
             )
 
@@ -138,7 +144,7 @@ class TestHierarchicalNodesTable:
                 """
             )
             fk_constraints = [row[0] for row in cur.fetchall()]
-            
+
             # Check for expected FKs (names may vary by PostgreSQL version)
             assert len(fk_constraints) >= 3, (
                 f"Expected at least 3 foreign key constraints, found {len(fk_constraints)}"
@@ -170,7 +176,9 @@ class TestHierarchicalNodesTable:
                 and ccu.column_name = 'node_type'
                 """
             )
-            assert cur.fetchone()[0] >= 1, "Check constraint on node_type column not found"
+            assert cur.fetchone()[0] >= 1, (
+                "Check constraint on node_type column not found"
+            )
 
 
 class TestHierarchicalNodesIndexes:
@@ -192,7 +200,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_version_id' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_version_id' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_version_id' not found"
+            )
 
     def test_parent_id_index(self, conn):
         """Test parent_id index exists."""
@@ -203,7 +213,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_parent_id' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_parent_id' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_parent_id' not found"
+            )
 
     def test_version_level_index(self, conn):
         """Test version_id + level composite index exists."""
@@ -214,7 +226,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_version_level' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_version_level' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_version_level' not found"
+            )
 
     def test_node_type_index(self, conn):
         """Test node_type index exists."""
@@ -225,7 +239,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_type' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_type' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_type' not found"
+            )
 
     def test_start_chunk_index(self, conn):
         """Test start_chunk_id partial index exists."""
@@ -236,7 +252,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_start_chunk' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_start_chunk' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_start_chunk' not found"
+            )
 
     def test_children_ids_index(self, conn):
         """Test children_ids GIN index exists."""
@@ -247,7 +265,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_children_ids' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_children_ids' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_children_ids' not found"
+            )
 
     def test_metadata_index(self, conn):
         """Test metadata GIN index exists."""
@@ -258,7 +278,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_metadata' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_metadata' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_metadata' not found"
+            )
 
     def test_embedding_hnsw_index(self, conn):
         """Test embedding HNSW index exists."""
@@ -269,7 +291,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_embedding_hnsw' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_embedding_hnsw' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_embedding_hnsw' not found"
+            )
 
     def test_version_parent_index(self, conn):
         """Test version_id + parent_id composite index exists."""
@@ -280,7 +304,9 @@ class TestHierarchicalNodesIndexes:
                 where indexname = 'idx_hierarchical_nodes_version_parent' and schemaname = 'public'
                 """
             )
-            assert cur.fetchone()[0] == 1, "Index 'idx_hierarchical_nodes_version_parent' not found"
+            assert cur.fetchone()[0] == 1, (
+                "Index 'idx_hierarchical_nodes_version_parent' not found"
+            )
 
 
 class TestHierarchicalNodesTrigger:
@@ -361,18 +387,28 @@ class TestHierarchicalNodesComments:
             )
             comment = cur.fetchone()[0]
             assert comment is not None and len(comment) > 0, "Table comment not found"
-            assert 'hichunk' in comment.lower() or 'tree' in comment.lower(), (
+            assert "hichunk" in comment.lower() or "tree" in comment.lower(), (
                 "Table comment should mention HiChunk or tree"
             )
 
     def test_column_comments(self, conn):
         """Test that columns have comments."""
         expected_columns = [
-            'node_id', 'version_id', 'parent_id', 'level', 'node_type',
-            'content', 'children_ids', 'start_chunk_id', 'end_chunk_id',
-            'metadata', 'embedding', 'created_at', 'updated_at'
+            "node_id",
+            "version_id",
+            "parent_id",
+            "level",
+            "node_type",
+            "content",
+            "children_ids",
+            "start_chunk_id",
+            "end_chunk_id",
+            "metadata",
+            "embedding",
+            "created_at",
+            "updated_at",
         ]
-        
+
         with conn.cursor() as cur:
             for col_name in expected_columns:
                 cur.execute(
@@ -384,7 +420,7 @@ class TestHierarchicalNodesComments:
                     and a.attnum > 0
                     and not a.attisdropped
                     """,
-                    (col_name,)
+                    (col_name,),
                 )
                 result = cur.fetchone()
                 assert result is not None and result[0] is not None, (
