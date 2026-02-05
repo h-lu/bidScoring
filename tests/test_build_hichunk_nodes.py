@@ -181,7 +181,23 @@ class TestFetchPendingVersions:
         mock_cur.fetchall.side_effect = [
             [("version-1", "doc-1", "Test Document")],  # 版本查询
             [  # chunks 查询 - 15列数据
-                ("chunk-1", 0, 1, "[0,0,100,100]", "text", "Test content", 0, None, None, None, None, None, None, None, None),
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    "[0,0,100,100]",
+                    "text",
+                    "Test content",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
             ],
         ]
 
@@ -215,7 +231,23 @@ class TestFetchPendingVersions:
         mock_cur.fetchall.side_effect = [
             [("version-abc", "doc-abc", "Doc")],  # 版本查询
             [  # chunks 查询
-                ("chunk-1", 0, 1, None, "text", "Test", 0, None, None, None, None, None, None, None, None),
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    None,
+                    "text",
+                    "Test",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
             ],
         ]
 
@@ -549,7 +581,25 @@ class TestIntegrationPatterns:
         # Simulate database returning only unprocessed versions
         mock_cur.fetchall.side_effect = [
             [("version-3", "doc-3", "Doc 3")],  # 版本查询
-            [("chunk-1", 0, 1, None, "text", "Content", 0, None, None, None, None, None, None, None, None)],
+            [
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    None,
+                    "text",
+                    "Content",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            ],
         ]
 
         _ = fetch_pending_versions(mock_conn)

@@ -142,9 +142,9 @@ class HybridRetriever:
 
                     # 正确的参数顺序: match_scores 的 %s -> version_id -> conditions 的 %s -> limit
                     params = [f"%{k}%" for k in keywords]  # match_scores
-                    params = params + [self.version_id]     # version_id
+                    params = params + [self.version_id]  # version_id
                     params = params + [f"%{k}%" for k in keywords]  # conditions
-                    params = params + [self.top_k * 2]      # limit
+                    params = params + [self.top_k * 2]  # limit
 
                     cur.execute(
                         f"""
