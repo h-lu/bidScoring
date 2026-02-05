@@ -34,3 +34,7 @@ Thumbs.db
 !data/**/*.pdf
 tmp/
 temp/
+
+# Git worktrees
+.worktrees/
+worktrees/
