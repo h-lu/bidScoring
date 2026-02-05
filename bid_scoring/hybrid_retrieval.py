@@ -15,6 +15,10 @@ import psycopg
 from bid_scoring.embeddings import embed_single_text
 
 
+# DeepMind recommended value for RRF damping
+DEFAULT_RRF_K = 60
+
+
 @dataclass
 class RetrievalResult:
     """Single retrieval result"""
@@ -22,7 +26,7 @@ class RetrievalResult:
     text: str
     page_idx: int
     score: float
-    source: str  # "vector" or "keyword"
+    source: str  # "vector", "keyword", or "hybrid"
     embedding: List[float] | None = None
 
 
@@ -34,7 +38,7 @@ class ReciprocalRankFusion:
     where k is a constant (default 60) to dampen the impact of ranking
     """
     
-    def __init__(self, k: int = 60):
+    def __init__(self, k: int = DEFAULT_RRF_K):
         self.k = k
     
     def fuse(
@@ -78,8 +82,16 @@ class HybridRetriever:
         top_k: int = 10,
         vector_weight: float = 0.5,
         keyword_weight: float = 0.5,
-        rrf_k: int = 60
+        rrf_k: int = DEFAULT_RRF_K
     ):
+        # Input validation
+        if not version_id:
+            raise ValueError("version_id cannot be empty")
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
+        if vector_weight < 0 or keyword_weight < 0:
+            raise ValueError("weights must be non-negative")
+        
         self.version_id = version_id
         self.settings = settings
         self.top_k = top_k
@@ -89,23 +101,27 @@ class HybridRetriever:
     
     def _vector_search(self, query: str) -> List[Tuple[str, float]]:
         """Perform vector similarity search"""
-        query_emb = embed_single_text(query)
-        
-        with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT chunk_id::text, 
-                           1 - (embedding <=> %s::vector) as similarity
-                    FROM chunks
-                    WHERE version_id = %s 
-                      AND embedding IS NOT NULL
-                    ORDER BY embedding <=> %s::vector
-                    LIMIT %s
-                    """,
-                    (query_emb, self.version_id, query_emb, self.top_k * 2)
-                )
-                return [(row[0], float(row[1])) for row in cur.fetchall()]
+        try:
+            query_emb = embed_single_text(query)
+            
+            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT chunk_id::text, 
+                               1 - (embedding <=> %s::vector) as similarity
+                        FROM chunks
+                        WHERE version_id = %s 
+                          AND embedding IS NOT NULL
+                        ORDER BY embedding <=> %s::vector
+                        LIMIT %s
+                        """,
+                        (query_emb, self.version_id, query_emb, self.top_k * 2)
+                    )
+                    return [(row[0], float(row[1])) for row in cur.fetchall()]
+        except Exception:
+            # Return empty list on error
+            return []
     
     def _keyword_search(
         self, 
@@ -115,27 +131,31 @@ class HybridRetriever:
         if not keywords:
             return []
         
-        with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
-            with conn.cursor() as cur:
-                # Build ILIKE conditions
-                conditions = " OR ".join(
-                    ["text_raw ILIKE %s"] * len(keywords)
-                )
-                params = [self.version_id] + [f"%{k}%" for k in keywords]
-                
-                cur.execute(
-                    f"""
-                    SELECT chunk_id::text, 
-                           ts_rank(text_tsv, plainto_tsquery('chinese', %s)) as rank
-                    FROM chunks
-                    WHERE version_id = %s 
-                      AND ({conditions})
-                    ORDER BY rank DESC
-                    LIMIT %s
-                    """,
-                    (" ".join(keywords), *params, self.top_k * 2)
-                )
-                return [(row[0], float(row[1] or 0)) for row in cur.fetchall()]
+        try:
+            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+                with conn.cursor() as cur:
+                    # Build ILIKE conditions
+                    conditions = " OR ".join(
+                        ["text_raw ILIKE %s"] * len(keywords)
+                    )
+                    params = [self.version_id] + [f"%{k}%" for k in keywords]
+                    
+                    cur.execute(
+                        f"""
+                        SELECT chunk_id::text, 
+                               ts_rank(text_tsv, plainto_tsquery('chinese', %s)) as rank
+                        FROM chunks
+                        WHERE version_id = %s 
+                          AND ({conditions})
+                        ORDER BY rank DESC
+                        LIMIT %s
+                        """,
+                        (" ".join(keywords), *params, self.top_k * 2)
+                    )
+                    return [(row[0], float(row[1] or 0)) for row in cur.fetchall()]
+        except Exception:
+            # Return empty list on error
+            return []
     
     def retrieve(
         self, 
@@ -165,39 +185,58 @@ class HybridRetriever:
         else:
             merged = vector_results
         
-        # Fetch full documents
-        return self._fetch_chunks([doc_id for doc_id, _ in merged[:self.top_k]])
+        # Fetch full documents with scores
+        merged_with_scores = merged[:self.top_k]
+        return self._fetch_chunks(merged_with_scores, vector_results, keyword_results)
     
-    def _fetch_chunks(self, chunk_ids: List[str]) -> List[RetrievalResult]:
+    def _fetch_chunks(
+        self, 
+        merged_results: List[Tuple[str, float]],
+        vector_results: List[Tuple[str, float]],
+        keyword_results: List[Tuple[str, float]]
+    ) -> List[RetrievalResult]:
         """Fetch full chunk data by IDs"""
-        if not chunk_ids:
+        if not merged_results:
             return []
         
-        with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT chunk_id::text, text_raw, page_idx, embedding
-                    FROM chunks
-                    WHERE chunk_id = ANY(%s::uuid[])
-                    """,
-                    (chunk_ids,)
-                )
-                
-                rows = {row[0]: row for row in cur.fetchall()}
-                
-                # Maintain order from merged results
-                results = []
-                for chunk_id in chunk_ids:
-                    if chunk_id in rows:
-                        row = rows[chunk_id]
-                        results.append(RetrievalResult(
-                            chunk_id=row[0],
-                            text=row[1] or "",
-                            page_idx=row[2] or 0,
-                            score=0.0,  # Will be set by RRF
-                            source="hybrid",
-                            embedding=row[3] if row[3] else None
-                        ))
-                
-                return results
+        # Extract chunk IDs and create scores lookup
+        chunk_ids = [doc_id for doc_id, _ in merged_results]
+        scores_dict = dict(merged_results)
+        
+        # Determine source type
+        source = "vector"
+        if keyword_results:
+            source = "hybrid" if vector_results else "keyword"
+        
+        try:
+            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT chunk_id::text, text_raw, page_idx, embedding
+                        FROM chunks
+                        WHERE chunk_id = ANY(%s::uuid[])
+                        """,
+                        (chunk_ids,)
+                    )
+                    
+                    rows = {row[0]: row for row in cur.fetchall()}
+                    
+                    # Maintain order from merged results
+                    results = []
+                    for chunk_id in chunk_ids:
+                        if chunk_id in rows:
+                            row = rows[chunk_id]
+                            results.append(RetrievalResult(
+                                chunk_id=row[0],
+                                text=row[1] or "",
+                                page_idx=row[2] or 0,
+                                score=scores_dict.get(chunk_id, 0.0),
+                                source=source,
+                                embedding=row[3] if row[3] else None
+                            ))
+                    
+                    return results
+        except Exception:
+            # Return empty list on error
+            return []
