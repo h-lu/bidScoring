@@ -157,6 +157,64 @@ class HybridRetriever:
             # Return empty list on error
             return []
     
+    def extract_keywords_from_query(self, query: str) -> List[str]:
+        """
+        Extract keywords from natural language query.
+        
+        Uses simple heuristics:
+        1. Remove common stopwords
+        2. Keep nouns and key terms
+        3. Split compound terms
+        
+        Args:
+            query: Natural language query string
+            
+        Returns:
+            List of extracted keywords
+        """
+        # Chinese stopwords (common)
+        stopwords = {
+            "的", "了", "是", "在", "我", "有", "和", "就", "不", "人", 
+            "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去",
+            "你", "会", "着", "没有", "看", "好", "自己", "这", "那",
+        }
+        
+        # Split and filter - extract 2+ character words
+        words = []
+        # Simple approach: scan for field-specific keywords
+        for i in range(len(query) - 1):
+            bigram = query[i:i+2]
+            if len(bigram) == 2 and bigram not in stopwords:
+                words.append(bigram)
+        
+        # Field-specific keyword expansion
+        field_keywords = {
+            "培训": ["培训", "训练", "教学", "指导"],
+            "时长": ["时长", "时间", "天数", "小时", "工作日", "周期"],
+            "计划": ["计划", "安排", "课程", "大纲", "内容"],
+            "对象": ["对象", "人员", "受训", "用户", "学员"],
+            "老师": ["老师", "讲师", "授课", "教师", "专家"],
+            "资质": ["资质", "资格", "认证", "证书", "背景"],
+            "响应": ["响应", "反应", "回复", "到达", "到场"],
+            "质保": ["质保", "保修", "质量保证", "保修期"],
+            "配件": ["配件", "备件", "耗材", "零件", "部件"],
+            "服务": ["服务", "支持", "维护", "售后"],
+            "费用": ["费用", "收费", "价格", "成本", "金额"],
+        }
+        
+        # Expand with synonyms
+        expanded = set(words)
+        for key, synonyms in field_keywords.items():
+            if key in query:
+                expanded.update(synonyms)
+        
+        # Add original query terms (cleaned)
+        for char in query:
+            if len(char) > 1 and char not in stopwords:
+                expanded.add(char)
+        
+        return list(expanded)
+    
     def retrieve(
         self, 
         query: str, 
