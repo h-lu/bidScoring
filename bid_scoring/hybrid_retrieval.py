@@ -9,7 +9,7 @@ References:
 - Cormack et al.: "Reciprocal Rank Fusion outperforms Condorcet"
 """
 
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict
 from dataclasses import dataclass
 import psycopg
 from bid_scoring.embeddings import embed_single_text
@@ -142,7 +142,7 @@ class HybridRetriever:
                     
                     # Count keyword matches as a simple relevance score
                     match_scores = " + ".join(
-                        [f"CASE WHEN text_raw ILIKE %s THEN 1 ELSE 0 END" for _ in keywords]
+                        ["CASE WHEN text_raw ILIKE %s THEN 1 ELSE 0 END" for _ in keywords]
                     )
                     
                     cur.execute(
