@@ -223,8 +223,8 @@ def parse_warranty(text: str) -> dict:
     return result
 
 
-def score_training_plan(conn, version_id: str) -> TrainingPlan:
-    """评分：培训方案"""
+def score_training_plan(conn, version_id: str) -> tuple[TrainingPlan, list[EvidenceItem]]:
+    """评分：培训方案，返回维度和所有证据"""
     print("\n" + "="*70)
     print("📚 评分维度: 培训方案")
     print("="*70)
@@ -235,6 +235,8 @@ def score_training_plan(conn, version_id: str) -> TrainingPlan:
         weight=5.0,
         sequence=1,
     )
+    
+    all_evidences: list[EvidenceItem] = []
     
     # 定义查询配置
     training_configs = {
@@ -279,6 +281,7 @@ def score_training_plan(conn, version_id: str) -> TrainingPlan:
             
             for ev in evidences:
                 field.add_candidate(ev)
+                all_evidences.append(ev)
                 print(f"     - {ev.field_value[:40]}... (置信度: {ev.confidence:.2f})")
             
             # 解决冲突
@@ -286,6 +289,10 @@ def score_training_plan(conn, version_id: str) -> TrainingPlan:
             setattr(plan, attr, field)
         else:
             print("   ⚠️ 未找到相关内容")
+    
+    # 将证据添加到维度
+    for ev in all_evidences:
+        plan.add_evidence(ev)
     
     # 计算评分
     completeness = plan.evaluate_completeness()
@@ -295,12 +302,13 @@ def score_training_plan(conn, version_id: str) -> TrainingPlan:
     print(f"   完整性: {completeness.value}")
     print(f"   得分: {score}/{plan.weight}")
     print(f"   得分率: {plan.get_score_ratio():.1%}")
+    print(f"   证据总数: {len(all_evidences)}")
     
-    return plan
+    return plan, all_evidences
 
 
-def score_after_sales_service(conn, version_id: str) -> AfterSalesService:
-    """评分：售后服务方案"""
+def score_after_sales_service(conn, version_id: str) -> tuple[AfterSalesService, list[EvidenceItem]]:
+    """评分：售后服务方案，返回维度和所有证据"""
     print("\n" + "="*70)
     print("🔧 评分维度: 售后服务方案")
     print("="*70)
@@ -311,6 +319,8 @@ def score_after_sales_service(conn, version_id: str) -> AfterSalesService:
         weight=10.0,
         sequence=2,
     )
+    
+    all_evidences: list[EvidenceItem] = []
     
     # 定义查询配置
     service_configs = {
@@ -355,6 +365,7 @@ def score_after_sales_service(conn, version_id: str) -> AfterSalesService:
             
             for ev in evidences:
                 field.add_candidate(ev)
+                all_evidences.append(ev)
                 print(f"     - {ev.field_value[:40]}... (置信度: {ev.confidence:.2f})")
                 
                 # 打印结构化解析结果
@@ -371,6 +382,10 @@ def score_after_sales_service(conn, version_id: str) -> AfterSalesService:
         else:
             print("   ⚠️ 未找到相关内容")
     
+    # 将证据添加到维度
+    for ev in all_evidences:
+        service.add_evidence(ev)
+    
     # 计算评分
     completeness = service.evaluate_completeness()
     service_level = service.evaluate_service_level()
@@ -381,15 +396,17 @@ def score_after_sales_service(conn, version_id: str) -> AfterSalesService:
     print(f"   服务等级: {service_level.value}")
     print(f"   得分: {score}/{service.weight}")
     print(f"   得分率: {service.get_score_ratio():.1%}")
+    print(f"   证据总数: {len(all_evidences)}")
     
-    return service
+    return service, all_evidences
 
 
 def generate_final_report(
     dimensions: list,
+    all_evidences: dict[str, list[EvidenceItem]],
     version_id: str,
-) -> ScoringResult:
-    """生成最终评分报告"""
+) -> dict:
+    """生成最终评分报告（包含完整证据详情）"""
     
     dimension_scores = []
     total_score = 0.0
@@ -398,6 +415,7 @@ def generate_final_report(
     for dim in dimensions:
         score = dim.calculate_score()
         completeness = dim.evaluate_completeness()
+        evidences = all_evidences.get(dim.dimension_id, [])
         
         dim_score = DimensionScore(
             dimension_id=dim.dimension_id,
@@ -405,7 +423,7 @@ def generate_final_report(
             weight=dim.weight,
             score=score,
             completeness=completeness,
-            evidence_count=len(dim.extracted_evidence),
+            evidence_count=len(evidences),
         )
         
         dimension_scores.append(dim_score)
@@ -420,7 +438,91 @@ def generate_final_report(
         max_possible_score=max_possible,
     )
     
-    return result
+    # 构建完整的输出（包含证据详情）
+    output = {
+        "report_info": {
+            "title": "回标分析评分报告",
+            "bid_id": "bid-253135-妙生",
+            "bidder": "上海妙生科贸有限公司",
+            "project": "共聚焦显微镜",
+            "document_version_id": version_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "summary": {
+            "total_score": result.total_score,
+            "max_possible_score": result.max_possible_score,
+            "score_percentage": result.score_percentage,
+            "is_passing": result.is_passing,
+            "total_evidence_count": sum(len(evs) for evs in all_evidences.values()),
+        },
+        "dimension_scores": [ds.model_dump() for ds in result.dimension_scores],
+        "evidences": {
+            dim_id: [ev.model_dump() for ev in evidences]
+            for dim_id, evidences in all_evidences.items()
+        },
+        "detailed_dimensions": [],
+    }
+    
+    # 添加每个维度的详细信息
+    for dim in dimensions:
+        evidences = all_evidences.get(dim.dimension_id, [])
+        
+        dim_detail = {
+            "dimension_id": dim.dimension_id,
+            "dimension_name": dim.dimension_name,
+            "weight": dim.weight,
+            "score": dim.calculate_score(),
+            "score_ratio": dim.get_score_ratio(),
+            "completeness": dim.evaluate_completeness().value,
+            "evidence_count": len(evidences),
+            "evidences": [
+                {
+                    "field_name": ev.field_name,
+                    "field_value": ev.field_value,
+                    "confidence": ev.confidence,
+                    "page_idx": ev.page_idx,
+                    "chunk_id": ev.chunk_id,
+                    "source_text": ev.source_text[:200] if ev.source_text else "",
+                }
+                for ev in evidences
+            ],
+        }
+        
+        # 添加特定维度的字段信息
+        if isinstance(dim, TrainingPlan):
+            dim_detail["fields"] = {
+                "training_duration": _get_field_info(dim.training_duration),
+                "training_schedule": _get_field_info(dim.training_schedule),
+                "training_personnel": _get_field_info(dim.training_personnel),
+                "instructor_qualifications": _get_field_info(dim.instructor_qualifications),
+            }
+        elif isinstance(dim, AfterSalesService):
+            dim_detail["fields"] = {
+                "response_time": _get_field_info(dim.response_time),
+                "warranty_period": _get_field_info(dim.warranty_period),
+                "parts_supply_period": _get_field_info(dim.parts_supply_period),
+                "post_warranty_service_fee": _get_field_info(dim.post_warranty_service_fee),
+            }
+            dim_detail["service_level"] = dim.evaluate_service_level().value
+        
+        output["detailed_dimensions"].append(dim_detail)
+    
+    return output
+
+
+def _get_field_info(field: EvidenceField | None) -> dict | None:
+    """获取字段信息"""
+    if field is None:
+        return None
+    
+    return {
+        "field_name": field.field_name,
+        "has_conflict": field.has_conflict(),
+        "candidate_count": len(field.candidates),
+        "selected_value": field.get_value(),
+        "selected_confidence": field.get_confidence(),
+        "resolution_strategy": field.resolution_strategy.value,
+    }
 
 
 def main():
@@ -442,36 +544,66 @@ def main():
             print("\n✅ 数据库连接成功")
             
             # 执行评分
-            training = score_training_plan(conn, VERSION_ID)
-            after_sales = score_after_sales_service(conn, VERSION_ID)
+            training, training_evidences = score_training_plan(conn, VERSION_ID)
+            after_sales, service_evidences = score_after_sales_service(conn, VERSION_ID)
+            
+            # 收集所有证据
+            all_evidences = {
+                "training": training_evidences,
+                "after_sales": service_evidences,
+            }
             
             # 生成报告
-            result = generate_final_report([training, after_sales], VERSION_ID)
+            result = generate_final_report(
+                [training, after_sales],
+                all_evidences,
+                VERSION_ID
+            )
             
             # 打印最终报告
             print("\n" + "="*70)
             print("📋 最终评分报告")
             print("="*70)
             
-            for ds in result.dimension_scores:
-                print(f"\n{ds.dimension_name}")
-                print(f"  权重: {ds.weight}分")
-                print(f"  得分: {ds.score:.1f}分")
-                print(f"  得分率: {ds.score/ds.weight:.1%}")
-                print(f"  完整性: {ds.completeness.value}")
-                print(f"  证据数: {ds.evidence_count}")
+            for ds in result["dimension_scores"]:
+                print(f"\n{ds['dimension_name']}")
+                print(f"  权重: {ds['weight']}分")
+                print(f"  得分: {ds['score']:.1f}分")
+                print(f"  得分率: {ds['score']/ds['weight']:.1%}")
+                print(f"  完整性: {ds['completeness']}")
+                print(f"  证据数: {ds['evidence_count']}")
             
             print("\n" + "-"*70)
-            print(f"总分: {result.total_score:.1f}/{result.max_possible_score:.1f}")
-            print(f"得分率: {result.score_percentage:.1f}%")
-            print(f"评审结果: {'✅ 通过' if result.is_passing else '❌ 未通过'}")
+            summary = result["summary"]
+            print(f"总分: {summary['total_score']:.1f}/{summary['max_possible_score']:.1f}")
+            print(f"得分率: {summary['score_percentage']:.1f}%")
+            print(f"评审结果: {'✅ 通过' if summary['is_passing'] else '❌ 未通过'}")
+            print(f"总证据数: {summary['total_evidence_count']}")
             print("-"*70)
             
             # 保存结果
             output_file = "/tmp/scoring_result_offline.json"
+            import json
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(result.model_dump_json(indent=2))
+                json.dump(result, f, indent=2, ensure_ascii=False, default=str)
             print(f"\n💾 详细结果已保存到: {output_file}")
+            
+            # 打印证据分析
+            print("\n📊 证据分析")
+            print("="*70)
+            
+            print(f"\n培训方案 - {len(training_evidences)} 个证据:")
+            for i, ev in enumerate(training_evidences, 1):
+                print(f"  {i}. {ev.field_name}: {ev.field_value[:40]}... "
+                      f"(页{ev.page_idx}, 置信度{ev.confidence:.2f})")
+            
+            print(f"\n售后服务方案 - {len(service_evidences)} 个证据:")
+            for i, ev in enumerate(service_evidences, 1):
+                extra = ""
+                if isinstance(ev, WarrantyEvidence) and ev.years:
+                    extra = f" [{ev.years}年]"
+                print(f"  {i}. {ev.field_name}: {ev.field_value[:40]}... "
+                      f"(页{ev.page_idx}, 置信度{ev.confidence:.2f}){extra}")
             
     except Exception as e:
         print(f"\n❌ 评分过程中出现错误: {e}")
