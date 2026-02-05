@@ -49,7 +49,8 @@ jobs:
       run: |
         for f in migrations/*.sql; do
           echo "Running migration: $f"
-          psql "$DATABASE_URL" -f "$f"
+          # Replace template variables with actual values
+          sed 's/{{EMBEDDING_DIM}}/1536/g' "$f" | psql "$DATABASE_URL"
         done
 
     - name: Lint with ruff
