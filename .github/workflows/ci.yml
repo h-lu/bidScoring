@@ -47,11 +47,8 @@ jobs:
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
       run: |
-        for f in migrations/*.sql; do
-          echo "Running migration: $f"
-          # Replace template variables with actual values
-          sed 's/{{EMBEDDING_DIM}}/1536/g' "$f" | psql "$DATABASE_URL"
-        done
+        # Run merged schema for CI
+        psql "$DATABASE_URL" -f migrations/000_init.sql
 
     - name: Lint with ruff
       run: |
