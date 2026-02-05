@@ -1115,6 +1115,8 @@ class TrainingPlan(ScoringDimension):
     - 培训计划/内容
     - 培训人员
     - 授课老师资质
+    
+    支持从配置文件加载评分标准，实现灵活配置
     """
     
     # 字段定义
@@ -1135,8 +1137,36 @@ class TrainingPlan(ScoringDimension):
         description="授课老师资质"
     )
     
+    # 配置引用
+    _config: Any | None = None
+    
     def model_post_init(self, __context) -> None:
-        """初始化后设置默认评分规则"""
+        """初始化后设置评分规则"""
+        # 尝试从配置文件加载
+        try:
+            from bid_scoring.scoring_config import get_training_plan_config
+            self._config = get_training_plan_config()
+            self._setup_rules_from_config()
+        except Exception:
+            # 如果配置加载失败，使用默认规则
+            self._setup_default_rules()
+    
+    def _setup_rules_from_config(self) -> None:
+        """从配置文件设置评分规则"""
+        if not self._config or not self._config.scoring_rules:
+            self._setup_default_rules()
+            return
+        
+        self.scoring_rules = []
+        for rule_config in self._config.scoring_rules:
+            self.scoring_rules.append(ScoringRule(
+                strategy=ThresholdStrategy(threshold=rule_config.min_score, operator=">="),
+                score_range=rule_config.score_range,
+                description=rule_config.description,
+            ))
+    
+    def _setup_default_rules(self) -> None:
+        """设置默认评分规则"""
         if not self.scoring_rules:
             self.scoring_rules = [
                 ScoringRule(
@@ -1156,20 +1186,43 @@ class TrainingPlan(ScoringDimension):
                 ),
             ]
     
+    def _get_required_fields(self) -> list:
+        """获取必填字段列表"""
+        if self._config and self._config.required_fields:
+            return [
+                (f.name, getattr(self, f.name, None))
+                for f in self._config.required_fields
+            ]
+        
+        # 默认字段
+        return [
+            ("training_duration", self.training_duration),
+            ("training_schedule", self.training_schedule),
+            ("training_personnel", self.training_personnel),
+            ("instructor_qualifications", self.instructor_qualifications),
+        ]
+    
     def evaluate_completeness(self) -> CompletenessLevel:
         """评估完整性"""
-        fields = [
-            self.training_duration,
-            self.training_schedule,
-            self.training_personnel,
-            self.instructor_qualifications,
-        ]
+        fields = self._get_required_fields()
         
         filled_count = sum(
-            1 for f in fields
+            1 for _, f in fields
             if f is not None and f.get_value() is not None
         )
         
+        # 从配置获取阈值
+        if self._config and self._config.scoring_rules:
+            for rule in self._config.scoring_rules:
+                if filled_count >= rule.min_score:
+                    if rule.name == "complete":
+                        return CompletenessLevel.COMPLETE
+                    elif rule.name == "partial":
+                        return CompletenessLevel.PARTIAL
+                    elif rule.name == "minimal":
+                        return CompletenessLevel.MINIMAL
+        
+        # 默认阈值
         if filled_count >= 4:
             return CompletenessLevel.COMPLETE
         elif filled_count >= 2:
@@ -1183,6 +1236,20 @@ class TrainingPlan(ScoringDimension):
         """基于完整性计算得分"""
         completeness = self.evaluate_completeness()
         
+        # 尝试从配置获取分数
+        if self._config and self._config.scoring_rules:
+            mapping = {
+                CompletenessLevel.COMPLETE: "complete",
+                CompletenessLevel.PARTIAL: "partial",
+                CompletenessLevel.MINIMAL: "minimal",
+                CompletenessLevel.EMPTY: "empty",
+            }
+            rule_name = mapping.get(completeness)
+            for rule in self._config.scoring_rules:
+                if rule.name == rule_name:
+                    return min(rule.score_range[0], self.weight)
+        
+        # 默认分数
         scores = {
             CompletenessLevel.COMPLETE: 4.5,
             CompletenessLevel.PARTIAL: 2.5,
@@ -1202,6 +1269,8 @@ class AfterSalesService(ScoringDimension):
     - 质保期限
     - 配件供应期限
     - 质保期后服务费
+    
+    支持从配置文件加载评分标准，实现灵活配置
     """
     
     # 字段定义
@@ -1226,8 +1295,36 @@ class AfterSalesService(ScoringDimension):
         description="质保期后服务费"
     )
     
+    # 配置引用
+    _config: Any | None = None
+    
     def model_post_init(self, __context) -> None:
-        """初始化后设置默认评分规则"""
+        """初始化后设置评分规则"""
+        # 尝试从配置文件加载
+        try:
+            from bid_scoring.scoring_config import get_after_sales_config
+            self._config = get_after_sales_config()
+            self._setup_rules_from_config()
+        except Exception:
+            # 如果配置加载失败，使用默认规则
+            self._setup_default_rules()
+    
+    def _setup_rules_from_config(self) -> None:
+        """从配置文件设置评分规则"""
+        if not self._config or not self._config.scoring_rules:
+            self._setup_default_rules()
+            return
+        
+        self.scoring_rules = []
+        for rule_config in self._config.scoring_rules:
+            self.scoring_rules.append(ScoringRule(
+                strategy=ThresholdStrategy(threshold=rule_config.min_score, operator=">="),
+                score_range=rule_config.score_range,
+                description=rule_config.description,
+            ))
+    
+    def _setup_default_rules(self) -> None:
+        """设置默认评分规则"""
         if not self.scoring_rules:
             self.scoring_rules = [
                 ScoringRule(
@@ -1246,6 +1343,14 @@ class AfterSalesService(ScoringDimension):
                     description="售后服务方案不足",
                 ),
             ]
+    
+    def _get_criteria(self):
+        """获取评分标准"""
+        if self._config and self._config.service_level_criteria:
+            return self._config.service_level_criteria
+        # 返回默认标准
+        from bid_scoring.scoring_config import ServiceLevelCriteria
+        return ServiceLevelCriteria()
     
     def evaluate_completeness(self) -> CompletenessLevel:
         """评估完整性"""
@@ -1274,46 +1379,149 @@ class AfterSalesService(ScoringDimension):
     def evaluate_service_level(self) -> ServiceLevel:
         """评估服务等级
         
-        基于响应时间和质保期限评估服务等级。
+        基于配置文件中定义的评分标准评估服务等级
         """
+        criteria = self._get_criteria()
         score_points = 0
         
         # 响应时间评估
         if self.response_time and self.response_time.selected:
-            # 尝试解析响应时间
             value = self.response_time.selected.field_value
-            if "2小时" in value or "2h" in value.lower():
-                score_points += 2
-            elif "8小时" in value or "24小时" in value:
-                score_points += 1
+            response_hours = self._parse_hours(value)
+            
+            if response_hours is not None:
+                if response_hours <= criteria.response_time.excellent:
+                    score_points += 2
+                elif response_hours <= criteria.response_time.standard:
+                    score_points += 1
+            else:
+                # 文本匹配回退
+                if f"{int(criteria.response_time.excellent)}小时" in value:
+                    score_points += 2
+                elif f"{int(criteria.response_time.standard)}小时" in value:
+                    score_points += 1
         
         # 质保期限评估
         if self.warranty_period and self.warranty_period.selected:
             value = self.warranty_period.selected.field_value
-            if "5年" in value or "五年" in value:
-                score_points += 2
-            elif "3年" in value or "三年" in value:
-                score_points += 1
+            years = self._parse_years(value)
+            
+            if years is not None:
+                if years >= criteria.warranty_period.excellent:
+                    score_points += 2
+                elif years >= criteria.warranty_period.standard:
+                    score_points += 1
+            else:
+                # 文本匹配回退
+                if f"{int(criteria.warranty_period.excellent)}年" in value:
+                    score_points += 2
+                elif f"{int(criteria.warranty_period.standard)}年" in value:
+                    score_points += 1
         
-        # 其他字段
+        # 其他字段（根据配置权重）
+        weights = self._config.scoring_weights if self._config else {}
+        
         if self.parts_supply_period and self.parts_supply_period.selected:
-            score_points += 1
-        if self.post_warranty_service_fee and self.post_warranty_service_fee.selected:
-            score_points += 1
+            score_points += weights.get('parts_supply', 1)
         
-        if score_points >= 5:
+        if self.post_warranty_service_fee and self.post_warranty_service_fee.selected:
+            score_points += weights.get('post_warranty_fee', 1)
+        
+        # 到场时间评估（如果配置了）
+        if weights.get('on_site_time', 0) > 0:
+            # 从响应时间中解析到场时间
+            if self.response_time and self.response_time.selected:
+                value = self.response_time.selected.field_value
+                if "到场" in value or "现场" in value:
+                    hours = self._parse_hours(value, "到场")
+                    if hours is not None and hours <= criteria.on_site_time.excellent:
+                        score_points += weights.get('on_site_time', 0)
+        
+        # 根据总分确定服务等级
+        excellent_threshold = sum([
+            2,  # 响应时间满分
+            2,  # 质保期限满分
+            weights.get('parts_supply', 1),
+            weights.get('post_warranty_fee', 1),
+            weights.get('on_site_time', 0),
+        ]) * 0.8  # 80% 为优秀
+        
+        standard_threshold = sum([
+            1,  # 响应时间及格
+            1,  # 质保期限及格
+            weights.get('parts_supply', 1) * 0.5,
+            weights.get('post_warranty_fee', 1) * 0.5,
+        ])
+        
+        if score_points >= excellent_threshold:
             return ServiceLevel.EXCELLENT
-        elif score_points >= 3:
+        elif score_points >= standard_threshold:
             return ServiceLevel.STANDARD
         elif score_points >= 1:
             return ServiceLevel.POOR
         else:
             return ServiceLevel.UNKNOWN
     
+    def _parse_hours(self, text: str, keyword: str | None = None) -> float | None:
+        """从文本中解析小时数"""
+        import re
+        
+        # 优先匹配指定关键词附近的数字
+        if keyword:
+            pattern = rf'(\d+)\s*小时.*{keyword}|{keyword}.*(\d+)\s*小时'
+            matches = re.findall(pattern, text)
+            if matches:
+                for match in matches[0]:
+                    if match:
+                        return float(match)
+        
+        # 通用小时匹配
+        match = re.search(r'(\d+)\s*小时', text)
+        if match:
+            return float(match.group(1))
+        
+        # 匹配工作日
+        match = re.search(r'(\d+)\s*个工作日', text)
+        if match:
+            return float(match.group(1)) * 8  # 转换为小时（假设8小时工作日）
+        
+        return None
+    
+    def _parse_years(self, text: str) -> float | None:
+        """从文本中解析年数"""
+        import re
+        
+        # 匹配年
+        match = re.search(r'(\d+)\s*年', text)
+        if match:
+            return float(match.group(1))
+        
+        # 匹配月数并转换
+        match = re.search(r'(\d+)\s*个月', text)
+        if match:
+            months = int(match.group(1))
+            return months / 12
+        
+        # 匹配"60个月"这样的格式
+        match = re.search(r'(\d+)\s*个?月', text)
+        if match:
+            months = int(match.group(1))
+            if months >= 12:
+                return months / 12
+        
+        return None
+    
     def calculate_score(self) -> float:
         """基于服务等级计算得分"""
         level = self.evaluate_service_level()
         
+        # 尝试从配置获取分数
+        if self._config and self._config.scoring_rules:
+            for rule in self._config.scoring_rules:
+                if level.value == rule.name:
+                    return min(rule.score_range[0], self.weight)
+        
+        # 默认分数
         scores = {
             ServiceLevel.EXCELLENT: 9.0,
             ServiceLevel.STANDARD: 5.5,
@@ -1416,3 +1624,9 @@ __all__ = [
     "DimensionScore",
     "ScoringResult",
 ]
+
+# 延迟导入配置模块（避免循环导入）
+def get_scoring_standards():
+    """获取评分标准配置（便捷函数）"""
+    from bid_scoring.scoring_config import get_scoring_config
+    return get_scoring_config()
