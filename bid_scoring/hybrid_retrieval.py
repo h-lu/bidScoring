@@ -140,17 +140,22 @@ class HybridRetriever:
                     )
                     params = [self.version_id] + [f"%{k}%" for k in keywords]
                     
+                    # Count keyword matches as a simple relevance score
+                    match_scores = " + ".join(
+                        [f"CASE WHEN text_raw ILIKE %s THEN 1 ELSE 0 END" for _ in keywords]
+                    )
+                    
                     cur.execute(
                         f"""
                         SELECT chunk_id::text, 
-                               ts_rank(text_tsv, plainto_tsquery('chinese', %s)) as rank
+                               ({match_scores}) as match_count
                         FROM chunks
                         WHERE version_id = %s 
                           AND ({conditions})
-                        ORDER BY rank DESC
+                        ORDER BY match_count DESC
                         LIMIT %s
                         """,
-                        (" ".join(keywords), *params, self.top_k * 2)
+                        ([f"%{k}%" for k in keywords] + params + [self.top_k * 2])
                     )
                     return [(row[0], float(row[1] or 0)) for row in cur.fetchall()]
         except Exception:
