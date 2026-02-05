@@ -41,3 +41,4 @@ temp/
 # Git worktrees
 .worktrees/
 worktrees/
+migrations_backup*/

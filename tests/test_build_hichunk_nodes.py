@@ -177,19 +177,36 @@ class TestFetchPendingVersions:
         mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
         mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
 
-        # Mock version data
-        content_list = [{"type": "text", "text": "Test content", "page_idx": 1}]
-        mock_cur.fetchall.return_value = [
-            ("version-1", "doc-1", "Test Document", content_list),
-            ("version-2", "doc-2", "Another Doc", content_list),
+        # Mock version data - 第一个查询返回版本信息
+        mock_cur.fetchall.side_effect = [
+            [("version-1", "doc-1", "Test Document")],  # 版本查询
+            [  # chunks 查询 - 15列数据
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    "[0,0,100,100]",
+                    "text",
+                    "Test content",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            ],
         ]
 
         versions = fetch_pending_versions(mock_conn, batch_size=5)
 
-        assert len(versions) == 2
+        assert len(versions) == 1
         assert versions[0]["version_id"] == "version-1"
         assert versions[0]["document_title"] == "Test Document"
-        assert versions[0]["content_list"] == content_list
+        assert len(versions[0]["content_list"]) == 1
 
     def test_fetch_pending_versions_empty(self):
         """Should return empty list when no versions to process."""
@@ -211,9 +228,27 @@ class TestFetchPendingVersions:
         mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cur)
         mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
 
-        content_list = [{"type": "text", "text": "Test", "page_idx": 1}]
-        mock_cur.fetchall.return_value = [
-            ("version-abc", "doc-abc", "Doc", content_list),
+        mock_cur.fetchall.side_effect = [
+            [("version-abc", "doc-abc", "Doc")],  # 版本查询
+            [  # chunks 查询
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    None,
+                    "text",
+                    "Test",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+            ],
         ]
 
         versions = fetch_pending_versions(mock_conn, version_id="version-abc")
@@ -294,7 +329,8 @@ class TestInsertHierarchicalNodes:
         assert success == 2
         assert fail == 0
         mock_conn.commit.assert_called_once()
-        mock_cur.executemany.assert_called_once()
+        # 按层级插入会调用多次 executemany
+        assert mock_cur.executemany.call_count >= 1
 
     def test_insert_hierarchical_nodes_empty(self):
         """Should handle empty node list."""
@@ -543,9 +579,27 @@ class TestIntegrationPatterns:
         mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
 
         # Simulate database returning only unprocessed versions
-        content_list = [{"type": "text", "text": "Content"}]
-        mock_cur.fetchall.return_value = [
-            ("version-3", "doc-3", "Doc 3", content_list),
+        mock_cur.fetchall.side_effect = [
+            [("version-3", "doc-3", "Doc 3")],  # 版本查询
+            [
+                (
+                    "chunk-1",
+                    0,
+                    1,
+                    None,
+                    "text",
+                    "Content",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            ],
         ]
 
         _ = fetch_pending_versions(mock_conn)
@@ -616,16 +670,18 @@ class TestNodeChunkMapping:
 
         insert_hierarchical_nodes(mock_conn, "v1", [leaf1, leaf2], chunk_mapping)
 
-        # Get the insert data
-        call_args = mock_cur.executemany.call_args
-        insert_data = call_args[0][1]
+        # Get all insert data from multiple calls
+        all_insert_data = []
+        for call in mock_cur.executemany.call_args_list:
+            if len(call[0]) > 1:
+                all_insert_data.extend(call[0][1])
 
         # Verify each leaf is mapped to correct chunk
-        assert len(insert_data) == 2
+        assert len(all_insert_data) == 2
         # First leaf maps to chunk-0
-        assert insert_data[0][7] == "chunk-0"  # start_chunk_id
+        assert all_insert_data[0][7] == "chunk-0"  # start_chunk_id
         # Second leaf maps to chunk-1
-        assert insert_data[1][7] == "chunk-1"
+        assert all_insert_data[1][7] == "chunk-1"
 
     def test_paragraph_node_chunk_mapping(self):
         """Test that paragraph nodes map to chunk ranges."""
@@ -665,11 +721,14 @@ class TestNodeChunkMapping:
 
         insert_hierarchical_nodes(mock_conn, "v1", [leaf1, leaf2, para], chunk_mapping)
 
-        call_args = mock_cur.executemany.call_args
-        insert_data = call_args[0][1]
+        # 获取所有调用的数据（按层级分批插入）
+        all_insert_data = []
+        for call in mock_cur.executemany.call_args_list:
+            if len(call[0]) > 1:
+                all_insert_data.extend(call[0][1])
 
         # Find paragraph in insert data
-        para_data = next((d for d in insert_data if d[4] == "paragraph"), None)
+        para_data = next((d for d in all_insert_data if d[4] == "paragraph"), None)
         assert para_data is not None
 
         # Paragraph should have start_chunk_id = chunk-0 and end_chunk_id = chunk-1

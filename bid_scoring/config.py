@@ -9,7 +9,7 @@ def load_settings() -> dict:
     Returns:
         配置字典，包含数据库和 OpenAI API 相关配置
     """
-    load_dotenv(override=True)  # Allow .env to override existing env vars
+    load_dotenv(override=True)  # .env 文件优先于环境变量
     return {
         "DATABASE_URL": os.getenv(
             "DATABASE_URL", "postgresql://localhost:5432/bid_scoring"

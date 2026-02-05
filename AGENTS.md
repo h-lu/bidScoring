@@ -83,3 +83,218 @@ Available skills include:
 - **假设明确**：对模糊需求做出合理假设并明确告知用户，而非无休止追问
 
 记住 Peter 的座右铭：**"I ship code I never read"** 的前提是工程体系足够强。你的目标不是写最快的代码，而是写**可验证、可维护、可回滚**的高质量代码。
+
+---
+
+# 提交规范与工作流程
+
+## Conventional Commits 规范
+
+所有提交信息必须遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范，格式如下：
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### 提交类型 (Type)
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| **feat** | 新功能 | `feat(auth): 添加用户登录功能` |
+| **fix** | Bug 修复 | `fix(api): 修复配额计算错误` |
+| **docs** | 文档更新 | `docs(readme): 更新部署说明` |
+| **style** | 代码格式（不影响功能） | `style: ruff format 格式化代码` |
+| **refactor** | 代码重构 | `refactor(db): 优化查询性能` |
+| **test** | 测试相关 | `test(auth): 添加登录测试用例` |
+| **chore** | 构建/工具/依赖更新 | `chore(deps): 添加 psycopg2-binary` |
+| **perf** | 性能优化 | `perf(cache): 减少内存占用` |
+| **ci** | CI/CD 配置 | `ci: 添加 GitHub Actions 工作流` |
+| **revert** | 回滚提交 | `revert: 回滚 feat: xxx` |
+
+### 提交范围 (Scope)
+
+可选，表示变更影响的模块：
+
+- `api` - API 接口
+- `db` - 数据库相关
+- `ui` / `web` - 前端界面
+- `gateway` - 网关服务
+- `admin` - 管理后台
+- `auth` - 认证相关
+- `deps` - 依赖管理
+- `ci` - CI/CD 配置
+
+### 提交描述规则
+
+1. **使用祈使语气**："添加" 而非 "添加了" 或 "正在添加"
+2. **首字母小写**：`fix: bug` 而非 `fix: Bug`
+3. **不加句号结尾**
+4. **限制在 72 个字符以内**
+
+### 提交示例
+
+```bash
+# 好的提交
+git commit -m "feat(auth): 添加 JWT 认证支持"
+git commit -m "fix(api): 修复响应状态码错误"
+git commit -m "refactor(db): 使用连接池优化性能"
+
+# 不好的提交
+git commit -m "修复了一些问题"           # 缺少类型
+git commit -m "Update code"             # 不是中文，描述不清
+git commit -m "feat: 添加了新功能。"     # 使用了过去式，有句号
+```
+
+---
+
+## Pull Request 工作流程
+
+本项目使用 GitHub Flow 工作流，**main 分支受保护**，必须通过 PR 合并代码。
+
+### 工作流程图
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    标准 PR 工作流程                       │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  1. 从 main 创建功能分支                                  │
+│     git checkout -b feature/xxx                          │
+│                                                         │
+│  2. 开发并提交代码                                        │
+│     git add .                                            │
+│     git commit -m "feat: 添加功能"                        │
+│                                                         │
+│  3. 推送分支到远程                                        │
+│     git push origin feature/xxx                          │
+│                                                         │
+│  4. 创建 Pull Request                                     │
+│     gh pr create --title "feat: xxx" --body "..."        │
+│                                                         │
+│  5. 等待 CI 通过 (必须全部 ✅)                             │
+│     - Backend Tests                                      │
+│     - Backend Lint                                       │
+│     - Frontend Tests                                     │
+│     - Frontend Lint                                      │
+│     - Frontend Build Check                               │
+│                                                         │
+│  6. 合并 PR                                               │
+│     gh pr merge --squash --delete-branch                 │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### PR 标题规范
+
+PR 标题应与提交信息保持一致：
+
+```
+feat: 添加用户登录功能
+fix: 修复配额计算错误
+docs: 更新 API 文档
+```
+
+### PR 检查清单
+
+创建 PR 时必须确认以下事项：
+
+- [ ] 代码已本地自测通过
+- [ ] 添加了必要的测试用例
+- [ ] 更新了相关文档
+- [ ] 本地运行 `ruff check gateway/ admin/` 无错误
+- [ ] 本地运行 `ruff format --check gateway/ admin/` 通过
+- [ ] 本地运行 `pytest` 通过
+- [ ] 提交信息符合 Conventional Commits 规范
+
+### 分支命名规范
+
+| 类型 | 命名格式 | 示例 |
+|------|----------|------|
+| 功能 | `feature/<描述>` | `feature/user-login` |
+| Bug 修复 | `fix/<描述>` | `fix/quota-calculation` |
+| 文档 | `docs/<描述>` | `docs/api-update` |
+| 重构 | `refactor/<描述>` | `refactor/db-optimization` |
+| 测试 | `test/<描述>` | `test/auth-coverage` |
+| 热修复 | `hotfix/<描述>` | `hotfix/security-patch` |
+
+---
+
+## 分支保护规则
+
+main 分支已配置保护规则，强制要求：
+
+1. **必须通过 Pull Request 合并** - 禁止直接 push
+2. **必须 5 项 CI 检查通过** - Backend/Frontend 的 Tests 和 Lint
+3. **分支必须是最新的** - 合并前需要 rebase 到最新 main
+4. **禁止强制推送** - `git push --force` 被禁用
+5. **禁止删除** - 防止误删 main 分支
+
+### 本地验证脚本
+
+在提交前，建议运行以下命令进行本地验证：
+
+```bash
+# 后端代码检查
+uv run ruff check gateway/ admin/
+uv run ruff format --check gateway/ admin/
+
+# 运行测试
+uv run pytest -v --tb=short
+
+# 或者使用脚本
+./scripts/pre-commit.sh  # 如果存在
+```
+
+---
+
+## 快速参考
+
+### 常用 Git 命令
+
+```bash
+# 创建并切换到新分支
+git checkout -b feature/xxx
+
+# 查看当前状态
+git status
+
+# 添加所有变更
+git add .
+
+# 提交（遵循规范）
+git commit -m "feat: 添加新功能"
+
+# 推送到远程
+git push -u origin feature/xxx
+
+# 创建 PR
+gh pr create --title "feat: xxx" --body "描述"
+
+# 合并 PR
+gh pr merge --squash --delete-branch
+
+# 同步 main 分支
+git checkout main
+git pull origin main
+```
+
+### 常用 GitHub CLI 命令
+
+```bash
+# 查看 PR 列表
+gh pr list
+
+# 查看 PR 详情
+gh pr view <编号>
+
+# 检查 CI 状态
+gh pr checks
+
+# 查看 Actions 运行状态
+gh run list
+gh run view <编号>
+```
