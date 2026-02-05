@@ -1,7 +1,7 @@
 """Tests for build_hichunk_nodes script."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call
+from unittest.mock import Mock, patch
 import sys
 import os
 
@@ -58,7 +58,7 @@ class TestResetHierarchicalNodes:
         
         assert result is False
         # DELETE should not be called
-        delete_calls = [call for call in mock_cur.execute.call_args_list if 'DELETE' in str(call)]
+        delete_calls = [c for c in mock_cur.execute.call_args_list if 'DELETE' in str(c)]
         assert len(delete_calls) == 0
 
     def test_reset_with_version_id(self):
@@ -75,12 +75,12 @@ class TestResetHierarchicalNodes:
         
         assert result is True
         # Check version-specific count query
-        count_calls = [call for call in mock_cur.execute.call_args_list 
-                      if 'SELECT COUNT(*)' in str(call) and 'version_id' in str(call)]
+        count_calls = [c for c in mock_cur.execute.call_args_list 
+                      if 'SELECT COUNT(*)' in str(c) and 'version_id' in str(c)]
         assert len(count_calls) > 0
         # Check version-specific delete
-        delete_calls = [call for call in mock_cur.execute.call_args_list 
-                       if 'DELETE' in str(call) and 'version_id' in str(call)]
+        delete_calls = [c for c in mock_cur.execute.call_args_list 
+                       if 'DELETE' in str(c) and 'version_id' in str(c)]
         assert len(delete_calls) > 0
 
     def test_reset_force_skips_confirmation(self):
@@ -111,7 +111,7 @@ class TestResetHierarchicalNodes:
         
         assert result is True
         # DELETE should not be called for empty table
-        delete_calls = [call for call in mock_cur.execute.call_args_list if 'DELETE' in str(call)]
+        delete_calls = [c for c in mock_cur.execute.call_args_list if 'DELETE' in str(c)]
         assert len(delete_calls) == 0
 
 
@@ -517,7 +517,7 @@ class TestIntegrationPatterns:
             ("version-3", "doc-3", "Doc 3", content_list),
         ]
         
-        versions = fetch_pending_versions(mock_conn)
+        _ = fetch_pending_versions(mock_conn)
         
         # Check that the fetch_pending_versions query includes a LEFT JOIN to check for existing nodes
         first_call_args = mock_cur.execute.call_args_list[0][0][0]

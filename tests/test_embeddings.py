@@ -67,7 +67,7 @@ class TestEmbeddingClient:
     
     def test_get_embedding_config(self):
         """Test embedding configuration."""
-        from bid_scoring.embeddings import get_embedding_config, DEFAULT_MODEL, DEFAULT_DIM
+        from bid_scoring.embeddings import get_embedding_config
         
         config = get_embedding_config()
         
@@ -152,7 +152,7 @@ class TestEmbedTexts:
         mock_client.embeddings.create.return_value = mock_response
         
         texts = ["text"] * 5
-        result = embed_texts(texts, client=mock_client, batch_size=2)
+        embed_texts(texts, client=mock_client, batch_size=2)
         
         # Should be called 3 times: 2+2+1
         assert mock_client.embeddings.create.call_count == 3
