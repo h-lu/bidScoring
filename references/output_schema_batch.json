@@ -1,7 +1,0 @@
-{
-  "type": "array",
-  "minItems": 1,
-  "items": {
-    "$ref": "output_schema.json"
-  }
-}
