@@ -13,7 +13,7 @@ def _load_task_models(prefix: str, default_key: str) -> dict:
 
 
 def load_settings() -> dict:
-    load_dotenv()
+    load_dotenv(override=True)  # Allow .env to override existing env vars
     default_llm = os.getenv("OPENAI_LLM_MODEL_DEFAULT") or os.getenv("OPENAI_LLM_MODEL")
     return {
         "DATABASE_URL": os.getenv("DATABASE_URL", "postgresql://localhost:5432/bid_scoring"),
