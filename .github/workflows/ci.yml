@@ -43,6 +43,15 @@ jobs:
         uv pip install --group dev --system
         uv pip install ruff --system
 
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
+      run: |
+        for f in migrations/*.sql; do
+          echo "Running migration: $f"
+          psql "$DATABASE_URL" -f "$f"
+        done
+
     - name: Lint with ruff
       run: |
         ruff check bid_scoring/ tests/
