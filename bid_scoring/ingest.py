@@ -27,18 +27,18 @@ def _strip_html_tags(html: str) -> str:
     """去除 HTML 标签，保留纯文本"""
     if not html:
         return ""
-    text = re.sub(r'<[^>]+>', ' ', html)
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
 def _extract_text_from_item(item: dict) -> str:
     """从任意类型的 item 中提取可索引文本"""
     item_type = item.get("type", "")
-    
+
     if item_type == "text":
         return item.get("text", "")
-    
+
     elif item_type == "table":
         # 表格：使用 caption + footnote + body 的纯文本
         texts = []
@@ -51,7 +51,7 @@ def _extract_text_from_item(item: dict) -> str:
         if item.get("table_footnote"):
             texts.extend(item["table_footnote"])
         return " ".join(texts)
-    
+
     elif item_type == "image":
         # 图片：使用 caption + footnote
         texts = []
@@ -60,16 +60,16 @@ def _extract_text_from_item(item: dict) -> str:
         if item.get("image_footnote"):
             texts.extend(item["image_footnote"])
         return " ".join(texts)
-    
+
     elif item_type == "list":
         # 列表：使用所有 list_items
         if item.get("list_items"):
             return " ".join(item["list_items"])
         return ""
-    
+
     elif item_type in ["header", "aside_text", "page_number", "footer"]:
         return item.get("text", "")
-    
+
     else:
         # 其他类型，尝试获取 text 字段
         return item.get("text", "")
@@ -78,29 +78,31 @@ def _extract_text_from_item(item: dict) -> str:
 def _prepare_chunk_data(item: dict, chunk_index: int) -> dict[str, Any] | None:
     """准备单条 chunk 数据，返回字典或 None（跳过）"""
     item_type = item.get("type", "")
-    
+
     # 跳过 page_number (按用户要求)
     if item_type == "page_number":
         return None
-    
+
     # ★ FIX: 跳过 header 和 footer，避免污染正文
     if item_type in ["header", "footer"]:
         return None
-    
+
     # 提取可索引文本
     text_content = _extract_text_from_item(item)
     text_content = text_content.strip()
-    
+
     # ★ FIX: 处理空标题情况
     # 如果 text_level=1 但文本为空，降级为普通文本（避免创建无效章节）
     text_level = item.get("text_level")
     if text_level == 1 and not text_content:
-        logger.warning(f"[Ingest] Empty heading at index {chunk_index}, demoting to body text")
+        logger.warning(
+            f"[Ingest] Empty heading at index {chunk_index}, demoting to body text"
+        )
         text_level = None
-    
+
     # 生成 tsvector（如果有文本内容）
     text_tsv = text_content if text_content else None
-    
+
     # 基础字段
     data = {
         "source_id": f"chunk_{chunk_index:04d}",
@@ -122,7 +124,7 @@ def _prepare_chunk_data(item: dict, chunk_index: int) -> dict[str, Any] | None:
         "sub_type": item.get("sub_type"),
         "text_level": text_level,
     }
-    
+
     return data
 
 
@@ -139,7 +141,7 @@ def ingest_content_list(
     status: str = "ready",
 ) -> dict:
     """将 MineRU content_list 数据入库
-    
+
     Args:
         conn: 数据库连接
         project_id: 项目 UUID
@@ -151,24 +153,26 @@ def ingest_content_list(
         source_uri: 源文件路径
         parser_version: 解析器版本
         status: 版本状态
-    
+
     Returns:
         统计信息字典
     """
     # 准备所有 chunk 数据
     chunks_data = []
     type_counts = {}
-    
+
     for i, item in enumerate(content_list):
         chunk_data = _prepare_chunk_data(item, i)
         if chunk_data is None:
-            type_counts[item.get("type", "unknown")] = type_counts.get(item.get("type", "unknown"), 0) + 1
+            type_counts[item.get("type", "unknown")] = (
+                type_counts.get(item.get("type", "unknown"), 0) + 1
+            )
             continue
-        
+
         chunks_data.append(chunk_data)
         item_type = item.get("type", "unknown")
         type_counts[item_type] = type_counts.get(item_type, 0) + 1
-    
+
     # 数据库操作
     with conn.cursor() as cur:
         # 插入项目
@@ -176,13 +180,13 @@ def ingest_content_list(
             "INSERT INTO projects (project_id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (project_id, f"project-{project_id[:8]}"),
         )
-        
+
         # 插入文档
         cur.execute(
             "INSERT INTO documents (doc_id, project_id, title, source_type) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
             (document_id, project_id, document_title, source_type),
         )
-        
+
         # 插入版本
         cur.execute(
             """
@@ -192,15 +196,14 @@ def ingest_content_list(
             """,
             (version_id, document_id, source_uri, None, parser_version, status),
         )
-        
+
         # ★ FIX: 先删除该 version 的现有 chunks，防止重复导入
-        cur.execute(
-            "DELETE FROM chunks WHERE version_id = %s",
-            (version_id,)
-        )
+        cur.execute("DELETE FROM chunks WHERE version_id = %s", (version_id,))
         if cur.rowcount > 0:
-            logger.warning(f"[Ingest] Deleted {cur.rowcount} existing chunks for version {version_id}")
-        
+            logger.warning(
+                f"[Ingest] Deleted {cur.rowcount} existing chunks for version {version_id}"
+            )
+
         # 批量插入 chunks
         for data in chunks_data:
             # 根据是否有文本来决定是否生成 tsvector
@@ -221,9 +224,16 @@ def ingest_content_list(
                     )
                     """,
                     (
-                        project_id, version_id, data["source_id"], data["chunk_index"], 
-                        data["page_idx"], data["bbox"], data["element_type"], 
-                        data["text_raw"], data["text_hash"], data["text_tsv"],
+                        project_id,
+                        version_id,
+                        data["source_id"],
+                        data["chunk_index"],
+                        data["page_idx"],
+                        data["bbox"],
+                        data["element_type"],
+                        data["text_raw"],
+                        data["text_hash"],
+                        data["text_tsv"],
                         data["img_path"],
                         data["image_caption"],
                         data["image_footnote"],
@@ -233,7 +243,7 @@ def ingest_content_list(
                         data["list_items"],
                         data["sub_type"],
                         data["text_level"],
-                    )
+                    ),
                 )
             else:
                 cur.execute(
@@ -252,9 +262,15 @@ def ingest_content_list(
                     )
                     """,
                     (
-                        project_id, version_id, data["source_id"], data["chunk_index"], 
-                        data["page_idx"], data["bbox"], data["element_type"], 
-                        data["text_raw"], data["text_hash"],
+                        project_id,
+                        version_id,
+                        data["source_id"],
+                        data["chunk_index"],
+                        data["page_idx"],
+                        data["bbox"],
+                        data["element_type"],
+                        data["text_raw"],
+                        data["text_hash"],
                         data["img_path"],
                         data["image_caption"],
                         data["image_footnote"],
@@ -264,11 +280,11 @@ def ingest_content_list(
                         data["list_items"],
                         data["sub_type"],
                         data["text_level"],
-                    )
+                    ),
                 )
-    
+
     conn.commit()
-    
+
     return {
         "total_chunks": len(chunks_data),
         "type_counts": type_counts,
