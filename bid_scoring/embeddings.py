@@ -92,16 +92,22 @@ def truncate_to_max_tokens(
 
 
 def estimate_tokens(text: str, model: str = DEFAULT_MODEL) -> int:
-    """估算文本的 token 数量（向后兼容，推荐使用 count_tokens）
+    """估算文本的 token 数量（快速估算，不依赖 tiktoken）
+
+    使用保守估计：每 2 个字符约 1 个 token。
+    适用于快速估算，不需要精确值的场景。
 
     Args:
         text: 输入文本
-        model: 模型名称
+        model: 模型名称（保留参数用于兼容性，但不使用）
 
     Returns:
-        token 数量
+        token 数量估计值
     """
-    return count_tokens(text, model)
+    if not text:
+        return 0
+    # 保守估计：每 2 个字符约 1 个 token
+    return len(text) // 2 + 1
 
 
 def get_embedding_client() -> OpenAI:

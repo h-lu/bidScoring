@@ -64,7 +64,9 @@ ALTER TABLE chunks
 
 -- Add unique constraint (from 009_fix_mineru_import.sql)
 ALTER TABLE chunks 
-    ADD CONSTRAINT IF NOT EXISTS unique_version_source 
+    DROP CONSTRAINT IF EXISTS unique_version_source;
+ALTER TABLE chunks 
+    ADD CONSTRAINT unique_version_source 
     UNIQUE (version_id, source_id);
 
 CREATE INDEX IF NOT EXISTS idx_chunks_text_level 
@@ -434,3 +436,22 @@ CREATE TABLE IF NOT EXISTS multi_vector_mappings (
 CREATE INDEX IF NOT EXISTS idx_multi_vector_mappings_chunk_id ON multi_vector_mappings(chunk_id);
 CREATE INDEX IF NOT EXISTS idx_multi_vector_mappings_embedding_hnsw 
 ON multi_vector_mappings USING hnsw(embedding vector_cosine_ops);
+
+-- ============================================
+-- Table and Column Comments
+-- ============================================
+
+COMMENT ON TABLE hierarchical_nodes IS 'Stores document structure as a tree for HiChunk hierarchical chunking';
+COMMENT ON COLUMN hierarchical_nodes.node_id IS 'Unique identifier for the node';
+COMMENT ON COLUMN hierarchical_nodes.version_id IS 'Reference to document version';
+COMMENT ON COLUMN hierarchical_nodes.parent_id IS 'Reference to parent node (null for root)';
+COMMENT ON COLUMN hierarchical_nodes.level IS 'Depth in tree: 0=leaf/sentence, 1=paragraph, 2=section, 3=document';
+COMMENT ON COLUMN hierarchical_nodes.node_type IS 'Type of node: sentence, paragraph, section, document, chunk';
+COMMENT ON COLUMN hierarchical_nodes.content IS 'Text content of this node';
+COMMENT ON COLUMN hierarchical_nodes.children_ids IS 'Array of child node IDs for fast tree traversal';
+COMMENT ON COLUMN hierarchical_nodes.start_chunk_id IS 'Reference to first chunk for leaf nodes (range start)';
+COMMENT ON COLUMN hierarchical_nodes.end_chunk_id IS 'Reference to last chunk for leaf nodes (range end)';
+COMMENT ON COLUMN hierarchical_nodes.metadata IS 'Additional metadata like headings, page numbers';
+COMMENT ON COLUMN hierarchical_nodes.embedding IS 'Optional vector embedding for non-leaf nodes';
+COMMENT ON COLUMN hierarchical_nodes.created_at IS 'Timestamp when the record was created';
+COMMENT ON COLUMN hierarchical_nodes.updated_at IS 'Timestamp when the record was last updated';
