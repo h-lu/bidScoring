@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 from pgvector.psycopg import register_vector
 
 from bid_scoring.config import load_settings
@@ -100,21 +101,19 @@ def get_stats(conn, version_id: str | None = None) -> dict[str, Any]:
         }
     """
     with conn.cursor() as cur:
-        # 基础查询：统计 document_versions 中 content_list 非空的版本
+        # 基础查询：统计有 chunks 的版本
         base_query = """
             SELECT 
-                COUNT(*) FILTER (WHERE dv.content_list IS NOT NULL AND jsonb_array_length(dv.content_list) > 0) as total_versions,
-                COUNT(*) FILTER (WHERE hn.version_id IS NOT NULL) as processed_versions,
-                COUNT(*) FILTER (WHERE dv.content_list IS NOT NULL AND jsonb_array_length(dv.content_list) > 0 AND hn.version_id IS NULL) as to_process
-            FROM document_versions dv
-            LEFT JOIN (
-                SELECT DISTINCT version_id FROM hierarchical_nodes
-            ) hn ON dv.version_id = hn.version_id
+                COUNT(DISTINCT c.version_id) as total_versions,
+                COUNT(DISTINCT hn.version_id) as processed_versions,
+                COUNT(DISTINCT c.version_id) FILTER (WHERE hn.version_id IS NULL) as to_process
+            FROM chunks c
+            LEFT JOIN hierarchical_nodes hn ON c.version_id = hn.version_id
         """
         
         params = []
         if version_id:
-            base_query += " WHERE dv.version_id = %s"
+            base_query += " WHERE c.version_id = %s"
             params.append(version_id)
         
         cur.execute(base_query, params)
@@ -131,9 +130,9 @@ def get_stats(conn, version_id: str | None = None) -> dict[str, Any]:
         total_nodes = cur.fetchone()[0]
         
         return {
-            "total_versions": row[0],
-            "processed": row[1],
-            "to_process": row[2],
+            "total_versions": row[0] or 0,
+            "processed": row[1] or 0,
+            "to_process": row[2] or 0,
             "total_nodes": total_nodes,
         }
 
@@ -146,30 +145,29 @@ def fetch_pending_versions(
     """获取待处理的文档版本
     
     策略:
-    1. 选择 content_list 非空且未处理的版本
-    2. 获取版本基本信息和关联的文档标题
+    1. 选择有 chunks 且未处理层次化节点的版本
+    2. 从 chunks 表重建 content_list
     
     Returns:
         [{
             'version_id': 版本ID,
             'doc_id': 文档ID,
             'document_title': 文档标题,
-            'content_list': content_list JSON,
+            'content_list': content_list 列表,
         }, ...]
     """
     with conn.cursor() as cur:
+        # 查找有待处理 chunks 的版本
         query = """
-            SELECT 
+            SELECT DISTINCT
                 dv.version_id,
                 dv.doc_id,
-                d.title as document_title,
-                dv.content_list
+                d.title as document_title
             FROM document_versions dv
             JOIN documents d ON dv.doc_id = d.doc_id
+            JOIN chunks c ON dv.version_id = c.version_id
             LEFT JOIN hierarchical_nodes hn ON dv.version_id = hn.version_id
-            WHERE dv.content_list IS NOT NULL 
-              AND jsonb_array_length(dv.content_list) > 0
-              AND hn.version_id IS NULL
+            WHERE hn.version_id IS NULL
         """
         
         params = []
@@ -177,7 +175,7 @@ def fetch_pending_versions(
             query += " AND dv.version_id = %s"
             params.append(version_id)
         
-        query += " ORDER BY dv.created_at LIMIT %s"
+        query += " ORDER BY dv.version_id LIMIT %s"
         params.append(batch_size)
         
         cur.execute(query, params)
@@ -185,11 +183,61 @@ def fetch_pending_versions(
         
         result = []
         for row in rows:
+            version_id_str = str(row[0])
+            
+            # 从 chunks 表获取该版本的所有 chunks
+            cur.execute(
+                """
+                SELECT 
+                    chunk_id,
+                    chunk_index,
+                    page_idx,
+                    bbox,
+                    element_type,
+                    text_raw,
+                    text_level,
+                    img_path,
+                    image_caption,
+                    image_footnote,
+                    table_body,
+                    table_caption,
+                    table_footnote,
+                    list_items,
+                    sub_type
+                FROM chunks 
+                WHERE version_id = %s 
+                ORDER BY chunk_index
+                """,
+                (version_id_str,)
+            )
+            
+            chunks_rows = cur.fetchall()
+            content_list = []
+            for cr in chunks_rows:
+                item = {
+                    "chunk_id": str(cr[0]),
+                    "chunk_index": cr[1],
+                    "page_idx": cr[2] or 0,
+                    "bbox": cr[3],
+                    "type": cr[4] or "text",
+                    "text": cr[5] or "",
+                    "text_level": cr[6] or 0,
+                    "img_path": cr[7],
+                    "image_caption": cr[8],
+                    "image_footnote": cr[9],
+                    "table_body": cr[10],
+                    "table_caption": cr[11],
+                    "table_footnote": cr[12],
+                    "list_items": cr[13],
+                    "sub_type": cr[14],
+                }
+                content_list.append(item)
+            
             result.append({
-                "version_id": str(row[0]),
+                "version_id": version_id_str,
                 "doc_id": str(row[1]),
                 "document_title": row[2] or "untitled",
-                "content_list": row[3],
+                "content_list": content_list,
             })
         
         return result
@@ -227,6 +275,9 @@ def insert_hierarchical_nodes(
 ) -> tuple[int, int]:
     """插入层次化节点到数据库
     
+    按层级从高到低插入（document -> section -> paragraph -> sentence），
+    确保父节点先于子节点插入，避免外键约束错误。
+    
     Args:
         conn: 数据库连接
         version_id: 版本 ID
@@ -243,9 +294,14 @@ def insert_hierarchical_nodes(
     success_count = 0
     fail_count = 0
     
-    # 准备插入数据
-    insert_data = []
-    leaf_nodes = [n for n in nodes if n.level == 0]
+    # 按层级分组节点（从高到低：3=document, 2=section, 1=paragraph, 0=sentence）
+    nodes_by_level = {3: [], 2: [], 1: [], 0: []}
+    leaf_nodes = []
+    
+    for node in nodes:
+        nodes_by_level[node.level].append(node)
+        if node.level == 0:
+            leaf_nodes.append(node)
     
     # 为叶子节点建立 source_index 到 node 的映射
     leaf_by_source_idx = {}
@@ -254,75 +310,85 @@ def insert_hierarchical_nodes(
         if source_idx is not None:
             leaf_by_source_idx[source_idx] = node
     
-    for node in nodes:
-        # 对于叶子节点，尝试关联 chunks
-        start_chunk_id = None
-        end_chunk_id = None
-        
-        if node.level == 0:
-            source_idx = node.metadata.get("source_index")
-            if source_idx is not None and source_idx in chunk_mapping:
-                start_chunk_id = chunk_mapping[source_idx]
-                end_chunk_id = chunk_mapping[source_idx]
-        elif node.level == 1:  # paragraph
-            # 对于段落，关联其包含的叶子节点的 chunks
-            child_source_indices = []
-            for child_id in node.children_ids:
-                child_node = next((n for n in leaf_nodes if n.node_id == child_id), None)
-                if child_node:
-                    source_idx = child_node.metadata.get("source_index")
-                    if source_idx is not None:
-                        child_source_indices.append(source_idx)
+    # 准备所有层级的插入数据
+    def prepare_insert_data(node_list):
+        data = []
+        for node in node_list:
+            # 对于叶子节点，尝试关联 chunks
+            start_chunk_id = None
+            end_chunk_id = None
             
-            if child_source_indices:
-                min_idx = min(child_source_indices)
-                max_idx = max(child_source_indices)
-                if min_idx in chunk_mapping:
-                    start_chunk_id = chunk_mapping[min_idx]
-                if max_idx in chunk_mapping:
-                    end_chunk_id = chunk_mapping[max_idx]
-        
-        insert_data.append((
-            node.node_id,
-            version_id,
-            node.parent_id,
-            node.level,
-            node.node_type,
-            node.content,
-            node.children_ids,
-            start_chunk_id,
-            end_chunk_id,
-            node.metadata,
-        ))
+            if node.level == 0:
+                source_idx = node.metadata.get("source_index")
+                if source_idx is not None and source_idx in chunk_mapping:
+                    start_chunk_id = chunk_mapping[source_idx]
+                    end_chunk_id = chunk_mapping[source_idx]
+            elif node.level == 1:  # paragraph
+                # 对于段落，关联其包含的叶子节点的 chunks
+                child_source_indices = []
+                for child_id in node.children_ids:
+                    child_node = next((n for n in leaf_nodes if n.node_id == child_id), None)
+                    if child_node:
+                        source_idx = child_node.metadata.get("source_index")
+                        if source_idx is not None:
+                            child_source_indices.append(source_idx)
+                
+                if child_source_indices:
+                    min_idx = min(child_source_indices)
+                    max_idx = max(child_source_indices)
+                    if min_idx in chunk_mapping:
+                        start_chunk_id = chunk_mapping[min_idx]
+                    if max_idx in chunk_mapping:
+                        end_chunk_id = chunk_mapping[max_idx]
+            
+            data.append((
+                node.node_id,
+                version_id,
+                node.parent_id,
+                node.level,
+                node.node_type,
+                node.content,
+                node.children_ids,
+                start_chunk_id,
+                end_chunk_id,
+                Jsonb(node.metadata),
+            ))
+        return data
     
-    # 批量插入
+    # 按层级顺序插入：3 -> 2 -> 1 -> 0
     try:
         with conn.cursor() as cur:
-            cur.executemany(
-                """
-                INSERT INTO hierarchical_nodes (
-                    node_id, version_id, parent_id, level, node_type,
-                    content, children_ids, start_chunk_id, end_chunk_id, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (node_id) DO NOTHING
-                """,
-                insert_data
-            )
+            for level in [3, 2, 1, 0]:
+                level_nodes = nodes_by_level[level]
+                if not level_nodes:
+                    continue
+                
+                insert_data = prepare_insert_data(level_nodes)
+                cur.executemany(
+                    """
+                    INSERT INTO hierarchical_nodes (
+                        node_id, version_id, parent_id, level, node_type,
+                        content, children_ids, start_chunk_id, end_chunk_id, metadata
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (node_id) DO NOTHING
+                    """,
+                    insert_data
+                )
+                success_count += len(level_nodes)
         
         conn.commit()
-        success_count = len(nodes)
         
         if show_detail:
             print(f"  ✅ 已插入 {success_count} 个节点")
             # 显示层级统计
             for level in range(4):
-                count = len([n for n in nodes if n.level == level])
+                count = len(nodes_by_level[level])
                 level_name = ["sentence", "paragraph", "section", "document"][level]
                 print(f"    - Level {level} ({level_name}): {count}")
         
     except Exception as e:
         conn.rollback()
-        fail_count = len(nodes)
+        fail_count = len(nodes) - success_count
         print(f"  ❌ 插入失败: {e}")
     
     return success_count, fail_count
