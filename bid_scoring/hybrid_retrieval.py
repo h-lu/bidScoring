@@ -131,8 +131,7 @@ class HybridRetriever:
                 with conn.cursor() as cur:
                     # Build ILIKE conditions
                     conditions = " OR ".join(["text_raw ILIKE %s"] * len(keywords))
-                    params = [self.version_id] + [f"%{k}%" for k in keywords]
-
+                    
                     # Count keyword matches as a simple relevance score
                     match_scores = " + ".join(
                         [
@@ -140,6 +139,12 @@ class HybridRetriever:
                             for _ in keywords
                         ]
                     )
+                    
+                    # 正确的参数顺序: match_scores 的 %s -> version_id -> conditions 的 %s -> limit
+                    params = [f"%{k}%" for k in keywords]  # match_scores
+                    params = params + [self.version_id]     # version_id
+                    params = params + [f"%{k}%" for k in keywords]  # conditions
+                    params = params + [self.top_k * 2]      # limit
 
                     cur.execute(
                         f"""
@@ -151,11 +156,12 @@ class HybridRetriever:
                         ORDER BY match_count DESC
                         LIMIT %s
                         """,
-                        ([f"%{k}%" for k in keywords] + params + [self.top_k * 2]),
+                        params,
                     )
                     return [(row[0], float(row[1] or 0)) for row in cur.fetchall()]
-        except Exception:
+        except Exception as e:
             # Return empty list on error
+            print(f"Keyword search error: {e}")
             return []
 
     def extract_keywords_from_query(self, query: str) -> List[str]:
