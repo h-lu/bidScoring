@@ -8,6 +8,8 @@ Best practices for text embeddings in RAG systems:
 5. Vector storage and similarity search with pgvector
 """
 
+import os
+
 import pytest
 from unittest.mock import Mock, patch
 
@@ -276,6 +278,9 @@ class TestCosineSimilarity:
 class TestEmbeddingIntegration:
     """Integration tests for embedding workflow."""
 
+    @pytest.mark.skipif(
+        not os.environ.get("OPENAI_API_KEY"), reason="Requires OpenAI API key"
+    )
     def test_embed_real_text(self):
         """Test embedding real text (requires API key)."""
         from bid_scoring.embeddings import embed_texts, DEFAULT_DIM
@@ -294,6 +299,9 @@ class TestEmbeddingIntegration:
             # Check that it's not all zeros
             assert any(v != 0.0 for v in vec)
 
+    @pytest.mark.skipif(
+        not os.environ.get("OPENAI_API_KEY"), reason="Requires OpenAI API key"
+    )
     def test_embedding_consistency(self):
         """Test that same text produces similar embedding (within tolerance)."""
         from bid_scoring.embeddings import embed_single_text
