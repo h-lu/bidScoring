@@ -568,7 +568,7 @@ class HybridRetriever:
                 with conn.cursor() as cur:
                     # Set HNSW search expansion factor for better recall
                     # Reference: https://github.com/pgvector/pgvector#hnsw
-                    cur.execute("SET hnsw.ef_search = %s", (self._hnsw_ef_search,))
+                    cur.execute(f"SET hnsw.ef_search = {self._hnsw_ef_search}")
 
                     # Use cosine similarity: 1 - (embedding <=> query)
                     # gives similarity in [0, 1]
