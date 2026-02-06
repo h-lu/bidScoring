@@ -11,6 +11,7 @@ References:
 
 from typing import List, Tuple, Dict
 from dataclasses import dataclass
+import re
 import psycopg
 from bid_scoring.embeddings import embed_single_text
 
@@ -241,10 +242,10 @@ class HybridRetriever:
             if key in query:
                 expanded.update(synonyms)
 
-        # Add original query terms (cleaned)
-        for char in query:
-            if len(char) > 1 and char not in stopwords:
-                expanded.add(char)
+        # Add alphanumeric tokens (e.g., API, SLA, 128GB)
+        for token in re.findall(r"[A-Za-z0-9]+", query):
+            if token not in stopwords:
+                expanded.add(token)
 
         return list(expanded)
 

@@ -174,3 +174,13 @@ def test_keyword_extraction():
     keywords = retriever.extract_keywords_from_query("售后服务响应时间")
     assert "服务" in keywords
     assert "响应" in keywords or "响应" in str(keywords)
+
+
+def test_keyword_extraction_includes_alphanumeric_tokens():
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+    keywords = retriever.extract_keywords_from_query("API响应时间")
+    assert "API" in keywords
