@@ -276,7 +276,6 @@ class TestCosineSimilarity:
 class TestEmbeddingIntegration:
     """Integration tests for embedding workflow."""
 
-    @pytest.mark.skip(reason="Requires OpenAI API key")
     def test_embed_real_text(self):
         """Test embedding real text (requires API key)."""
         from bid_scoring.embeddings import embed_texts, DEFAULT_DIM
@@ -295,9 +294,8 @@ class TestEmbeddingIntegration:
             # Check that it's not all zeros
             assert any(v != 0.0 for v in vec)
 
-    @pytest.mark.skip(reason="Requires OpenAI API key")
     def test_embedding_consistency(self):
-        """Test that same text produces same embedding."""
+        """Test that same text produces similar embedding (within tolerance)."""
         from bid_scoring.embeddings import embed_single_text
 
         text = "Consistency test"
@@ -305,7 +303,19 @@ class TestEmbeddingIntegration:
         vec1 = embed_single_text(text)
         vec2 = embed_single_text(text)
 
-        assert vec1 == vec2
+        # Embeddings should be very similar (cosine similarity close to 1)
+        # but may not be exactly equal due to API non-determinism
+        assert len(vec1) == len(vec2)
+
+        # Calculate cosine similarity
+        import math
+        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        magnitude1 = math.sqrt(sum(a * a for a in vec1))
+        magnitude2 = math.sqrt(sum(b * b for b in vec2))
+        cosine_sim = dot_product / (magnitude1 * magnitude2)
+
+        # Cosine similarity should be very close to 1.0 (within 0.1%)
+        assert cosine_sim > 0.999, f"Cosine similarity {cosine_sim} is not close enough to 1.0"
 
 
 class TestEmbeddingBestPractices:
