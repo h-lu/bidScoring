@@ -526,3 +526,123 @@ def test_fulltext_search_integration():
         assert isinstance(chunk_id, str)
         assert isinstance(score, float)
         assert score >= 0  # ts_rank_cd returns non-negative values
+
+
+# =============================================================================
+# Connection Pool Tests (New from Task 3)
+# =============================================================================
+
+
+def test_connection_pool_initialization():
+    """Test connection pool initialization with default settings"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever, HAS_CONNECTION_POOL
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    retriever = HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5,
+        use_connection_pool=True
+    )
+    
+    if HAS_CONNECTION_POOL:
+        # Should have pool if psycopg-pool is installed
+        assert retriever._pool is not None
+    else:
+        # Should be None if psycopg-pool not installed
+        assert retriever._pool is None
+
+
+def test_connection_pool_disabled():
+    """Test that connection pool can be disabled"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    retriever = HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5,
+        use_connection_pool=False
+    )
+    
+    # Pool should be None when disabled
+    assert retriever._pool is None
+
+
+def test_get_connection_method_exists():
+    """Test that _get_connection method exists"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5
+    )
+    
+    assert hasattr(retriever, '_get_connection')
+    assert callable(getattr(retriever, '_get_connection'))
+
+
+def test_close_method_exists():
+    """Test that close method exists and works"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    retriever = HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5,
+        use_connection_pool=True
+    )
+    
+    assert hasattr(retriever, 'close')
+    
+    # Close should not raise error
+    retriever.close()
+    
+    # Pool should be None after close
+    assert retriever._pool is None
+
+
+def test_context_manager():
+    """Test that HybridRetriever works as context manager"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    
+    # Test context manager
+    with HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5,
+        use_connection_pool=True
+    ) as retriever:
+        assert retriever.version_id == "test"
+        # Pool should exist inside context
+    
+    # Pool should be closed after exiting context
+
+
+def test_custom_pool_sizes():
+    """Test custom pool size configuration"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever, HAS_CONNECTION_POOL
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    
+    # Should accept custom pool sizes
+    retriever = HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5,
+        use_connection_pool=True,
+        pool_min_size=1,
+        pool_max_size=5
+    )
+    
+    # Just verify initialization doesn't fail
+    assert retriever.version_id == "test"

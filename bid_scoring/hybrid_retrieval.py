@@ -23,6 +23,14 @@ import yaml
 
 from bid_scoring.embeddings import embed_single_text
 
+# Connection pool support - graceful fallback if not installed
+try:
+    from psycopg_pool import ConnectionPool
+    HAS_CONNECTION_POOL = True
+except ImportError:
+    HAS_CONNECTION_POOL = False
+    ConnectionPool = None
+
 # Type alias for field keywords dictionary
 FieldKeywordsDict = Dict[str, List[str]]
 SynonymIndexDict = Dict[str, str]  # synonym -> key mapping for bidirectional lookup
@@ -240,6 +248,9 @@ class HybridRetriever:
         config_path: str | Path | None = None,
         extra_stopwords: Set[str] | None = None,
         extra_field_keywords: Dict[str, List[str]] | None = None,
+        use_connection_pool: bool = True,
+        pool_min_size: int = 2,
+        pool_max_size: int = 10,
     ):
         """
         Initialize the hybrid retriever.
@@ -255,6 +266,9 @@ class HybridRetriever:
                            These are merged with config file stopwords.
             extra_field_keywords: Additional field keywords for synonym expansion.
                                 These are merged with config file keywords.
+            use_connection_pool: Whether to use connection pooling (default True)
+            pool_min_size: Minimum connections in pool (default 2)
+            pool_max_size: Maximum connections in pool (default 10)
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -268,6 +282,31 @@ class HybridRetriever:
         self.settings = settings
         self.top_k = top_k
         self.rrf = ReciprocalRankFusion(k=rrf_k)
+
+        # Initialize connection pool
+        self._pool: ConnectionPool | None = None
+        if use_connection_pool and HAS_CONNECTION_POOL:
+            try:
+                self._pool = ConnectionPool(
+                    settings["DATABASE_URL"],
+                    min_size=pool_min_size,
+                    max_size=pool_max_size,
+                    max_idle=300,  # 5 minutes
+                    max_lifetime=3600,  # 1 hour
+                    open=True,  # Explicitly open the pool
+                )
+                logger.debug(
+                    f"Initialized connection pool (min={pool_min_size}, max={pool_max_size})"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize connection pool: {e}. "
+                    "Using direct connections."
+                )
+        elif use_connection_pool and not HAS_CONNECTION_POOL:
+            logger.warning(
+                "psycopg-pool not installed. Install with: uv add psycopg-pool"
+            )
 
         # Load configuration from file
         config = load_retrieval_config(config_path)
@@ -312,6 +351,28 @@ class HybridRetriever:
             f"Built synonym index with {len(self._synonym_index)} terms "
             f"from {len(self._field_keywords)} keyword groups"
         )
+
+    def _get_connection(self):
+        """获取数据库连接（使用连接池或直接连接）"""
+        if self._pool:
+            return self._pool.connection()
+        return psycopg.connect(self.settings["DATABASE_URL"])
+
+    def close(self) -> None:
+        """关闭连接池和资源"""
+        if self._pool:
+            self._pool.close()
+            logger.debug("Connection pool closed")
+            self._pool = None
+
+    def __enter__(self):
+        """上下文管理器入口"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """上下文管理器出口，自动关闭资源"""
+        self.close()
+        return False
 
     @property
     def stopwords(self) -> Set[str]:
@@ -372,7 +433,7 @@ class HybridRetriever:
         try:
             query_emb = embed_single_text(query)
 
-            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+            with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     # Use cosine similarity: 1 - (embedding <=> query) gives similarity in [0, 1]
                     cur.execute(
@@ -422,7 +483,7 @@ class HybridRetriever:
         ts_query = " & ".join(keywords)
 
         try:
-            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+            with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     # 使用 ts_rank_cd 计算相关性分数（来自 context7 建议）
                     # cd = cover density，更适合短文本块
@@ -460,7 +521,7 @@ class HybridRetriever:
             return []
 
         try:
-            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+            with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     # Build ILIKE conditions for WHERE clause
                     conditions = " OR ".join(["text_raw ILIKE %s"] * len(keywords))
@@ -622,7 +683,7 @@ class HybridRetriever:
         }
 
         try:
-            with psycopg.connect(self.settings["DATABASE_URL"]) as conn:
+            with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
