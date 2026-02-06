@@ -49,7 +49,7 @@ TEST_QUERIES = [
 SETTINGS = load_settings()
 
 
-def test_fulltext_vs_ilike():
+def run_fulltext_vs_ilike():
     """测试 1: 全文搜索 vs ILIKE 性能对比 (AND vs OR 语义)"""
     print("\n" + "=" * 60)
     print("测试 1: 全文搜索 AND vs OR 语义对比")
@@ -118,7 +118,7 @@ def test_fulltext_vs_ilike():
     retriever.close()
 
 
-def test_vector_recall():
+def run_vector_recall():
     """测试 2: 向量搜索召回率测试（不同 ef_search）"""
     print("\n" + "=" * 60)
     print("测试 2: HNSW ef_search 参数对召回率的影响")
@@ -152,7 +152,7 @@ def test_vector_recall():
     print("\n  💡 说明: ef_search=100 是推荐默认值（平衡性能和召回率）")
 
 
-def test_hybrid_search():
+def run_hybrid_search():
     """测试 3: 混合搜索效果验证"""
     print("\n" + "=" * 60)
     print("测试 3: 混合搜索效果验证")
@@ -199,7 +199,7 @@ def test_hybrid_search():
     retriever.close()
 
 
-def test_rrf_weights():
+def run_rrf_weights():
     """测试 4: RRF 权重效果对比"""
     print("\n" + "=" * 60)
     print("测试 4: RRF 权重效果对比")
@@ -234,7 +234,7 @@ def test_rrf_weights():
         retriever.close()
 
 
-def test_cache_performance():
+def run_cache_performance():
     """测试 5: 缓存效果测试"""
     print("\n" + "=" * 60)
     print("测试 5: 查询缓存效果测试")
@@ -335,7 +335,7 @@ async def benchmark_async_performance():
     await retriever.close_async()
 
 
-def test_connection_pool():
+def run_connection_pool():
     """测试 7: 连接池效果测试"""
     print("\n" + "=" * 60)
     print("测试 7: 连接池效果测试")
@@ -418,13 +418,13 @@ async def main():
     print(f"测试查询数: {len(TEST_QUERIES)}")
     
     # 执行所有测试
-    test_fulltext_vs_ilike()
-    test_vector_recall()
-    test_hybrid_search()
-    test_rrf_weights()
-    test_cache_performance()
+    run_fulltext_vs_ilike()
+    run_vector_recall()
+    run_hybrid_search()
+    run_rrf_weights()
+    run_cache_performance()
     await benchmark_async_performance()
-    test_connection_pool()
+    run_connection_pool()
     
     print("\n" + "=" * 60)
     print("测试完成!")
