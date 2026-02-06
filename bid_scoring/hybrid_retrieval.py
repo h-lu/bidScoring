@@ -130,6 +130,10 @@ def _build_synonym_index(field_keywords: FieldKeywordsDict) -> SynonymIndexDict:
 # This value balances the influence of top-ranked items vs. deep-ranked items.
 DEFAULT_RRF_K = 60
 
+# Default HNSW search expansion factor for better recall.
+# Default pgvector is 40, we use 100 for better recall.
+DEFAULT_HNSW_EF_SEARCH = 100
+
 # Maximum number of parallel search workers
 MAX_SEARCH_WORKERS = 2
 
@@ -251,6 +255,7 @@ class HybridRetriever:
         use_connection_pool: bool = True,
         pool_min_size: int = 2,
         pool_max_size: int = 10,
+        hnsw_ef_search: int = 100,
     ):
         """
         Initialize the hybrid retriever.
@@ -269,6 +274,9 @@ class HybridRetriever:
             use_connection_pool: Whether to use connection pooling (default True)
             pool_min_size: Minimum connections in pool (default 2)
             pool_max_size: Maximum connections in pool (default 10)
+            hnsw_ef_search: HNSW search expansion factor for better recall (default 100)
+                            Higher values improve recall at the cost of performance.
+                            Default pgvector value is 40, we use 100 for better recall.
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -281,6 +289,7 @@ class HybridRetriever:
         self.version_id = version_id
         self.settings = settings
         self.top_k = top_k
+        self._hnsw_ef_search = hnsw_ef_search
         self.rrf = ReciprocalRankFusion(k=rrf_k)
 
         # Initialize connection pool
@@ -435,7 +444,12 @@ class HybridRetriever:
 
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Use cosine similarity: 1 - (embedding <=> query) gives similarity in [0, 1]
+                    # Set HNSW search expansion factor for better recall
+                    # Reference: https://github.com/pgvector/pgvector#hnsw
+                    cur.execute("SET hnsw.ef_search = %s", (self._hnsw_ef_search,))
+
+                    # Use cosine similarity: 1 - (embedding <=> query)
+                    # gives similarity in [0, 1]
                     cur.execute(
                         """
                         SELECT chunk_id::text,
