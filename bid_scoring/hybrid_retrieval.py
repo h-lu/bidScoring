@@ -41,8 +41,6 @@ SynonymIndexDict = Dict[str, str]  # synonym -> key mapping for bidirectional lo
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 # Default configuration file path
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config" / "retrieval_config.yaml"
 
