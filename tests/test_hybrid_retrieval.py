@@ -1530,3 +1530,88 @@ def test_retrieve_vector_only_rrf_denominator_matches_rrf_formula():
 
     assert merged[0][1] == pytest.approx(1 / (retriever.rrf.k + 1), rel=1e-6)
     assert merged[1][1] == pytest.approx(1 / (retriever.rrf.k + 2), rel=1e-6)
+
+
+def test_retrieve_applies_reranker_when_enabled():
+    """retrieve() should apply reranker output when reranking is enabled."""
+    from bid_scoring.hybrid_retrieval import HybridRetriever, RetrievalResult
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=3
+    )
+
+    retriever._vector_search = lambda query: [("chunk-1", 0.9), ("chunk-2", 0.8)]
+    retriever._keyword_search_fulltext = lambda keywords, use_or_semantic: []
+
+    base_results = [
+        RetrievalResult("chunk-1", "text-1", 1, 0.2, "vector"),
+        RetrievalResult("chunk-2", "text-2", 2, 0.1, "vector"),
+    ]
+    retriever._fetch_chunks = lambda merged_results: base_results
+
+    class FakeReranker:
+        def __init__(self):
+            self.called = False
+            self.query = None
+            self.top_n = None
+
+        def rerank(self, query, results, top_n):
+            self.called = True
+            self.query = query
+            self.top_n = top_n
+            return [results[1], results[0]]
+
+    fake_reranker = FakeReranker()
+    retriever._enable_rerank = True
+    retriever._reranker = fake_reranker
+    retriever._rerank_top_n = 2
+
+    results = retriever.retrieve("培训时长", keywords=["培训"])
+
+    assert fake_reranker.called is True
+    assert fake_reranker.query == "培训时长"
+    assert fake_reranker.top_n == 2
+    assert [r.chunk_id for r in results] == ["chunk-2", "chunk-1"]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_async_applies_reranker_when_enabled():
+    """retrieve_async() should apply reranker output when reranking is enabled."""
+    from bid_scoring.hybrid_retrieval import HybridRetriever, RetrievalResult
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=3
+    )
+
+    retriever._vector_search = lambda query: [("chunk-1", 0.9), ("chunk-2", 0.8)]
+    retriever._keyword_search_fulltext = lambda keywords, use_or_semantic: []
+
+    base_results = [
+        RetrievalResult("chunk-1", "text-1", 1, 0.2, "vector"),
+        RetrievalResult("chunk-2", "text-2", 2, 0.1, "vector"),
+    ]
+    retriever._fetch_chunks = lambda merged_results: base_results
+
+    class FakeReranker:
+        def __init__(self):
+            self.called = False
+            self.query = None
+            self.top_n = None
+
+        def rerank(self, query, results, top_n):
+            self.called = True
+            self.query = query
+            self.top_n = top_n
+            return [results[1], results[0]]
+
+    fake_reranker = FakeReranker()
+    retriever._enable_rerank = True
+    retriever._reranker = fake_reranker
+    retriever._rerank_top_n = 2
+
+    results = await retriever.retrieve_async("培训时长", keywords=["培训"])
+
+    assert fake_reranker.called is True
+    assert fake_reranker.query == "培训时长"
+    assert fake_reranker.top_n == 2
+    assert [r.chunk_id for r in results] == ["chunk-2", "chunk-1"]

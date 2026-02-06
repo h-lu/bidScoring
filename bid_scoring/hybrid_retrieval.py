@@ -1119,6 +1119,10 @@ class HybridRetriever:
         merged_with_scores = merged[: self.top_k]
         results = self._fetch_chunks(merged_with_scores)
 
+        # Optional cross-encoder reranking on retrieved candidates.
+        if self._enable_rerank and self._reranker and results:
+            results = self._reranker.rerank(query, results, self._rerank_top_n)
+
         # Store in cache if enabled
         if self._cache:
             self._cache.put(cache_key, results)
@@ -1206,6 +1210,12 @@ class HybridRetriever:
         results = await loop.run_in_executor(
             None, self._fetch_chunks, merged_with_scores
         )
+
+        # Optional cross-encoder reranking.
+        if self._enable_rerank and self._reranker and results:
+            results = await loop.run_in_executor(
+                None, self._reranker.rerank, query, results, self._rerank_top_n
+            )
 
         # Store in cache if enabled
         if use_cache and self._cache:
