@@ -28,22 +28,9 @@ from bid_scoring.config import load_settings
 from bid_scoring.hybrid_retrieval import HybridRetriever
 
 
-# 解析命令行参数
-parser = argparse.ArgumentParser(description="Hybrid Retrieval 真实效果测试")
-parser.add_argument(
-    "version_id",
-    nargs="?",
-    default=os.environ.get("VERSION_ID"),
-    help="测试使用的版本 ID（也可通过 VERSION_ID 环境变量设置）",
-)
-args = parser.parse_args()
+# 全局变量，由 main() 函数设置
+VERSION_ID = None
 
-if not args.version_id:
-    print("错误: 请提供 version_id 参数或设置 VERSION_ID 环境变量")
-    parser.print_help()
-    exit(1)
-
-VERSION_ID = args.version_id
 
 # 测试查询（来自实际业务场景）
 TEST_QUERIES = [
@@ -405,6 +392,24 @@ def test_connection_pool():
 
 async def main():
     """主测试函数"""
+    global VERSION_ID
+
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="Hybrid Retrieval 真实效果测试")
+    parser.add_argument(
+        "version_id",
+        nargs="?",
+        default=os.environ.get("VERSION_ID"),
+        help="测试使用的版本 ID（也可通过 VERSION_ID 环境变量设置）",
+    )
+    args = parser.parse_args()
+
+    if not args.version_id:
+        print("错误: 请提供 version_id 参数或设置 VERSION_ID 环境变量")
+        parser.print_help()
+        exit(1)
+    VERSION_ID = args.version_id
+
     print("\n" + "=" * 60)
     print("Hybrid Retrieval 真实效果测试")
     print("=" * 60)
