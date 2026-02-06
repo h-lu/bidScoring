@@ -197,3 +197,236 @@ def test_keyword_extraction_filters_stopwords():
     # But field keywords should still be present
     assert "培训" in keywords
     assert "时长" in keywords
+
+
+def test_config_loading_from_file():
+    """Test loading configuration from default YAML file"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever, load_retrieval_config
+
+    # Test loading default config
+    config = load_retrieval_config()
+    assert "stopwords" in config
+    assert "field_keywords" in config
+    assert len(config["stopwords"]) > 0
+    assert len(config["field_keywords"]) > 0
+
+    # Test retriever with default config
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+    assert len(retriever.stopwords) > 0
+    assert len(retriever.field_keywords) > 0
+
+
+def test_extra_stopwords():
+    """Test adding extra stopwords via constructor"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5,
+        extra_stopwords={"自定义", "测试词"},
+    )
+
+    # Verify extra stopwords were added
+    assert "自定义" in retriever.stopwords
+    assert "测试词" in retriever.stopwords
+
+    # Verify the stopword is filtered in keyword extraction
+    keywords = retriever.extract_keywords_from_query("自定义测试")
+    assert "自定义" not in keywords
+
+
+def test_extra_field_keywords():
+    """Test adding extra field keywords via constructor"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5,
+        extra_field_keywords={
+            "云原生": ["Kubernetes", "K8s", "容器", "Docker"],
+            "AI": ["人工智能", "深度学习", "机器学习"],
+        },
+    )
+
+    # Verify extra field keywords were added
+    assert "云原生" in retriever.field_keywords
+    assert "AI" in retriever.field_keywords
+    assert "Kubernetes" in retriever.field_keywords["云原生"]
+
+    # Test keyword expansion with extra keywords
+    keywords = retriever.extract_keywords_from_query("云原生架构")
+    assert "Kubernetes" in keywords
+    assert "容器" in keywords
+
+
+def test_merge_field_keywords():
+    """Test that extra field keywords merge with config file keywords"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5,
+        extra_field_keywords={
+            "培训": ["新词1", "新词2"],  # Should merge with existing "培训"
+        },
+    )
+
+    # Verify existing synonyms are preserved
+    assert "培训" in retriever.field_keywords
+    assert "训练" in retriever.field_keywords["培训"]  # From config file
+    assert "新词1" in retriever.field_keywords["培训"]  # From extra
+
+
+def test_runtime_add_stopwords():
+    """Test adding stopwords at runtime"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    # Add stopwords at runtime
+    retriever.add_stopwords({"临时停用词", "另一个"})
+
+    assert "临时停用词" in retriever.stopwords
+    assert "另一个" in retriever.stopwords
+
+
+def test_runtime_add_field_keywords():
+    """Test adding field keywords at runtime"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    # Add field keywords at runtime
+    retriever.add_field_keywords({"区块链": ["Blockchain", "分布式账本", "智能合约"]})
+
+    assert "区块链" in retriever.field_keywords
+    assert "Blockchain" in retriever.field_keywords["区块链"]
+
+    # Test expansion works with runtime-added keywords
+    keywords = retriever.extract_keywords_from_query("区块链技术")
+    assert "Blockchain" in keywords
+
+
+def test_custom_config_path():
+    """Test loading from a custom config file path"""
+    import tempfile
+    import os
+    from bid_scoring.hybrid_retrieval import HybridRetriever, load_retrieval_config
+
+    # Create a temporary config file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(
+            'stopwords:\n  - "测试停用词"\nfield_keywords:\n  测试概念:\n    - "同义词1"\n    - "同义词2"\n'
+        )
+        temp_path = f.name
+
+    try:
+        # Test loading custom config
+        config = load_retrieval_config(temp_path)
+        assert "测试停用词" in config["stopwords"]
+        assert "测试概念" in config["field_keywords"]
+
+        # Test retriever with custom config
+        retriever = HybridRetriever(
+            version_id="test",
+            settings={"DATABASE_URL": "postgresql://test"},
+            top_k=5,
+            config_path=temp_path,
+        )
+        assert "测试停用词" in retriever.stopwords
+        assert "测试概念" in retriever.field_keywords
+    finally:
+        os.unlink(temp_path)
+
+
+def test_missing_config_file():
+    """Test handling of missing config file"""
+    from bid_scoring.hybrid_retrieval import load_retrieval_config
+
+    # Should return empty config without error
+    config = load_retrieval_config("/nonexistent/path/config.yaml")
+    assert config["stopwords"] == []
+    assert config["field_keywords"] == {}
+
+
+def test_properties_return_copies():
+    """Test that stopwords and field_keywords properties return copies"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    # Get copies
+    stopwords = retriever.stopwords
+    field_keywords = retriever.field_keywords
+
+    # Modify the copies
+    stopwords.add("新词")
+    field_keywords["新键"] = ["值"]
+
+    # Original should be unchanged
+    assert "新词" not in retriever.stopwords
+    assert "新键" not in retriever.field_keywords
+
+
+def test_bidirectional_synonym_expansion():
+    """Test that synonyms in query can expand to all related terms"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    # Query with synonym (not key) should expand to all related terms
+    keywords = retriever.extract_keywords_from_query("核磁共振设备")
+    assert "MRI" in keywords  # key
+    assert "核磁" in keywords  # synonym
+    assert "磁共振" in keywords  # synonym
+    assert "MR" in keywords  # synonym
+
+    # Query with another synonym
+    keywords = retriever.extract_keywords_from_query("计算机断层扫描仪")
+    assert "CT" in keywords
+    assert "螺旋CT" in keywords
+    assert "多层CT" in keywords
+
+    # Query with abbreviation
+    keywords = retriever.extract_keywords_from_query("数字X光机")
+    assert "DR" in keywords
+    assert "数字化摄影" in keywords
+    assert "X光机" in keywords
+
+
+def test_synonym_index_rebuild_on_add():
+    """Test that synonym index is rebuilt when adding field keywords at runtime"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    # Add new field keyword with synonyms at runtime
+    retriever.add_field_keywords(
+        {"人工智能": ["AI", "Artificial Intelligence", "智能算法"]}
+    )
+
+    # Query with synonym should expand to all terms
+    keywords = retriever.extract_keywords_from_query("AI技术")
+    assert "人工智能" in keywords
+    assert "智能算法" in keywords
+    assert "Artificial Intelligence" in keywords
+
+    # Query with another synonym
+    keywords = retriever.extract_keywords_from_query("智能算法应用")
+    assert "人工智能" in keywords
+    assert "AI" in keywords
