@@ -112,7 +112,7 @@ def compare_search_methods(
     # 2. 纯关键词搜索
     if query.keywords:
         start = time.perf_counter()
-        keyword_results = retriever._keyword_search(query.keywords)
+        keyword_results = retriever._keyword_search_fulltext(query.keywords)
         keyword_latency = (time.perf_counter() - start) * 1000
 
         keyword_ids = [r[0] for r in keyword_results]

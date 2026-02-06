@@ -8,15 +8,29 @@
 3. 混合搜索效果验证
 4. 缓存效果测试
 5. 异步接口测试
+
+用法:
+    python test_real_retrieval.py [VERSION_ID]
+
+示例:
+    python test_real_retrieval.py 83420a7c-b27b-480f-9427-565c47d2b53c
+    VERSION_ID=83420a7c-b27b-480f-9427-565c47d2b53c python test_real_retrieval.py
 """
 
+import argparse
 import asyncio
+import os
 import time
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 
 from bid_scoring.config import load_settings
 from bid_scoring.hybrid_retrieval import HybridRetriever
+
+
+# 全局变量，由 main() 函数设置
+VERSION_ID = None
+
 
 # 测试查询（来自实际业务场景）
 TEST_QUERIES = [
@@ -33,10 +47,9 @@ TEST_QUERIES = [
 ]
 
 SETTINGS = load_settings()
-VERSION_ID = "83420a7c-b27b-480f-9427-565c47d2b53c"  # 使用实际版本
 
 
-def test_fulltext_vs_ilike():
+def run_fulltext_vs_ilike():
     """测试 1: 全文搜索 vs ILIKE 性能对比 (AND vs OR 语义)"""
     print("\n" + "=" * 60)
     print("测试 1: 全文搜索 AND vs OR 语义对比")
@@ -105,7 +118,7 @@ def test_fulltext_vs_ilike():
     retriever.close()
 
 
-def test_vector_recall():
+def run_vector_recall():
     """测试 2: 向量搜索召回率测试（不同 ef_search）"""
     print("\n" + "=" * 60)
     print("测试 2: HNSW ef_search 参数对召回率的影响")
@@ -139,7 +152,7 @@ def test_vector_recall():
     print("\n  💡 说明: ef_search=100 是推荐默认值（平衡性能和召回率）")
 
 
-def test_hybrid_search():
+def run_hybrid_search():
     """测试 3: 混合搜索效果验证"""
     print("\n" + "=" * 60)
     print("测试 3: 混合搜索效果验证")
@@ -186,7 +199,7 @@ def test_hybrid_search():
     retriever.close()
 
 
-def test_rrf_weights():
+def run_rrf_weights():
     """测试 4: RRF 权重效果对比"""
     print("\n" + "=" * 60)
     print("测试 4: RRF 权重效果对比")
@@ -221,7 +234,7 @@ def test_rrf_weights():
         retriever.close()
 
 
-def test_cache_performance():
+def run_cache_performance():
     """测试 5: 缓存效果测试"""
     print("\n" + "=" * 60)
     print("测试 5: 查询缓存效果测试")
@@ -322,7 +335,7 @@ async def benchmark_async_performance():
     await retriever.close_async()
 
 
-def test_connection_pool():
+def run_connection_pool():
     """测试 7: 连接池效果测试"""
     print("\n" + "=" * 60)
     print("测试 7: 连接池效果测试")
@@ -379,6 +392,24 @@ def test_connection_pool():
 
 async def main():
     """主测试函数"""
+    global VERSION_ID
+
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description="Hybrid Retrieval 真实效果测试")
+    parser.add_argument(
+        "version_id",
+        nargs="?",
+        default=os.environ.get("VERSION_ID"),
+        help="测试使用的版本 ID（也可通过 VERSION_ID 环境变量设置）",
+    )
+    args = parser.parse_args()
+
+    if not args.version_id:
+        print("错误: 请提供 version_id 参数或设置 VERSION_ID 环境变量")
+        parser.print_help()
+        exit(1)
+    VERSION_ID = args.version_id
+
     print("\n" + "=" * 60)
     print("Hybrid Retrieval 真实效果测试")
     print("=" * 60)
@@ -387,13 +418,13 @@ async def main():
     print(f"测试查询数: {len(TEST_QUERIES)}")
     
     # 执行所有测试
-    test_fulltext_vs_ilike()
-    test_vector_recall()
-    test_hybrid_search()
-    test_rrf_weights()
-    test_cache_performance()
+    run_fulltext_vs_ilike()
+    run_vector_recall()
+    run_hybrid_search()
+    run_rrf_weights()
+    run_cache_performance()
     await benchmark_async_performance()
-    test_connection_pool()
+    run_connection_pool()
     
     print("\n" + "=" * 60)
     print("测试完成!")
