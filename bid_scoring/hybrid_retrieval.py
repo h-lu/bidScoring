@@ -14,10 +14,9 @@ References:
 import asyncio
 import logging
 import re
-import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -335,7 +334,9 @@ class RetrievalResult:
     vector_score: float | None = None  # Original vector similarity score
     keyword_score: float | None = None  # Original keyword match score
     embedding: List[float] | None = None
-    rerank_score: float | None = None  # Cross-encoder rerank score (if reranking enabled)
+    rerank_score: float | None = (
+        None  # Cross-encoder rerank score (if reranking enabled)
+    )
 
 
 @dataclass
