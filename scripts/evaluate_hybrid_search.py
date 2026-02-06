@@ -23,7 +23,7 @@ import statistics
 import sys
 import time
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Set
+from typing import Set
 
 import psycopg
 
@@ -36,6 +36,7 @@ from bid_scoring.hybrid_retrieval import HybridRetriever
 @dataclass
 class TestQuery:
     """测试查询定义"""
+
     query: str
     keywords: list[str]
     description: str
@@ -45,6 +46,7 @@ class TestQuery:
 @dataclass
 class Metrics:
     """检索指标"""
+
     recall_at_1: float
     recall_at_3: float
     recall_at_5: float
@@ -63,67 +65,64 @@ TEST_QUERIES: list[TestQuery] = [
         query="培训时长是多少天",
         keywords=["培训", "时长", "天数", "时间"],
         description="培训时长询问",
-        query_type="keyword_critical"
+        query_type="keyword_critical",
     ),
     TestQuery(
         query="保修期多长时间",
         keywords=["保修", "质保", "保修期", "时间"],
         description="保修期询问",
-        query_type="keyword_critical"
+        query_type="keyword_critical",
     ),
     TestQuery(
         query="配件清单有哪些",
         keywords=["配件", "备件", "清单", "耗材"],
         description="配件清单询问",
-        query_type="keyword_critical"
+        query_type="keyword_critical",
     ),
-
     # 事实型查询 (Factual)
     TestQuery(
         query="售后服务电话是多少",
         keywords=["售后", "服务", "电话", "400"],
         description="售后服务电话",
-        query_type="factual"
+        query_type="factual",
     ),
     TestQuery(
         query="安装调试需要多久",
         keywords=["安装", "调试", "时间", "周期"],
         description="安装调试周期",
-        query_type="factual"
+        query_type="factual",
     ),
-
     # 语义理解型查询 (Semantic)
     TestQuery(
         query="设备出现问题怎么办",
         keywords=["设备", "问题", "故障", "维修"],
         description="故障处理流程",
-        query_type="semantic"
+        query_type="semantic",
     ),
     TestQuery(
         query="如何使用这个系统",
         keywords=["使用", "系统", "操作", "方法"],
         description="系统使用方法",
-        query_type="semantic"
+        query_type="semantic",
     ),
     TestQuery(
         query="培训内容包括哪些",
         keywords=["培训", "内容", "课程", "大纲"],
         description="培训内容概述",
-        query_type="semantic"
+        query_type="semantic",
     ),
-
     # 复合型查询
     TestQuery(
         query="响应时间和到场时间要求",
         keywords=["响应", "到场", "时间", "时效"],
         description="服务响应时效",
-        query_type="keyword_critical"
+        query_type="keyword_critical",
     ),
     TestQuery(
         query="质保期满后如何维护",
         keywords=["质保", "维护", "保修期", "服务"],
         description="质保期后维护",
-        query_type="semantic"
+        query_type="semantic",
     ),
 ]
 
@@ -132,17 +131,13 @@ def get_all_chunks_for_version(conn, version_id: str) -> Set[str]:
     """获取版本下的所有 chunk_id"""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT chunk_id::text FROM chunks WHERE version_id = %s",
-            (version_id,)
+            "SELECT chunk_id::text FROM chunks WHERE version_id = %s", (version_id,)
         )
         return {row[0] for row in cur.fetchall()}
 
 
 def find_relevant_chunks(
-    conn,
-    version_id: str,
-    query: str,
-    keywords: list[str]
+    conn, version_id: str, query: str, keywords: list[str]
 ) -> Set[str]:
     """
     基于关键词匹配找到相关 chunk_id
@@ -161,7 +156,7 @@ def find_relevant_chunks(
               AND text_tsv @@ to_tsquery('simple', %s)
             LIMIT 20
             """,
-            (version_id, keyword_pattern)
+            (version_id, keyword_pattern),
         )
         relevant.update(row[0] for row in cur.fetchall())
 
@@ -177,7 +172,7 @@ def find_relevant_chunks(
                   AND ({conditions})
                 LIMIT 20
                 """,
-                (version_id,) + tuple(patterns)
+                (version_id,) + tuple(patterns),
             )
             relevant.update(row[0] for row in cur.fetchall())
 
@@ -185,11 +180,10 @@ def find_relevant_chunks(
 
 
 def calculate_metrics(
-    retrieved: list[str],
-    relevant: Set[str],
-    latency_ms: float
+    retrieved: list[str], relevant: Set[str], latency_ms: float
 ) -> Metrics:
     """计算检索指标"""
+
     def recall_at_k(k: int) -> float:
         if not relevant:
             return 0.0
@@ -218,7 +212,7 @@ def calculate_metrics(
         precision_at_3=precision_at_k(3),
         precision_at_5=precision_at_k(5),
         mrr=mrr(),
-        latency_ms=latency_ms
+        latency_ms=latency_ms,
     )
 
 
@@ -227,7 +221,7 @@ def evaluate_search_method(
     conn,
     test_query: TestQuery,
     method: str,
-    top_k: int = 10
+    top_k: int = 10,
 ) -> tuple[list[str], Metrics]:
     """
     评估单个搜索方法
@@ -251,7 +245,9 @@ def evaluate_search_method(
     latency_ms = (time.perf_counter() - start) * 1000
 
     # 找到相关文档 (使用关键词作为 ground truth)
-    relevant = find_relevant_chunks(conn, retriever.version_id, test_query.query, test_query.keywords)
+    relevant = find_relevant_chunks(
+        conn, retriever.version_id, test_query.query, test_query.keywords
+    )
 
     metrics = calculate_metrics(retrieved, relevant, latency_ms)
     return retrieved, metrics
@@ -268,7 +264,9 @@ def print_report(results: dict[str, list[Metrics]], detailed: bool = False):
     # 1. 总体指标对比
     print("\n【总体指标对比】")
     print("-" * 90)
-    print(f"{'指标':<20} {'Vector Only':>18} {'Keyword Only':>18} {'Hybrid':>18} {'改进':>10}")
+    print(
+        f"{'指标':<20} {'Vector Only':>18} {'Keyword Only':>18} {'Hybrid':>18} {'改进':>10}"
+    )
     print("-" * 90)
 
     for metric_name in ["mrr", "recall_at_3", "recall_at_5", "precision_at_3"]:
@@ -295,11 +293,17 @@ def print_report(results: dict[str, list[Metrics]], detailed: bool = False):
     for method in methods:
         latencies = [m.latency_ms for m in results[method]]
         mean_latency = statistics.mean(latencies) if latencies else 0.0
-        p95_latency = sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) > 0 else 0
+        p95_latency = (
+            sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) > 0 else 0
+        )
         latency_row.append(f"{mean_latency:.1f} (p95: {p95_latency:.1f})")
 
     latency_row.append("-")
-    print("  ".join(f"{v:>18}" if i > 0 else f"{v:<20}" for i, v in enumerate(latency_row)))
+    print(
+        "  ".join(
+            f"{v:>18}" if i > 0 else f"{v:<20}" for i, v in enumerate(latency_row)
+        )
+    )
 
     # 2. 按查询类型分析
     print("\n【按查询类型分析 - Hybrid 方法】")
@@ -307,7 +311,9 @@ def print_report(results: dict[str, list[Metrics]], detailed: bool = False):
 
     query_types = ["keyword_critical", "factual", "semantic"]
     for qtype in query_types:
-        type_metrics = [m for m, q in zip(results["hybrid"], TEST_QUERIES) if q.query_type == qtype]
+        type_metrics = [
+            m for m, q in zip(results["hybrid"], TEST_QUERIES) if q.query_type == qtype
+        ]
         if type_metrics:
             mrr_val = statistics.mean([m.mrr for m in type_metrics])
             r5_val = statistics.mean([m.recall_at_5 for m in type_metrics])
@@ -319,13 +325,15 @@ def print_report(results: dict[str, list[Metrics]], detailed: bool = False):
         print("-" * 90)
 
         for i, query in enumerate(TEST_QUERIES):
-            print(f"\nQuery {i+1}: {query.query}")
+            print(f"\nQuery {i + 1}: {query.query}")
             print(f"  Type: {query.query_type}, Keywords: {query.keywords}")
 
             for method in methods:
                 m = results[method][i]
-                print(f"  {method:<12} R@5={m.recall_at_5:.2f} P@3={m.precision_at_3:.2f} "
-                      f"MRR={m.mrr:.2f} Lat={m.latency_ms:.1f}ms")
+                print(
+                    f"  {method:<12} R@5={m.recall_at_5:.2f} P@3={m.precision_at_3:.2f} "
+                    f"MRR={m.mrr:.2f} Lat={m.latency_ms:.1f}ms"
+                )
 
     print("\n" + "=" * 90)
     print("说明:")
@@ -342,24 +350,11 @@ def main():
         "--version-id",
         type=str,
         help="文档版本 ID",
-        default="83420a7c-b27b-480f-9427-565c47d2b53c"
+        default="83420a7c-b27b-480f-9427-565c47d2b53c",
     )
-    parser.add_argument(
-        "--top-k",
-        type=int,
-        default=10,
-        help="检索结果数量 (默认: 10)"
-    )
-    parser.add_argument(
-        "--detailed",
-        action="store_true",
-        help="显示详细结果"
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        help="输出 JSON 文件路径"
-    )
+    parser.add_argument("--top-k", type=int, default=10, help="检索结果数量 (默认: 10)")
+    parser.add_argument("--detailed", action="store_true", help="显示详细结果")
+    parser.add_argument("--output", type=str, help="输出 JSON 文件路径")
 
     args = parser.parse_args()
 
@@ -368,29 +363,23 @@ def main():
 
     # 创建检索器
     retriever = HybridRetriever(
-        version_id=args.version_id,
-        settings=settings,
-        top_k=args.top_k
+        version_id=args.version_id, settings=settings, top_k=args.top_k
     )
 
     # 运行评估
-    print(f"开始评估混合检索效果...")
+    print("开始评估混合检索效果...")
     print(f"版本 ID: {args.version_id}")
     print(f"Top-K: {args.top_k}")
     print(f"测试查询数: {len(TEST_QUERIES)}")
 
-    results: dict[str, list[Metrics]] = {
-        "vector": [],
-        "keyword": [],
-        "hybrid": []
-    }
+    results: dict[str, list[Metrics]] = {"vector": [], "keyword": [], "hybrid": []}
 
     with psycopg.connect(settings["DATABASE_URL"]) as conn:
         # 验证版本存在
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) FROM document_versions WHERE version_id = %s",
-                (args.version_id,)
+                (args.version_id,),
             )
             if cur.fetchone()[0] == 0:
                 print(f"错误: 版本 {args.version_id} 不存在")
@@ -398,7 +387,10 @@ def main():
 
         # 评估每个查询
         for i, test_query in enumerate(TEST_QUERIES, 1):
-            print(f"  评估查询 {i}/{len(TEST_QUERIES)}: {test_query.query[:30]}...", end=" ")
+            print(
+                f"  评估查询 {i}/{len(TEST_QUERIES)}: {test_query.query[:30]}...",
+                end=" ",
+            )
 
             for method in ["vector", "keyword", "hybrid"]:
                 _, metrics = evaluate_search_method(
@@ -422,24 +414,30 @@ def main():
                     "type": q.query_type,
                     "vector": asdict(v),
                     "keyword": asdict(k),
-                    "hybrid": asdict(h)
+                    "hybrid": asdict(h),
                 }
                 for q, v, k, h in zip(
                     TEST_QUERIES,
                     results["vector"],
                     results["keyword"],
-                    results["hybrid"]
+                    results["hybrid"],
                 )
             ],
             "summary": {
                 method: {
                     "mrr": statistics.mean([m.mrr for m in results[method]]),
-                    "recall_at_5": statistics.mean([m.recall_at_5 for m in results[method]]),
-                    "precision_at_3": statistics.mean([m.precision_at_3 for m in results[method]]),
-                    "latency_ms": statistics.mean([m.latency_ms for m in results[method]]),
+                    "recall_at_5": statistics.mean(
+                        [m.recall_at_5 for m in results[method]]
+                    ),
+                    "precision_at_3": statistics.mean(
+                        [m.precision_at_3 for m in results[method]]
+                    ),
+                    "latency_ms": statistics.mean(
+                        [m.latency_ms for m in results[method]]
+                    ),
                 }
                 for method in ["vector", "keyword", "hybrid"]
-            }
+            },
         }
 
         with open(args.output, "w", encoding="utf-8") as f:

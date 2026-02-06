@@ -14,7 +14,8 @@ def validate_embedding_dim(dim: int | None) -> int:
 def main():
     settings = load_settings()
     dsn = settings["DATABASE_URL"]
-    dim = validate_embedding_dim(settings["OPENAI_EMBEDDING_DIM"])
+    # 验证嵌入维度配置正确
+    validate_embedding_dim(settings["OPENAI_EMBEDDING_DIM"])
     template = pathlib.Path("migrations/000_init.sql").read_text(encoding="utf-8")
     sql = template  # 000_init.sql 已包含固定的 1536 维向量定义，无需替换
     # 使用 psycopg.sql 模块执行整个 SQL 脚本，正确处理函数定义

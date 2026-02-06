@@ -16,7 +16,6 @@ from typing import List, Set, Dict
 import statistics
 import time
 
-import pytest
 
 from bid_scoring.hybrid_retrieval import HybridRetriever, ReciprocalRankFusion
 from bid_scoring.config import load_settings
@@ -25,6 +24,7 @@ from bid_scoring.config import load_settings
 @dataclass
 class TestQuery:
     """测试查询样本"""
+
     query_text: str
     keywords: List[str]
     # 预期相关的 chunk_id 集合 (通过人工标注或自动生成)
@@ -36,6 +36,7 @@ class TestQuery:
 @dataclass
 class RetrievalMetrics:
     """检索评估指标"""
+
     recall_at_k: Dict[int, float]  # Recall@1, Recall@3, Recall@5
     precision_at_k: Dict[int, float]
     mrr: float  # Mean Reciprocal Rank
@@ -60,11 +61,7 @@ def calculate_metrics(
         RetrievalMetrics 包含各项指标
     """
     metrics = RetrievalMetrics(
-        recall_at_k={},
-        precision_at_k={},
-        mrr=0.0,
-        latency_ms=0.0,
-        query_type=""
+        recall_at_k={}, precision_at_k={}, mrr=0.0, latency_ms=0.0, query_type=""
     )
 
     # 计算 Recall@K 和 Precision@K
@@ -72,7 +69,9 @@ def calculate_metrics(
         top_k = set(retrieved_ids[:k])
         relevant_in_k = len(top_k & expected_ids)
 
-        metrics.recall_at_k[k] = relevant_in_k / len(expected_ids) if expected_ids else 0.0
+        metrics.recall_at_k[k] = (
+            relevant_in_k / len(expected_ids) if expected_ids else 0.0
+        )
         metrics.precision_at_k[k] = relevant_in_k / k if k > 0 else 0.0
 
     # 计算 MRR (Mean Reciprocal Rank)
@@ -104,7 +103,9 @@ def compare_search_methods(
     vector_latency = (time.perf_counter() - start) * 1000
 
     vector_ids = [r[0] for r in vector_results]
-    results["vector"] = calculate_metrics(vector_ids, query.expected_chunk_ids, k_values)
+    results["vector"] = calculate_metrics(
+        vector_ids, query.expected_chunk_ids, k_values
+    )
     results["vector"].latency_ms = vector_latency
     results["vector"].query_type = query.query_type
 
@@ -115,7 +116,9 @@ def compare_search_methods(
         keyword_latency = (time.perf_counter() - start) * 1000
 
         keyword_ids = [r[0] for r in keyword_results]
-        results["keyword"] = calculate_metrics(keyword_ids, query.expected_chunk_ids, k_values)
+        results["keyword"] = calculate_metrics(
+            keyword_ids, query.expected_chunk_ids, k_values
+        )
         results["keyword"].latency_ms = keyword_latency
         results["keyword"].query_type = query.query_type
 
@@ -125,7 +128,9 @@ def compare_search_methods(
     hybrid_latency = (time.perf_counter() - start) * 1000
 
     hybrid_ids = [r.chunk_id for r in hybrid_results]
-    results["hybrid"] = calculate_metrics(hybrid_ids, query.expected_chunk_ids, k_values)
+    results["hybrid"] = calculate_metrics(
+        hybrid_ids, query.expected_chunk_ids, k_values
+    )
     results["hybrid"].latency_ms = hybrid_latency
     results["hybrid"].query_type = query.query_type
 
@@ -150,47 +155,72 @@ def print_benchmark_report(all_results: List[Dict[str, RetrievalMetrics]]):
         # 收集该方法的指标
         mrr_values = [r[method].mrr for r in all_results if method in r]
         recall_5_values = [r[method].recall_at_k[5] for r in all_results if method in r]
-        precision_3_values = [r[method].precision_at_k[3] for r in all_results if method in r]
+        precision_3_values = [
+            r[method].precision_at_k[3] for r in all_results if method in r
+        ]
         latencies = [r[method].latency_ms for r in all_results if method in r]
 
-        print(f"  MRR (Mean Reciprocal Rank):")
+        print("  MRR (Mean Reciprocal Rank):")
         print(f"    Mean: {statistics.mean(mrr_values):.4f}")
         print(f"    Median: {statistics.median(mrr_values):.4f}")
 
-        print(f"  Recall@5:")
+        print("  Recall@5:")
         print(f"    Mean: {statistics.mean(recall_5_values):.4f}")
         print(f"    Median: {statistics.median(recall_5_values):.4f}")
 
-        print(f"  Precision@3:")
+        print("  Precision@3:")
         print(f"    Mean: {statistics.mean(precision_3_values):.4f}")
         print(f"    Median: {statistics.median(precision_3_values):.4f}")
 
-        print(f"  Latency:")
+        print("  Latency:")
         print(f"    Mean: {statistics.mean(latencies):.2f} ms")
-        print(f"    P95: {sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) > 0 else 0:.2f} ms")
+        print(
+            f"    P95: {sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) > 0 else 0:.2f} ms"
+        )
 
     # 混合 vs 纯向量的改进
     print("\n【混合检索改进幅度】")
     print("-" * 40)
 
-    hybrid_mrr = [r["hybrid"].mrr for r in all_results if "hybrid" in r and "vector" in r]
-    vector_mrr = [r["vector"].mrr for r in all_results if "hybrid" in r and "vector" in r]
+    hybrid_mrr = [
+        r["hybrid"].mrr for r in all_results if "hybrid" in r and "vector" in r
+    ]
+    vector_mrr = [
+        r["vector"].mrr for r in all_results if "hybrid" in r and "vector" in r
+    ]
 
     if hybrid_mrr and vector_mrr:
-        mrr_improvement = (statistics.mean(hybrid_mrr) - statistics.mean(vector_mrr)) / statistics.mean(vector_mrr) * 100
+        mrr_improvement = (
+            (statistics.mean(hybrid_mrr) - statistics.mean(vector_mrr))
+            / statistics.mean(vector_mrr)
+            * 100
+        )
         print(f"  MRR 改进: {mrr_improvement:+.2f}%")
 
-    hybrid_r5 = [r["hybrid"].recall_at_k[5] for r in all_results if "hybrid" in r and "vector" in r]
-    vector_r5 = [r["vector"].recall_at_k[5] for r in all_results if "hybrid" in r and "vector" in r]
+    hybrid_r5 = [
+        r["hybrid"].recall_at_k[5]
+        for r in all_results
+        if "hybrid" in r and "vector" in r
+    ]
+    vector_r5 = [
+        r["vector"].recall_at_k[5]
+        for r in all_results
+        if "hybrid" in r and "vector" in r
+    ]
 
     if hybrid_r5 and vector_r5:
-        r5_improvement = (statistics.mean(hybrid_r5) - statistics.mean(vector_r5)) / statistics.mean(vector_r5) * 100
+        r5_improvement = (
+            (statistics.mean(hybrid_r5) - statistics.mean(vector_r5))
+            / statistics.mean(vector_r5)
+            * 100
+        )
         print(f"  Recall@5 改进: {r5_improvement:+.2f}%")
 
     print("=" * 80)
 
 
 # ============ 测试用例 ============
+
 
 class TestHybridRetrievalBenchmark:
     """混合检索基准测试套件"""
@@ -211,7 +241,7 @@ class TestHybridRetrievalBenchmark:
             ("doc_C", 0.85),  # 目标文档: 语义相关但不是最匹配
         ]
         keyword_results = [
-            ("doc_C", 5.0),   # 目标文档: 关键词完全匹配
+            ("doc_C", 5.0),  # 目标文档: 关键词完全匹配
             ("doc_D", 3.0),
         ]
 
@@ -222,7 +252,9 @@ class TestHybridRetrievalBenchmark:
         doc_c_rank = fused_ids.index("doc_C") + 1
 
         # doc_C 在融合后排名应该优于或等于在纯向量中的排名 (#3)
-        assert doc_c_rank <= 3, f"doc_C should rank better after fusion, got rank {doc_c_rank}"
+        assert doc_c_rank <= 3, (
+            f"doc_C should rank better after fusion, got rank {doc_c_rank}"
+        )
 
     def test_keyword_critical_queries(self):
         """
@@ -233,9 +265,7 @@ class TestHybridRetrievalBenchmark:
         """
         settings = load_settings()
         retriever = HybridRetriever(
-            version_id="test-version",
-            settings=settings,
-            top_k=10
+            version_id="test-version", settings=settings, top_k=10
         )
 
         # 模拟关键词关键型查询
@@ -243,15 +273,16 @@ class TestHybridRetrievalBenchmark:
             query_text="培训时长是多少天",
             keywords=["培训", "时长", "天数"],
             expected_chunk_ids={"chunk_training_schedule"},  # 假设的预期文档
-            query_type="keyword_critical"
+            query_type="keyword_critical",
         )
 
         # 提取关键词
         extracted = retriever.extract_keywords_from_query(query.query_text)
 
         # 验证关键词提取包含关键术语
-        assert any(k in extracted for k in ["培训", "时长", "天数"]), \
+        assert any(k in extracted for k in ["培训", "时长", "天数"]), (
             "Keywords should contain critical terms"
+        )
 
     def test_semantic_queries(self):
         """
@@ -262,16 +293,14 @@ class TestHybridRetrievalBenchmark:
         """
         settings = load_settings()
         retriever = HybridRetriever(
-            version_id="test-version",
-            settings=settings,
-            top_k=10
+            version_id="test-version", settings=settings, top_k=10
         )
 
         query = TestQuery(
             query_text="售后服务包含哪些内容",
             keywords=["售后", "服务"],
             expected_chunk_ids={"chunk_service_policy"},
-            query_type="semantic"
+            query_type="semantic",
         )
 
         # 验证关键词提取也能捕获同义词
@@ -279,8 +308,9 @@ class TestHybridRetrievalBenchmark:
 
         # 应该包含 "服务" 及其同义词
         service_synonyms = {"服务", "支持", "维护", "售后"}
-        assert any(k in service_synonyms for k in extracted), \
+        assert any(k in service_synonyms for k in extracted), (
             "Should capture semantic synonyms"
+        )
 
     def test_empty_keyword_fallback(self):
         """
@@ -291,9 +321,7 @@ class TestHybridRetrievalBenchmark:
         """
         settings = load_settings()
         retriever = HybridRetriever(
-            version_id="test-version",
-            settings=settings,
-            top_k=10
+            version_id="test-version", settings=settings, top_k=10
         )
 
         # 极端短查询，可能没有有效关键词
@@ -301,8 +329,9 @@ class TestHybridRetrievalBenchmark:
         keywords = retriever.extract_keywords_from_query(query_text)
 
         # 提取的关键词应该很少或为空
-        assert len(keywords) == 0 or all(len(k) >= 2 for k in keywords), \
+        assert len(keywords) == 0 or all(len(k) >= 2 for k in keywords), (
             "Should filter out stopwords effectively"
+        )
 
     def test_latency_acceptable(self):
         """
@@ -313,15 +342,14 @@ class TestHybridRetrievalBenchmark:
         """
         settings = load_settings()
         retriever = HybridRetriever(
-            version_id="test-version",
-            settings=settings,
-            top_k=10
+            version_id="test-version", settings=settings, top_k=10
         )
 
         query = "培训方案和时长安排"
 
         # 测量纯向量搜索延迟
         import time
+
         start = time.perf_counter()
         _ = retriever._vector_search(query)
         vector_latency = (time.perf_counter() - start) * 1000
@@ -333,8 +361,9 @@ class TestHybridRetrievalBenchmark:
 
         # 混合检索延迟应该不超过纯向量搜索的 2 倍
         # (因为并行执行，理论上应该接近 max(vector_time, keyword_time))
-        assert hybrid_latency < vector_latency * 2, \
+        assert hybrid_latency < vector_latency * 2, (
             f"Hybrid latency ({hybrid_latency:.2f}ms) should be < 2x vector latency ({vector_latency:.2f}ms)"
+        )
 
 
 class TestMetricsCalculation:
@@ -351,10 +380,10 @@ class TestMetricsCalculation:
         assert metrics.recall_at_k[1] == 0.0
 
         # Recall@3: 1/3 ≈ 0.33 (doc_2 在 top3 中)
-        assert abs(metrics.recall_at_k[3] - 1/3) < 0.01
+        assert abs(metrics.recall_at_k[3] - 1 / 3) < 0.01
 
         # Recall@5: 2/3 ≈ 0.67 (doc_2 和 doc_4 在 top5 中)
-        assert abs(metrics.recall_at_k[5] - 2/3) < 0.01
+        assert abs(metrics.recall_at_k[5] - 2 / 3) < 0.01
 
     def test_mrr_calculation(self):
         """测试 MRR 计算"""
@@ -384,4 +413,4 @@ class TestMetricsCalculation:
         assert metrics.precision_at_k[2] == 0.5
 
         # Precision@3: 2/3 ≈ 0.67 (doc_1, doc_3 相关)
-        assert abs(metrics.precision_at_k[3] - 2/3) < 0.01
+        assert abs(metrics.precision_at_k[3] - 2 / 3) < 0.01

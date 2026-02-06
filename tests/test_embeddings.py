@@ -309,13 +309,16 @@ class TestEmbeddingIntegration:
 
         # Calculate cosine similarity
         import math
+
         dot_product = sum(a * b for a, b in zip(vec1, vec2))
         magnitude1 = math.sqrt(sum(a * a for a in vec1))
         magnitude2 = math.sqrt(sum(b * b for b in vec2))
         cosine_sim = dot_product / (magnitude1 * magnitude2)
 
         # Cosine similarity should be very close to 1.0 (within 0.1%)
-        assert cosine_sim > 0.999, f"Cosine similarity {cosine_sim} is not close enough to 1.0"
+        assert cosine_sim > 0.999, (
+            f"Cosine similarity {cosine_sim} is not close enough to 1.0"
+        )
 
 
 class TestEmbeddingBestPractices:
