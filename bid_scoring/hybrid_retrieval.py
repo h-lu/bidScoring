@@ -15,13 +15,108 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Set, Tuple
 
 import psycopg
+import yaml
 
 from bid_scoring.embeddings import embed_single_text
 
+# Type alias for field keywords dictionary
+FieldKeywordsDict = Dict[str, List[str]]
+SynonymIndexDict = Dict[str, str]  # synonym -> key mapping for bidirectional lookup
+
 logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
+
+# Default configuration file path
+DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config" / "retrieval_config.yaml"
+
+
+def load_retrieval_config(config_path: str | Path | None = None) -> dict:
+    """Load retrieval configuration from YAML file.
+
+    Args:
+        config_path: Path to the YAML configuration file.
+                    If None, uses the default path.
+
+    Returns:
+        Configuration dictionary containing stopwords and field_keywords.
+        Returns empty configuration if file not found or invalid.
+
+    Example:
+        >>> config = load_retrieval_config()
+        >>> print(config["stopwords"][:5])
+        ['的', '了', '是', '在', '我']
+    """
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+
+    if not path.exists():
+        logger.warning(f"Config file not found: {path}. Using empty configuration.")
+        return {"stopwords": [], "field_keywords": {}}
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+
+        # Ensure required keys exist
+        config.setdefault("stopwords", [])
+        config.setdefault("field_keywords", {})
+
+        logger.debug(f"Loaded retrieval config from {path}")
+        return config
+    except yaml.YAMLError as e:
+        logger.error(f"Failed to parse config file {path}: {e}")
+        return {"stopwords": [], "field_keywords": {}}
+    except Exception as e:
+        logger.error(f"Failed to load config file {path}: {e}")
+        return {"stopwords": [], "field_keywords": {}}
+
+
+def _build_synonym_index(field_keywords: FieldKeywordsDict) -> SynonymIndexDict:
+    """Build a bidirectional synonym index for fast lookup.
+
+    This creates a mapping from each synonym (including the key itself)
+    back to the original key, enabling bidirectional keyword expansion.
+
+    For example, with field_keywords = {"MRI": ["磁共振", "核磁共振"]}
+    The synonym index will be:
+        {"MRI": "MRI", "磁共振": "MRI", "核磁共振": "MRI"}
+
+    This allows queries containing "核磁共振" to expand to all MRI-related terms.
+
+    Args:
+        field_keywords: Dictionary mapping keys to their synonym lists
+
+    Returns:
+        Dictionary mapping each term to its canonical key
+
+    Performance:
+        O(N * M) where N = number of keys, M = average synonyms per key
+        Memory: O(total number of unique terms)
+    """
+    synonym_index: SynonymIndexDict = {}
+    for key, synonyms in field_keywords.items():
+        # Map the key itself to itself for consistent lookup
+        synonym_index[key] = key
+        # Map each synonym to the key
+        for synonym in synonyms:
+            # If synonym already exists, the first occurrence wins
+            # This is deterministic behavior
+            if synonym not in synonym_index:
+                synonym_index[synonym] = key
+            else:
+                # Log warning about synonym collision
+                existing_key = synonym_index[synonym]
+                if existing_key != key:
+                    logger.debug(
+                        f"Synonym '{synonym}' maps to both '{existing_key}' and '{key}', "
+                        f"using first mapping"
+                    )
+    return synonym_index
+
 
 # DeepMind recommended value for RRF damping constant.
 # This value balances the influence of top-ranked items vs. deep-ranked items.
@@ -109,10 +204,27 @@ class HybridRetriever:
     - Proper error handling with logging
     - RRF (Reciprocal Rank Fusion) for result merging
     - Detailed score tracking for debugging
+    - Configurable stopwords and field keywords from external files
 
     Usage:
+        # Basic usage with default config
         retriever = HybridRetriever(version_id="xxx", settings=settings)
-        results = retriever.retrieve("培训时长", keywords=["培训", "时长", "天数"])
+        results = retriever.retrieve("培训时长")
+
+        # With custom config file
+        retriever = HybridRetriever(
+            version_id="xxx",
+            settings=settings,
+            config_path="/path/to/custom_config.yaml"
+        )
+
+        # With extra stopwords and field keywords
+        retriever = HybridRetriever(
+            version_id="xxx",
+            settings=settings,
+            extra_stopwords={"自定义", "停用词"},
+            extra_field_keywords={"新技术": ["AI", "人工智能", "机器学习"]}
+        )
     """
 
     def __init__(
@@ -121,6 +233,9 @@ class HybridRetriever:
         settings: dict,
         top_k: int = 10,
         rrf_k: int = DEFAULT_RRF_K,
+        config_path: str | Path | None = None,
+        extra_stopwords: Set[str] | None = None,
+        extra_field_keywords: Dict[str, List[str]] | None = None,
     ):
         """
         Initialize the hybrid retriever.
@@ -130,6 +245,12 @@ class HybridRetriever:
             settings: Configuration dictionary containing DATABASE_URL
             top_k: Number of top results to return
             rrf_k: RRF damping constant (default 60 as per DeepMind research)
+            config_path: Path to YAML configuration file with stopwords and field_keywords.
+                        If None, uses default path (data/retrieval_config.yaml).
+            extra_stopwords: Additional stopwords to filter out during keyword extraction.
+                           These are merged with config file stopwords.
+            extra_field_keywords: Additional field keywords for synonym expansion.
+                                These are merged with config file keywords.
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -143,6 +264,96 @@ class HybridRetriever:
         self.settings = settings
         self.top_k = top_k
         self.rrf = ReciprocalRankFusion(k=rrf_k)
+
+        # Load configuration from file
+        config = load_retrieval_config(config_path)
+
+        # Initialize stopwords: config file + extra
+        self._stopwords: Set[str] = set(config.get("stopwords", []))
+        if extra_stopwords:
+            self._stopwords.update(extra_stopwords)
+            logger.debug(f"Added {len(extra_stopwords)} extra stopwords")
+
+        # Initialize field keywords: config file + extra (extra takes precedence)
+        self._field_keywords: FieldKeywordsDict = dict(config.get("field_keywords", {}))
+        if extra_field_keywords:
+            for key, synonyms in extra_field_keywords.items():
+                # Ensure key itself is in the synonyms list for consistency
+                all_synonyms = [key] + [s for s in synonyms if s != key]
+                if key in self._field_keywords:
+                    # Merge synonyms, avoid duplicates
+                    existing = set(self._field_keywords[key])
+                    new_synonyms = [s for s in all_synonyms if s not in existing]
+                    self._field_keywords[key].extend(new_synonyms)
+                    logger.debug(
+                        f"Extended field keyword '{key}' with {len(new_synonyms)} new synonyms"
+                    )
+                else:
+                    self._field_keywords[key] = list(all_synonyms)
+                    logger.debug(
+                        f"Added new field keyword '{key}' with {len(all_synonyms)} synonyms"
+                    )
+
+        # Ensure all existing field keywords have the key itself in their synonyms
+        for key in list(self._field_keywords.keys()):
+            if key not in self._field_keywords[key]:
+                self._field_keywords[key].insert(0, key)
+
+        # Build bidirectional synonym index for fast lookup
+        # This enables queries containing synonyms to expand to all related terms
+        self._synonym_index: SynonymIndexDict = _build_synonym_index(
+            self._field_keywords
+        )
+        logger.debug(
+            f"Built synonym index with {len(self._synonym_index)} terms "
+            f"from {len(self._field_keywords)} keyword groups"
+        )
+
+    @property
+    def stopwords(self) -> Set[str]:
+        """Get the current set of stopwords."""
+        return self._stopwords.copy()
+
+    @property
+    def field_keywords(self) -> Dict[str, List[str]]:
+        """Get the current field keywords mapping."""
+        return self._field_keywords.copy()
+
+    def add_stopwords(self, words: Set[str]) -> None:
+        """Add additional stopwords at runtime.
+
+        Args:
+            words: Set of words to add as stopwords
+        """
+        self._stopwords.update(words)
+        logger.debug(f"Added {len(words)} stopwords at runtime")
+
+    def add_field_keywords(self, keywords: Dict[str, List[str]]) -> None:
+        """Add additional field keywords at runtime.
+
+        This method updates both the field keywords dictionary and rebuilds
+        the synonym index to include the new mappings.
+
+        Args:
+            keywords: Dictionary mapping core concepts to synonym lists
+        """
+        for key, synonyms in keywords.items():
+            # Ensure key itself is in the synonyms list
+            all_synonyms = [key] + [s for s in synonyms if s != key]
+            if key in self._field_keywords:
+                existing = set(self._field_keywords[key])
+                new_synonyms = [s for s in all_synonyms if s not in existing]
+                self._field_keywords[key].extend(new_synonyms)
+            else:
+                self._field_keywords[key] = list(all_synonyms)
+
+        # Rebuild synonym index to include new keywords
+        # This ensures bidirectional lookup works for newly added terms
+        self._synonym_index = _build_synonym_index(self._field_keywords)
+        logger.debug(
+            f"Added {len(keywords)} field keyword entries at runtime, "
+            f"synonym index now has {len(self._synonym_index)} terms"
+        )
 
     def _vector_search(self, query: str) -> List[Tuple[str, float]]:
         """
@@ -238,12 +449,17 @@ class HybridRetriever:
 
     def extract_keywords_from_query(self, query: str) -> List[str]:
         """
-        Extract keywords from natural language query with field-specific expansion.
+        Extract keywords from natural language query with bidirectional synonym expansion.
 
         This method uses:
-        1. Stopword filtering for Chinese
-        2. Field-specific keyword dictionaries for synonym expansion
+        1. Stopword filtering for Chinese (configurable via config file)
+        2. Bidirectional synonym expansion - matches both keys and synonyms in query
         3. Alphanumeric token extraction
+
+        The bidirectional expansion allows queries containing synonyms to match
+        and expand to all related terms. For example:
+        - Query "核磁共振参数" will expand to all MRI-related terms
+        - Query "多层CT维修" will expand to all CT-related terms
 
         Args:
             query: Natural language query string
@@ -251,67 +467,23 @@ class HybridRetriever:
         Returns:
             List of extracted keywords with synonyms expanded
         """
-        # Chinese stopwords (common)
-        stopwords = {
-            "的",
-            "了",
-            "是",
-            "在",
-            "我",
-            "有",
-            "和",
-            "就",
-            "不",
-            "人",
-            "都",
-            "一",
-            "一个",
-            "上",
-            "也",
-            "很",
-            "到",
-            "说",
-            "要",
-            "去",
-            "你",
-            "会",
-            "着",
-            "没有",
-            "看",
-            "好",
-            "自己",
-            "这",
-            "那",
-            "多少",  # Filter this as it's a question word
-            "什么",
-        }
-
-        # Field-specific keyword expansion dictionaries
-        # These map core concepts to their synonyms for better recall
-        field_keywords = {
-            "培训": ["培训", "训练", "教学", "指导", "教程"],
-            "时长": ["时长", "时间", "天数", "小时", "工作日", "周期", "期限"],
-            "计划": ["计划", "安排", "课程", "大纲", "内容", "方案"],
-            "对象": ["对象", "人员", "受训", "用户", "学员", "参与者"],
-            "老师": ["老师", "讲师", "授课", "教师", "专家", "培训师"],
-            "资质": ["资质", "资格", "认证", "证书", "背景", "经验"],
-            "响应": ["响应", "反应", "回复", "到达", "到场", "时效"],
-            "质保": ["质保", "保修", "质量保证", "保修期", "维护期"],
-            "配件": ["配件", "备件", "耗材", "零件", "部件", "组件"],
-            "服务": ["服务", "支持", "维护", "售后", "保障"],
-            "费用": ["费用", "收费", "价格", "成本", "金额", "预算"],
-        }
-
-        # Extract field keywords that appear in the query
         expanded = set()
-        for key, synonyms in field_keywords.items():
-            if key in query:
-                expanded.update(synonyms)
 
-        # Add alphanumeric tokens (e.g., API, SLA, 128GB)
+        # Method 1: Check if any synonym (including keys) appears in query
+        # This enables bidirectional lookup: synonym -> key -> all synonyms
+        for term, key in self._synonym_index.items():
+            if term in query:
+                # Add all synonyms for the matched key
+                expanded.update(self._field_keywords[key])
+
+        # Method 2: Add alphanumeric tokens (e.g., API, SLA, 128GB)
         for token in re.findall(r"[A-Za-z0-9]+", query):
-            if token not in stopwords and len(token) >= 2:
+            if token not in self._stopwords and len(token) >= 2:
                 expanded.add(token)
+                # Also check if this token is in synonym index
+                if token in self._synonym_index:
+                    key = self._synonym_index[token]
+                    expanded.update(self._field_keywords[key])
 
         return list(expanded)
 
