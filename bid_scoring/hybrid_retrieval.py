@@ -325,6 +325,7 @@ class HybridRetriever:
         keyword_weight: float = 1.0,
         enable_cache: bool = False,
         cache_size: int = 1000,
+        use_or_semantic: bool = True,
     ):
         """
         Initialize the hybrid retriever.
@@ -350,6 +351,9 @@ class HybridRetriever:
             keyword_weight: Weight for keyword search results in RRF (default 1.0)
             enable_cache: Whether to enable query result caching (default False)
             cache_size: Maximum number of cached query results (default 1000)
+            use_or_semantic: Whether to use OR semantic for full-text search (default True)
+                            - True: Match any keyword (higher recall)
+                            - False: Match all keywords (higher precision)
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -363,6 +367,7 @@ class HybridRetriever:
         self.settings = settings
         self.top_k = top_k
         self._hnsw_ef_search = hnsw_ef_search
+        self._use_or_semantic = use_or_semantic
         self.rrf = ReciprocalRankFusion(
             k=rrf_k, vector_weight=vector_weight, keyword_weight=keyword_weight
         )
@@ -592,7 +597,11 @@ class HybridRetriever:
             )
             return []
 
-    def _keyword_search_fulltext(self, keywords: List[str]) -> List[Tuple[str, float]]:
+    def _keyword_search_fulltext(
+        self, 
+        keywords: List[str],
+        use_or_semantic: bool = True
+    ) -> List[Tuple[str, float]]:
         """
         使用 PostgreSQL 全文搜索进行关键词匹配（基于 tsvector 和 GIN 索引）。
 
@@ -607,6 +616,9 @@ class HybridRetriever:
 
         Args:
             keywords: 关键词列表
+            use_or_semantic: 是否使用 OR 语义（默认 True）
+                - True: 匹配任一关键词（提高召回率）
+                - False: 匹配所有关键词（提高精确率）
 
         Returns:
             List of (chunk_id, rank_score) tuples，rank_score 为相关性分数
@@ -614,23 +626,26 @@ class HybridRetriever:
         if not keywords:
             return []
 
-        # 构建 tsquery：将多个关键词用 & (AND) 连接
-        # 这样可以匹配同时包含多个关键词的文档
-        ts_query = " & ".join(keywords)
+        # 构建 tsquery：根据 use_or_semantic 选择连接符
+        # | (OR): 匹配任一关键词，提高召回率（默认）
+        # & (AND): 匹配所有关键词，提高精确率
+        operator = " | " if use_or_semantic else " & "
+        ts_query = operator.join(keywords)
 
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     # 使用 ts_rank_cd 计算相关性分数（来自 context7 建议）
                     # cd = cover density，更适合短文本块
+                    # 使用 to_tsquery 而不是 plainto_tsquery 以支持 | (OR) 和 & (AND) 操作符
                     cur.execute(
                         """
                         SELECT 
                             chunk_id::text,
-                            ts_rank_cd(textsearch, plainto_tsquery('simple', %s)) as rank
+                            ts_rank_cd(textsearch, to_tsquery('simple', %s)) as rank
                         FROM chunks
                         WHERE version_id = %s
-                          AND textsearch @@ plainto_tsquery('simple', %s)
+                          AND textsearch @@ to_tsquery('simple', %s)
                         ORDER BY rank DESC
                         LIMIT %s
                         """,
@@ -777,7 +792,12 @@ class HybridRetriever:
         with ThreadPoolExecutor(max_workers=MAX_SEARCH_WORKERS) as executor:
             vector_future = executor.submit(self._vector_search, query)
             # 使用新的全文搜索方法（基于 tsvector + GIN 索引）
-            keyword_future = executor.submit(self._keyword_search_fulltext, keywords)
+            # 传递 use_or_semantic 参数控制 OR/AND 语义
+            keyword_future = executor.submit(
+                self._keyword_search_fulltext, 
+                keywords, 
+                self._use_or_semantic
+            )
 
             vector_results = vector_future.result()
             keyword_results = keyword_future.result()
@@ -860,7 +880,7 @@ class HybridRetriever:
         with ThreadPoolExecutor(max_workers=MAX_SEARCH_WORKERS) as executor:
             vector_future = loop.run_in_executor(executor, self._vector_search, query)
             keyword_future = loop.run_in_executor(
-                executor, self._keyword_search_fulltext, keywords
+                executor, self._keyword_search_fulltext, keywords, self._use_or_semantic
             )
 
             vector_results, keyword_results = await asyncio.gather(

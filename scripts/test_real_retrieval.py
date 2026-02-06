@@ -37,9 +37,9 @@ VERSION_ID = "83420a7c-b27b-480f-9427-565c47d2b53c"  # 使用实际版本
 
 
 def test_fulltext_vs_ilike():
-    """测试 1: 全文搜索 vs ILIKE 性能对比"""
+    """测试 1: 全文搜索 vs ILIKE 性能对比 (AND vs OR 语义)"""
     print("\n" + "=" * 60)
-    print("测试 1: 全文搜索 vs ILIKE 性能对比")
+    print("测试 1: 全文搜索 AND vs OR 语义对比")
     print("=" * 60)
     
     retriever = HybridRetriever(
@@ -50,15 +50,39 @@ def test_fulltext_vs_ilike():
     
     keywords = ["培训", "时长"]
     
-    # 测试全文搜索
-    ft_times = []
+    # 测试 OR 语义（默认，提高召回率）
+    or_times = []
     for _ in range(5):
         start = time.perf_counter()
-        results = retriever._keyword_search_fulltext(keywords)
-        ft_times.append(time.perf_counter() - start)
+        results = retriever._keyword_search_fulltext(keywords, use_or_semantic=True)
+        or_times.append(time.perf_counter() - start)
     
-    ft_avg = statistics.mean(ft_times) * 1000
-    ft_results = len(results)
+    or_avg = statistics.mean(or_times) * 1000
+    or_results = len(results)
+    
+    # 测试 AND 语义（提高精确率）
+    and_times = []
+    for _ in range(5):
+        start = time.perf_counter()
+        results = retriever._keyword_search_fulltext(keywords, use_or_semantic=False)
+        and_times.append(time.perf_counter() - start)
+    
+    and_avg = statistics.mean(and_times) * 1000
+    and_results = len(results)
+    
+    print(f"\n查询关键词: {keywords}")
+    print(f"  OR 语义 (默认，提高召回率):")
+    print(f"    - 平均耗时: {or_avg:.2f} ms")
+    print(f"    - 返回结果: {or_results} 条")
+    print(f"  AND 语义 (提高精确率):")
+    print(f"    - 平均耗时: {and_avg:.2f} ms")
+    print(f"    - 返回结果: {and_results} 条")
+    
+    if and_results > 0:
+        recall_boost = or_results / and_results
+        print(f"\n  📈 OR 语义召回提升: {recall_boost:.1f}x")
+    elif or_results > 0:
+        print(f"\n  📈 OR 语义召回提升: 无限 (AND 无结果，OR 有结果)")
     
     # 测试 ILIKE（遗留方法）
     ilike_times = []
@@ -70,17 +94,13 @@ def test_fulltext_vs_ilike():
     ilike_avg = statistics.mean(ilike_times) * 1000
     ilike_results = len(results)
     
-    print(f"\n查询关键词: {keywords}")
-    print(f"  全文搜索 (tsvector+GIN):")
-    print(f"    - 平均耗时: {ft_avg:.2f} ms")
-    print(f"    - 返回结果: {ft_results} 条")
-    print(f"  ILIKE (旧方法):")
+    print(f"\n  ILIKE (旧方法):")
     print(f"    - 平均耗时: {ilike_avg:.2f} ms")
     print(f"    - 返回结果: {ilike_results} 条")
     
-    if ft_avg > 0:
-        speedup = ilike_avg / ft_avg
-        print(f"\n  ⚡ 性能提升: {speedup:.1f}x")
+    if or_avg > 0:
+        speedup = ilike_avg / or_avg
+        print(f"\n  ⚡ 全文搜索性能提升: {speedup:.1f}x")
     
     retriever.close()
 
