@@ -32,6 +32,17 @@ def _strip_html_tags(html: str) -> str:
     return text
 
 
+def _normalize_list_field(value: Any) -> list[str]:
+    """标准化为字符串列表（兼容 str / list / None）"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [v for v in value if v]
+    if isinstance(value, str):
+        return [value] if value else []
+    return [str(value)]
+
+
 def _extract_text_from_item(item: dict) -> str:
     """从任意类型的 item 中提取可索引文本"""
     item_type = item.get("type", "")
@@ -43,29 +54,28 @@ def _extract_text_from_item(item: dict) -> str:
         # 表格：使用 caption + footnote + body 的纯文本
         texts = []
         if item.get("table_caption"):
-            texts.extend(item["table_caption"])
+            texts.extend(_normalize_list_field(item["table_caption"]))
         if item.get("table_body"):
             body_text = _strip_html_tags(item["table_body"])
             if body_text:
                 texts.append(body_text)
         if item.get("table_footnote"):
-            texts.extend(item["table_footnote"])
+            texts.extend(_normalize_list_field(item["table_footnote"]))
         return " ".join(texts)
 
     elif item_type == "image":
         # 图片：使用 caption + footnote
         texts = []
         if item.get("image_caption"):
-            texts.extend(item["image_caption"])
+            texts.extend(_normalize_list_field(item["image_caption"]))
         if item.get("image_footnote"):
-            texts.extend(item["image_footnote"])
+            texts.extend(_normalize_list_field(item["image_footnote"]))
         return " ".join(texts)
 
     elif item_type == "list":
         # 列表：使用所有 list_items
-        if item.get("list_items"):
-            return " ".join(item["list_items"])
-        return ""
+        list_items = _normalize_list_field(item.get("list_items"))
+        return " ".join(list_items) if list_items else ""
 
     elif item_type in ["header", "aside_text", "page_number", "footer"]:
         return item.get("text", "")
@@ -115,12 +125,12 @@ def _prepare_chunk_data(item: dict, chunk_index: int) -> dict[str, Any] | None:
         "text_tsv": text_tsv,
         # MineRU 特有字段
         "img_path": item.get("img_path"),
-        "image_caption": item.get("image_caption"),
-        "image_footnote": item.get("image_footnote"),
+        "image_caption": _normalize_list_field(item.get("image_caption")),
+        "image_footnote": _normalize_list_field(item.get("image_footnote")),
         "table_body": item.get("table_body"),
-        "table_caption": item.get("table_caption"),
-        "table_footnote": item.get("table_footnote"),
-        "list_items": item.get("list_items"),
+        "table_caption": _normalize_list_field(item.get("table_caption")),
+        "table_footnote": _normalize_list_field(item.get("table_footnote")),
+        "list_items": _normalize_list_field(item.get("list_items")),
         "sub_type": item.get("sub_type"),
         "text_level": text_level,
     }

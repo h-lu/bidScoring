@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 import psycopg
 from bid_scoring.config import load_settings
-from bid_scoring.ingest import ingest_content_list
+from bid_scoring.ingest import (
+    ingest_content_list,
+    _extract_text_from_item,
+    _prepare_chunk_data,
+)
 
 
 def test_ingest_inserts_chunks():
@@ -35,3 +39,26 @@ def test_ingest_inserts_chunks():
             assert cur.fetchone()[0] == 1
             cur.execute("select count(*) from chunks")
             assert cur.fetchone()[0] > 0
+
+
+def test_extract_text_from_item_accepts_string_captions():
+    item = {
+        "type": "image",
+        "image_caption": "Figure 1: Sample",
+        "image_footnote": "Credit: Author",
+    }
+    text = _extract_text_from_item(item)
+    assert "Figure 1: Sample" in text
+    assert "Credit: Author" in text
+
+
+def test_prepare_chunk_data_normalizes_caption_lists():
+    item = {
+        "type": "table",
+        "table_caption": "Table 1: Caption",
+        "table_footnote": "Footnote",
+        "table_body": "<tr><td>Cell</td></tr>",
+    }
+    data = _prepare_chunk_data(item, 0)
+    assert data["table_caption"] == ["Table 1: Caption"]
+    assert data["table_footnote"] == ["Footnote"]
