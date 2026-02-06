@@ -281,6 +281,7 @@ def test_cache_performance():
         print(f"\n  ⚡ 缓存加速: {speedup:.1f}x")
 
 
+@pytest.mark.asyncio
 async def test_async_performance():
     """测试 6: 异步接口性能测试"""
     print("\n" + "=" * 60)
