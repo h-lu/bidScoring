@@ -8,15 +8,42 @@
 3. 混合搜索效果验证
 4. 缓存效果测试
 5. 异步接口测试
+
+用法:
+    python test_real_retrieval.py [VERSION_ID]
+
+示例:
+    python test_real_retrieval.py 83420a7c-b27b-480f-9427-565c47d2b53c
+    VERSION_ID=83420a7c-b27b-480f-9427-565c47d2b53c python test_real_retrieval.py
 """
 
+import argparse
 import asyncio
+import os
 import time
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 
 from bid_scoring.config import load_settings
 from bid_scoring.hybrid_retrieval import HybridRetriever
+
+
+# 解析命令行参数
+parser = argparse.ArgumentParser(description="Hybrid Retrieval 真实效果测试")
+parser.add_argument(
+    "version_id",
+    nargs="?",
+    default=os.environ.get("VERSION_ID"),
+    help="测试使用的版本 ID（也可通过 VERSION_ID 环境变量设置）",
+)
+args = parser.parse_args()
+
+if not args.version_id:
+    print("错误: 请提供 version_id 参数或设置 VERSION_ID 环境变量")
+    parser.print_help()
+    exit(1)
+
+VERSION_ID = args.version_id
 
 # 测试查询（来自实际业务场景）
 TEST_QUERIES = [
@@ -33,7 +60,6 @@ TEST_QUERIES = [
 ]
 
 SETTINGS = load_settings()
-VERSION_ID = "83420a7c-b27b-480f-9427-565c47d2b53c"  # 使用实际版本
 
 
 def test_fulltext_vs_ilike():
