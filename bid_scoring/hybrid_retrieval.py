@@ -19,12 +19,21 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import psycopg
 import yaml
 
 from bid_scoring.embeddings import embed_single_text
+
+# Reranker support - graceful fallback if not installed
+try:
+    from sentence_transformers import CrossEncoder
+
+    HAS_RERANKER = True
+except ImportError:
+    HAS_RERANKER = False
+    CrossEncoder = None
 
 # Connection pool support - graceful fallback if not installed
 try:
@@ -98,6 +107,124 @@ class LRUCache:
     def clear(self) -> None:
         """Clear all items from the cache."""
         self._cache.clear()
+
+
+class Reranker:
+    """轻量级 Cross-Encoder 重排序器。
+
+    基于 FlashRank 理念，使用轻量级 cross-encoder 模型
+    对初步检索结果进行精排，提升检索质量。
+
+    References:
+        - FlashRank: https://github.com/PrithivirajDamodaran/FlashRank
+        - LangChain Contextual Compression
+
+    Example:
+        >>> reranker = Reranker()
+        >>> results = reranker.rerank("查询", retrieval_results, top_n=5)
+    """
+
+    DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    def __init__(self, model_name: str = DEFAULT_MODEL, device: str = "cpu"):
+        """初始化重排序器。
+
+        Args:
+            model_name: Cross-encoder 模型名称
+            device: 运行设备 ("cpu" 或 "cuda")
+
+        Raises:
+            ImportError: 如果 sentence-transformers 未安装
+        """
+        if not HAS_RERANKER:
+            raise ImportError(
+                "sentence-transformers is required for reranking. "
+                "Install with: uv add sentence-transformers"
+            )
+
+        self._model_name = model_name
+        self._device = device
+        self._model: Optional[CrossEncoder] = None
+
+    def _load_model(self) -> CrossEncoder:
+        """延迟加载模型。"""
+        if self._model is None:
+            logger.debug(f"Loading reranker model: {self._model_name}")
+            self._model = CrossEncoder(self._model_name, device=self._device)
+        return self._model
+
+    def rerank(
+        self,
+        query: str,
+        results: List["RetrievalResult"],
+        top_n: int = 5,
+    ) -> List["RetrievalResult"]:
+        """对检索结果进行重排序。
+
+        Args:
+            query: 原始查询
+            results: 初步检索结果列表
+            top_n: 返回前 N 个结果
+
+        Returns:
+            重排序后的结果列表
+        """
+        if not results:
+            return results
+
+        # 限制重排序数量，避免过长的计算时间
+        max_rerank = min(len(results), top_n * 2)
+        candidates = results[:max_rerank]
+
+        # 构建 query-document 对
+        pairs = [(query, r.text) for r in candidates]
+
+        try:
+            model = self._load_model()
+            scores = model.predict(pairs)
+
+            # 按重排序分数排序
+            scored_results = list(zip(candidates, scores))
+            scored_results.sort(key=lambda x: x[1], reverse=True)
+
+            logger.debug(
+                f"Reranked {len(candidates)} results, "
+                f"top score: {scored_results[0][1]:.4f}"
+            )
+
+            return [r for r, _ in scored_results[:top_n]]
+
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}", exc_info=True)
+            # 降级：返回原始排序的前 top_n 个
+            return results[:top_n]
+
+    def rerank_with_scores(
+        self,
+        query: str,
+        results: List["RetrievalResult"],
+    ) -> List[Tuple["RetrievalResult", float]]:
+        """对检索结果进行重排序并返回分数。
+
+        Args:
+            query: 原始查询
+            results: 初步检索结果列表
+
+        Returns:
+            (结果, 重排序分数) 的列表
+        """
+        if not results:
+            return []
+
+        pairs = [(query, r.text) for r in results]
+
+        try:
+            model = self._load_model()
+            scores = model.predict(pairs)
+            return list(zip(results, scores))
+        except Exception as e:
+            logger.error(f"Reranking with scores failed: {e}", exc_info=True)
+            return [(r, r.score) for r in results]
 
 
 def load_retrieval_config(config_path: str | Path | None = None) -> dict:
@@ -207,6 +334,56 @@ class RetrievalResult:
     vector_score: float | None = None  # Original vector similarity score
     keyword_score: float | None = None  # Original keyword match score
     embedding: List[float] | None = None
+    rerank_score: float | None = (
+        None  # Cross-encoder rerank score (if reranking enabled)
+    )
+
+
+@dataclass
+class RetrievalMetrics:
+    """检索性能指标。
+
+    用于收集和分析检索操作的性能数据，包括各环节耗时、
+    缓存命中率、返回结果数量等。
+
+    Example:
+        >>> metrics = RetrievalMetrics()
+        >>> metrics.vector_search_time_ms = 45.2
+        >>> print(metrics.total_time_ms)
+    """
+
+    # 各环节耗时 (毫秒)
+    vector_search_time_ms: float = 0.0
+    keyword_search_time_ms: float = 0.0
+    rrf_fusion_time_ms: float = 0.0
+    fetch_chunks_time_ms: float = 0.0
+    rerank_time_ms: float = 0.0
+    total_time_ms: float = 0.0
+
+    # 结果统计
+    vector_results_count: int = 0
+    keyword_results_count: int = 0
+    final_results_count: int = 0
+
+    # 缓存和特征
+    cache_hit: bool = False
+    query_type: str = "unknown"  # "technical", "long", "standard"
+
+    def to_dict(self) -> Dict[str, Union[float, int, bool, str]]:
+        """转换为字典格式。"""
+        return {
+            "vector_search_time_ms": self.vector_search_time_ms,
+            "keyword_search_time_ms": self.keyword_search_time_ms,
+            "rrf_fusion_time_ms": self.rrf_fusion_time_ms,
+            "fetch_chunks_time_ms": self.fetch_chunks_time_ms,
+            "rerank_time_ms": self.rerank_time_ms,
+            "total_time_ms": self.total_time_ms,
+            "vector_results_count": self.vector_results_count,
+            "keyword_results_count": self.keyword_results_count,
+            "final_results_count": self.final_results_count,
+            "cache_hit": self.cache_hit,
+            "query_type": self.query_type,
+        }
 
 
 class ReciprocalRankFusion:
@@ -326,6 +503,11 @@ class HybridRetriever:
         enable_cache: bool = False,
         cache_size: int = 1000,
         use_or_semantic: bool = True,
+        enable_rerank: bool = False,
+        rerank_model: str = Reranker.DEFAULT_MODEL,
+        rerank_top_n: int | None = None,
+        enable_dynamic_weights: bool = False,
+        enable_metrics: bool = False,
     ):
         """
         Initialize the hybrid retriever.
@@ -354,6 +536,11 @@ class HybridRetriever:
             use_or_semantic: Whether to use OR semantic for full-text search (default True)
                             - True: Match any keyword (higher recall)
                             - False: Match all keywords (higher precision)
+            enable_rerank: Whether to enable cross-encoder reranking (default False)
+            rerank_model: Cross-encoder model name for reranking
+            rerank_top_n: Number of results to return after reranking
+            enable_dynamic_weights: Whether to enable dynamic weight adjustment (default False)
+            enable_metrics: Whether to collect retrieval metrics (default False)
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -366,11 +553,37 @@ class HybridRetriever:
         self.version_id = version_id
         self.settings = settings
         self.top_k = top_k
-        self._hnsw_ef_search = hnsw_ef_search
+        # 动态调整 ef_search：确保 ef_search >= top_k * 2，最小值为 100
+        # 参考 pgvector 最佳实践：ef_search 应大于返回的最近邻数量
+        self._hnsw_ef_search = max(100, hnsw_ef_search, top_k * 2)
         self._use_or_semantic = use_or_semantic
+        self._default_vector_weight = vector_weight
+        self._default_keyword_weight = keyword_weight
         self.rrf = ReciprocalRankFusion(
             k=rrf_k, vector_weight=vector_weight, keyword_weight=keyword_weight
         )
+
+        # Initialize reranker
+        self._enable_rerank = enable_rerank
+        self._rerank_top_n = rerank_top_n or top_k
+        self._reranker: Optional[Reranker] = None
+        if enable_rerank:
+            if HAS_RERANKER:
+                self._reranker = Reranker(model_name=rerank_model)
+                logger.debug(f"Initialized reranker with model: {rerank_model}")
+            else:
+                logger.warning(
+                    "Reranking enabled but sentence-transformers not installed. "
+                    "Install with: uv add sentence-transformers"
+                )
+                self._enable_rerank = False
+
+        # Initialize dynamic weight adjustment
+        self._enable_dynamic_weights = enable_dynamic_weights
+
+        # Initialize metrics collection
+        self._enable_metrics = enable_metrics
+        self._metrics_history: List[RetrievalMetrics] = []
 
         # Initialize query result cache
         self._cache: LRUCache | None = LRUCache(cache_size) if enable_cache else None
@@ -512,6 +725,60 @@ class HybridRetriever:
             f"synonym index now has {len(self._synonym_index)} terms"
         )
 
+    def _analyze_query_type(self, query: str) -> str:
+        """分析查询类型，用于动态权重调整。
+
+        Args:
+            query: 查询字符串
+
+        Returns:
+            查询类型: "technical", "long", 或 "standard"
+        """
+        # 检测技术术语（如 API, SLA, 128GB 等）
+        technical_pattern = r"\b[A-Z]{2,}\b|\b\d+[A-Za-z]+\b"
+        technical_matches = len(re.findall(technical_pattern, query))
+
+        # 检测中文专业术语
+        has_chinese_tech_terms = any(
+            term in query for term in self._field_keywords.keys()
+        )
+
+        if technical_matches >= 2 or has_chinese_tech_terms:
+            return "technical"
+        elif len(query) > 50:
+            return "long"
+        else:
+            return "standard"
+
+    def _adjust_weights_for_query(self, query: str) -> Tuple[float, float]:
+        """根据查询特征动态调整 RRF 权重。
+
+        不同类型的查询适合不同的权重配置：
+        - 技术查询: 增加关键词搜索权重（精确匹配更重要）
+        - 长查询: 增加向量搜索权重（语义理解更重要）
+        - 标准查询: 使用默认平衡权重
+
+        Args:
+            query: 查询字符串
+
+        Returns:
+            (vector_weight, keyword_weight) 元组
+        """
+        if not self._enable_dynamic_weights:
+            return self._default_vector_weight, self._default_keyword_weight
+
+        query_type = self._analyze_query_type(query)
+
+        if query_type == "technical":
+            # 技术查询：增加关键词搜索权重
+            return 0.7, 1.3
+        elif query_type == "long":
+            # 长查询：增加向量搜索权重
+            return 1.3, 0.7
+        else:
+            # 标准查询：平衡权重
+            return self._default_vector_weight, self._default_keyword_weight
+
     def _generate_cache_key(self, query: str, keywords: List[str] | None) -> str:
         """Generate a cache key for a query.
 
@@ -571,6 +838,10 @@ class HybridRetriever:
 
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
+                    # Set query timeout to prevent long-running queries
+                    # 30 seconds should be sufficient for most searches
+                    cur.execute("SET LOCAL statement_timeout = '30s'")
+
                     # Set HNSW search expansion factor for better recall
                     # Reference: https://github.com/pgvector/pgvector#hnsw
                     cur.execute("SET hnsw.ef_search = %s", (self._hnsw_ef_search,))
@@ -624,30 +895,57 @@ class HybridRetriever:
         if not keywords:
             return []
 
-        # 构建 tsquery：根据 use_or_semantic 选择连接符
-        # | (OR): 匹配任一关键词，提高召回率（默认）
-        # & (AND): 匹配所有关键词，提高精确率
-        operator = " | " if use_or_semantic else " & "
-        ts_query = operator.join(keywords)
+        # 使用 websearch 语法构建查询，提升容错性（context7 推荐）
+        # OR 语义: "A OR B"
+        # AND 语义: "A B"（空格在 websearch 中表示 AND）
+        cleaned_keywords = [k.strip().replace('"', " ") for k in keywords if k.strip()]
+        if not cleaned_keywords:
+            return []
+        joiner = " OR " if use_or_semantic else " "
+        ts_query = joiner.join(cleaned_keywords)
 
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
-                    # 使用 ts_rank_cd 计算相关性分数（来自 context7 建议）
-                    # cd = cover density，更适合短文本块
-                    # 使用 to_tsquery 而不是 plainto_tsquery 以支持 | (OR) 和 & (AND) 操作符
+                    # 设置查询超时保护
+                    cur.execute("SET LOCAL statement_timeout = '30s'")
+
+                    # 先检查 querytree，避免不可索引查询浪费一次大扫描
+                    # querytree 返回 "T" 或空字符串表示没有可索引词元
+                    cur.execute(
+                        "SELECT querytree(websearch_to_tsquery('simple', %s))",
+                        (ts_query,),
+                    )
+                    querytree_result = cur.fetchone()
+                    querytree_text = (
+                        str(querytree_result[0]).strip()
+                        if querytree_result and querytree_result[0] is not None
+                        else ""
+                    )
+                    if querytree_text in {"", "T"}:
+                        logger.debug(
+                            "Skip fulltext search due to non-indexable querytree: %s",
+                            querytree_text,
+                        )
+                        return []
+
+                    # 使用 websearch_to_tsquery 提升用户输入兼容性
+                    # 使用 ts_rank_cd(..., 32) 对 rank 做归一化，便于与向量结果融合
                     cur.execute(
                         """
-                        SELECT 
+                        WITH q AS (
+                            SELECT websearch_to_tsquery('simple', %s) AS tsq
+                        )
+                        SELECT
                             chunk_id::text,
-                            ts_rank_cd(textsearch, to_tsquery('simple', %s)) as rank
-                        FROM chunks
+                            ts_rank_cd(textsearch, q.tsq, 32) as rank
+                        FROM chunks, q
                         WHERE version_id = %s
-                          AND textsearch @@ to_tsquery('simple', %s)
+                          AND textsearch @@ q.tsq
                         ORDER BY rank DESC
                         LIMIT %s
                         """,
-                        (ts_query, self.version_id, ts_query, self.top_k * 2),
+                        (ts_query, self.version_id, self.top_k * 2),
                     )
                     return [(row[0], float(row[1])) for row in cur.fetchall()]
         except psycopg.Error as e:
@@ -811,7 +1109,7 @@ class HybridRetriever:
             merged = [
                 (
                     doc_id,
-                    1.0 / (self.rrf.k + rank),
+                    1.0 / (self.rrf.k + rank + 1),
                     {"vector": {"rank": rank, "score": score}},
                 )
                 for rank, (doc_id, score) in enumerate(vector_results)
@@ -896,7 +1194,7 @@ class HybridRetriever:
             merged = [
                 (
                     doc_id,
-                    1.0 / (self.rrf.k + rank),
+                    1.0 / (self.rrf.k + rank + 1),
                     {"vector": {"rank": rank, "score": score}},
                 )
                 for rank, (doc_id, score) in enumerate(vector_results)
