@@ -281,8 +281,7 @@ def test_cache_performance():
         print(f"\n  ⚡ 缓存加速: {speedup:.1f}x")
 
 
-@pytest.mark.asyncio
-async def test_async_performance():
+async def benchmark_async_performance():
     """测试 6: 异步接口性能测试"""
     print("\n" + "=" * 60)
     print("测试 6: 异步接口性能测试")
@@ -393,7 +392,7 @@ async def main():
     test_hybrid_search()
     test_rrf_weights()
     test_cache_performance()
-    await test_async_performance()
+    await benchmark_async_performance()
     test_connection_pool()
     
     print("\n" + "=" * 60)
