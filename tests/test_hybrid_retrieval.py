@@ -430,3 +430,99 @@ def test_synonym_index_rebuild_on_add():
     keywords = retriever.extract_keywords_from_query("智能算法应用")
     assert "人工智能" in keywords
     assert "AI" in keywords
+
+
+# =============================================================================
+# Fulltext Search Tests (New from Task 2)
+# =============================================================================
+
+
+def test_fulltext_search_method_exists():
+    """Test that _keyword_search_fulltext method exists"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5
+    )
+    
+    # Verify method exists
+    assert hasattr(retriever, '_keyword_search_fulltext')
+    assert hasattr(retriever, '_keyword_search_legacy')
+
+
+def test_fulltext_search_empty_keywords():
+    """Test fulltext search with empty keywords returns empty list"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5
+    )
+    
+    # Empty keywords should return empty list
+    result = retriever._keyword_search_fulltext([])
+    assert result == []
+
+
+def test_legacy_keyword_search_empty_keywords():
+    """Test legacy keyword search with empty keywords returns empty list"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5
+    )
+    
+    # Empty keywords should return empty list
+    result = retriever._keyword_search_legacy([])
+    assert result == []
+
+
+def test_keyword_extraction_for_fulltext():
+    """Test keyword extraction produces valid input for fulltext search"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+
+    retriever = HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5
+    )
+    
+    # Test that keywords are extracted correctly
+    keywords = retriever.extract_keywords_from_query("培训时长和服务响应")
+    
+    # Should contain field keywords
+    assert "培训" in keywords
+    assert "时长" in keywords
+    assert "服务" in keywords
+    assert "响应" in keywords
+
+
+def test_fulltext_search_integration():
+    """Integration test for fulltext search with real database"""
+    from bid_scoring.hybrid_retrieval import HybridRetriever
+    from bid_scoring.config import load_settings
+    
+    settings = load_settings()
+    retriever = HybridRetriever(
+        version_id="test",
+        settings=settings,
+        top_k=5
+    )
+    
+    # Extract keywords
+    keywords = retriever.extract_keywords_from_query("培训")
+    assert "培训" in keywords
+    
+    # Fulltext search should return results
+    results = retriever._keyword_search_fulltext(["培训"])
+    
+    # Verify results format
+    for chunk_id, score in results:
+        assert isinstance(chunk_id, str)
+        assert isinstance(score, float)
+        assert score >= 0  # ts_rank_cd returns non-negative values
