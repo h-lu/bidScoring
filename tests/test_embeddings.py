@@ -122,6 +122,41 @@ class TestEmbedTexts:
         assert result[1] == [0.1] * DEFAULT_DIM
 
     @patch("bid_scoring.embeddings.OpenAI")
+    def test_embed_texts_mixed_empty_and_valid_fills_zero_vectors(self, mock_openai):
+        """Test mixed empty inputs return zero vectors for empty entries."""
+        from bid_scoring.embeddings import embed_texts, DEFAULT_DIM
+
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.data = [Mock(embedding=[0.1] * DEFAULT_DIM)]
+        mock_client.embeddings.create.return_value = mock_response
+
+        texts = ["", "valid text", "  "]
+        result = embed_texts(texts, client=mock_client)
+
+        assert len(result) == 3
+        assert result[1] == [0.1] * DEFAULT_DIM
+        assert result[0] == [0.0] * DEFAULT_DIM
+        assert result[2] == [0.0] * DEFAULT_DIM
+
+    def test_embed_texts_all_empty_uses_config_dim(self, monkeypatch):
+        """Test all empty inputs use config dim even with explicit model."""
+        import bid_scoring.embeddings as embeddings
+
+        monkeypatch.setattr(
+            embeddings,
+            "get_embedding_config",
+            lambda: {"model": "text-embedding-3-large", "dim": 3072},
+        )
+        texts = ["", "   "]
+
+        result = embeddings.embed_texts(texts, model="text-embedding-3-large")
+
+        assert len(result) == 2
+        assert len(result[0]) == 3072
+        assert len(result[1]) == 3072
+
+    @patch("bid_scoring.embeddings.OpenAI")
     def test_embed_texts_batching(self, mock_openai):
         """Test that texts are properly batched."""
         from bid_scoring.embeddings import embed_texts, DEFAULT_DIM

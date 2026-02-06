@@ -181,17 +181,19 @@ def embed_texts(
     # 过滤空文本
     valid_texts = [(i, t) for i, t in enumerate(texts) if t and t.strip()]
 
+    embedding_config = get_embedding_config()
+    dim = embedding_config["dim"]
+
     if not valid_texts:
         # 全部为空，返回空向量
-        dim = get_embedding_config()["dim"] if model is None else DEFAULT_DIM
-        return [[0.0] * dim] * len(texts)
+        return [[0.0] * dim for _ in texts]
 
     # 初始化客户端
     if client is None:
         client = get_embedding_client()
 
     if model is None:
-        model = get_embedding_config()["model"]
+        model = embedding_config["model"]
 
     # 检查并截断超长文本
     processed_texts = []
@@ -237,7 +239,12 @@ def embed_texts(
         batches.append(current_batch)
 
     # 处理所有批次
-    all_embeddings = [None] * len(texts)
+    all_embeddings = []
+    for text in texts:
+        if text and text.strip():
+            all_embeddings.append(None)
+        else:
+            all_embeddings.append([0.0] * dim)
 
     for batch_idx, batch in enumerate(batches):
         if show_progress:
