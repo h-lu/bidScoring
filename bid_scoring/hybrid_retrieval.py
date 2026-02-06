@@ -11,12 +11,15 @@ References:
 - LangChain Hybrid Search Best Practices
 """
 
+import asyncio
 import logging
 import re
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import psycopg
 import yaml
@@ -26,6 +29,7 @@ from bid_scoring.embeddings import embed_single_text
 # Connection pool support - graceful fallback if not installed
 try:
     from psycopg_pool import ConnectionPool
+
     HAS_CONNECTION_POOL = True
 except ImportError:
     HAS_CONNECTION_POOL = False
@@ -41,6 +45,61 @@ logger = logging.getLogger(__name__)
 
 # Default configuration file path
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config" / "retrieval_config.yaml"
+
+
+class LRUCache:
+    """Simple LRU Cache implementation using OrderedDict.
+
+    This cache stores key-value pairs with a fixed capacity.
+    When the capacity is exceeded, the least recently accessed item
+    is evicted to make room for the new item.
+
+    Attributes:
+        capacity: Maximum number of items to store in the cache
+    """
+
+    def __init__(self, capacity: int = 1000):
+        """Initialize the LRU cache.
+
+        Args:
+            capacity: Maximum number of items to store
+        """
+        self.capacity = capacity
+        self._cache: OrderedDict[str, Any] = OrderedDict()
+
+    def get(self, key: str) -> Any | None:
+        """Get a value from the cache.
+
+        Args:
+            key: Cache key to look up
+
+        Returns:
+            The cached value, or None if not found
+        """
+        if key not in self._cache:
+            return None
+        # Move to end to mark as recently used
+        self._cache.move_to_end(key)
+        return self._cache[key]
+
+    def put(self, key: str, value: Any) -> None:
+        """Store a value in the cache.
+
+        Args:
+            key: Cache key
+            value: Value to cache
+        """
+        if key in self._cache:
+            # Update existing value and mark as recently used
+            self._cache.move_to_end(key)
+        self._cache[key] = value
+        # Evict oldest item if over capacity
+        if len(self._cache) > self.capacity:
+            self._cache.popitem(last=False)
+
+    def clear(self) -> None:
+        """Clear all items from the cache."""
+        self._cache.clear()
 
 
 def load_retrieval_config(config_path: str | Path | None = None) -> dict:
@@ -156,16 +215,24 @@ class ReciprocalRankFusion:
     """
     Reciprocal Rank Fusion for merging ranked lists.
 
-    RRF formula: score = sum(1 / (k + rank)) for each list
+    RRF formula: score = sum(weight / (k + rank)) for each list
     where k is a constant (default 60) to dampen the impact of ranking
+    and weight allows adjusting the influence of each source
 
     Reference:
         Cormack, V., & Clarke, C. (2009). "Reciprocal Rank Fusion outperforms
         Condorcet and individual Rank Learning Methods"
     """
 
-    def __init__(self, k: int = DEFAULT_RRF_K):
+    def __init__(
+        self,
+        k: int = DEFAULT_RRF_K,
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+    ):
         self.k = k
+        self.vector_weight = vector_weight
+        self.keyword_weight = keyword_weight
 
     def fuse(
         self,
@@ -186,20 +253,20 @@ class ReciprocalRankFusion:
         scores: Dict[str, float] = {}
         sources: Dict[str, Dict[str, dict]] = {}
 
-        # Process vector search results
+        # Process vector search results with weight
         for rank, (doc_id, orig_score) in enumerate(vector_results):
             if doc_id not in scores:
                 scores[doc_id] = 0.0
                 sources[doc_id] = {}
-            scores[doc_id] += 1.0 / (self.k + rank + 1)
+            scores[doc_id] += self.vector_weight / (self.k + rank + 1)
             sources[doc_id]["vector"] = {"rank": rank, "score": orig_score}
 
-        # Process keyword search results
+        # Process keyword search results with weight
         for rank, (doc_id, orig_score) in enumerate(keyword_results):
             if doc_id not in scores:
                 scores[doc_id] = 0.0
                 sources[doc_id] = {}
-            scores[doc_id] += 1.0 / (self.k + rank + 1)
+            scores[doc_id] += self.keyword_weight / (self.k + rank + 1)
             sources[doc_id]["keyword"] = {"rank": rank, "score": orig_score}
 
         # Sort by RRF score descending and include source information
@@ -256,6 +323,10 @@ class HybridRetriever:
         pool_min_size: int = 2,
         pool_max_size: int = 10,
         hnsw_ef_search: int = 100,
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        enable_cache: bool = False,
+        cache_size: int = 1000,
     ):
         """
         Initialize the hybrid retriever.
@@ -277,6 +348,10 @@ class HybridRetriever:
             hnsw_ef_search: HNSW search expansion factor for better recall (default 100)
                             Higher values improve recall at the cost of performance.
                             Default pgvector value is 40, we use 100 for better recall.
+            vector_weight: Weight for vector search results in RRF (default 1.0)
+            keyword_weight: Weight for keyword search results in RRF (default 1.0)
+            enable_cache: Whether to enable query result caching (default False)
+            cache_size: Maximum number of cached query results (default 1000)
 
         Raises:
             ValueError: If version_id is empty or top_k is not positive
@@ -290,7 +365,12 @@ class HybridRetriever:
         self.settings = settings
         self.top_k = top_k
         self._hnsw_ef_search = hnsw_ef_search
-        self.rrf = ReciprocalRankFusion(k=rrf_k)
+        self.rrf = ReciprocalRankFusion(
+            k=rrf_k, vector_weight=vector_weight, keyword_weight=keyword_weight
+        )
+
+        # Initialize query result cache
+        self._cache: LRUCache | None = LRUCache(cache_size) if enable_cache else None
 
         # Initialize connection pool
         self._pool: ConnectionPool | None = None
@@ -429,6 +509,50 @@ class HybridRetriever:
             f"synonym index now has {len(self._synonym_index)} terms"
         )
 
+    def _generate_cache_key(self, query: str, keywords: List[str] | None) -> str:
+        """Generate a cache key for a query.
+
+        The cache key is a SHA256 hash of the combined query parameters:
+        version_id, query text, keywords, and top_k. This ensures that
+        identical queries produce identical keys while different parameters
+        produce different keys.
+
+        Args:
+            query: The search query text
+            keywords: Optional list of keywords
+
+        Returns:
+            SHA256 hex digest string (64 characters)
+        """
+        key_data = f"{self.version_id}:{query}:{keywords}:{self.top_k}"
+        return sha256(key_data.encode()).hexdigest()
+
+    def clear_cache(self) -> None:
+        """Clear all cached query results.
+
+        This is a no-op if caching is not enabled.
+        """
+        if self._cache:
+            self._cache.clear()
+            logger.debug("Query result cache cleared")
+
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics.
+
+        Returns:
+            Dictionary with keys:
+                - enabled: Whether caching is enabled
+                - size: Current number of cached items
+                - capacity: Maximum cache capacity
+        """
+        if not self._cache:
+            return {"enabled": False, "size": 0, "capacity": 0}
+        return {
+            "enabled": True,
+            "size": len(self._cache._cache),
+            "capacity": self._cache.capacity,
+        }
+
     def _vector_search(self, query: str) -> List[Tuple[str, float]]:
         """
         Perform vector similarity search using cosine similarity.
@@ -512,7 +636,7 @@ class HybridRetriever:
                         ORDER BY rank DESC
                         LIMIT %s
                         """,
-                        (ts_query, self.version_id, ts_query, self.top_k * 2)
+                        (ts_query, self.version_id, ts_query, self.top_k * 2),
                     )
                     return [(row[0], float(row[1])) for row in cur.fetchall()]
         except psycopg.Error as e:
@@ -624,9 +748,11 @@ class HybridRetriever:
         Retrieve chunks using hybrid search with parallel execution.
 
         This method:
-        1. Runs vector search and keyword search in parallel
-        2. Merges results using RRF (Reciprocal Rank Fusion)
-        3. Fetches full chunk data for top results
+        1. Checks cache for existing results (if caching enabled)
+        2. Runs vector search and keyword search in parallel
+        3. Merges results using RRF (Reciprocal Rank Fusion)
+        4. Fetches full chunk data for top results
+        5. Stores results in cache (if caching enabled)
 
         Args:
             query: Natural language query for vector search
@@ -640,6 +766,14 @@ class HybridRetriever:
         if keywords is None:
             keywords = self.extract_keywords_from_query(query)
             logger.debug(f"Auto-extracted keywords: {keywords}")
+
+        # Check cache if enabled
+        if self._cache:
+            cache_key = self._generate_cache_key(query, keywords)
+            cached_result = self._cache.get(cache_key)
+            if cached_result is not None:
+                logger.debug(f"Cache hit for query: {query[:50]}...")
+                return cached_result
 
         # Run searches in parallel for better performance
         with ThreadPoolExecutor(max_workers=MAX_SEARCH_WORKERS) as executor:
@@ -671,7 +805,120 @@ class HybridRetriever:
 
         # Fetch full documents with scores
         merged_with_scores = merged[: self.top_k]
-        return self._fetch_chunks(merged_with_scores)
+        results = self._fetch_chunks(merged_with_scores)
+
+        # Store in cache if enabled
+        if self._cache:
+            self._cache.put(cache_key, results)
+            logger.debug(f"Cached results for query: {query[:50]}...")
+
+        return results
+
+    async def retrieve_async(
+        self,
+        query: str,
+        keywords: List[str] | None = None,
+        use_cache: bool = True,
+    ) -> List[RetrievalResult]:
+        """
+        Async version of retrieve() using ThreadPoolExecutor.
+
+        This method provides the same functionality as retrieve() but runs
+        the I/O-bound operations in a thread pool for async compatibility.
+
+        Args:
+            query: Natural language query for vector search
+            keywords: Optional keywords for keyword search.
+                     If None, keywords will be auto-extracted from query.
+            use_cache: Whether to use query result caching (default True).
+                      Only effective if caching is enabled on retriever.
+
+        Returns:
+            List of RetrievalResult sorted by RRF relevance score
+
+        Example:
+            retriever = HybridRetriever(version_id="xxx", settings=settings)
+            results = await retriever.retrieve_async("培训时长")
+        """
+        # Check cache if enabled
+        if use_cache and self._cache:
+            cache_key = self._generate_cache_key(query, keywords)
+            cached_result = self._cache.get(cache_key)
+            if cached_result is not None:
+                logger.debug(f"Cache hit for async query: {query[:50]}...")
+                return cached_result
+
+        # Auto-extract keywords if not provided
+        if keywords is None:
+            # Keyword extraction is CPU-bound, run in executor
+            loop = asyncio.get_event_loop()
+            keywords = await loop.run_in_executor(
+                None, self.extract_keywords_from_query, query
+            )
+            logger.debug(f"Auto-extracted keywords (async): {keywords}")
+
+        # Run searches in thread pool for I/O-bound operations
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=MAX_SEARCH_WORKERS) as executor:
+            vector_future = loop.run_in_executor(executor, self._vector_search, query)
+            keyword_future = loop.run_in_executor(
+                executor, self._keyword_search_fulltext, keywords
+            )
+
+            vector_results, keyword_results = await asyncio.gather(
+                vector_future, keyword_future
+            )
+
+        logger.debug(
+            f"Vector search returned {len(vector_results)} results, "
+            f"Fulltext search returned {len(keyword_results)} results (async)"
+        )
+
+        # Merge using RRF (CPU-bound, but fast enough to run directly)
+        if keyword_results:
+            merged = self.rrf.fuse(vector_results, keyword_results)
+        else:
+            # Fallback to vector-only results with empty source info
+            merged = [
+                (
+                    doc_id,
+                    1.0 / (self.rrf.k + rank),
+                    {"vector": {"rank": rank, "score": score}},
+                )
+                for rank, (doc_id, score) in enumerate(vector_results)
+            ]
+
+        # Fetch full documents with scores (I/O-bound)
+        merged_with_scores = merged[: self.top_k]
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(
+            None, self._fetch_chunks, merged_with_scores
+        )
+
+        # Store in cache if enabled
+        if use_cache and self._cache:
+            self._cache.put(cache_key, results)
+            logger.debug(f"Cached async results for query: {query[:50]}...")
+
+        return results
+
+    async def close_async(self) -> None:
+        """
+        Async close method for cleanup.
+
+        This method provides an async interface to close resources,
+        useful when using the retriever in async contexts.
+
+        Example:
+            retriever = HybridRetriever(...)
+            try:
+                results = await retriever.retrieve_async("query")
+            finally:
+                await retriever.close_async()
+        """
+        # Run close() in executor to make it async-friendly
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.close)
 
     def _fetch_chunks(
         self,
