@@ -598,9 +598,7 @@ class HybridRetriever:
             return []
 
     def _keyword_search_fulltext(
-        self, 
-        keywords: List[str],
-        use_or_semantic: bool = True
+        self, keywords: List[str], use_or_semantic: bool = True
     ) -> List[Tuple[str, float]]:
         """
         使用 PostgreSQL 全文搜索进行关键词匹配（基于 tsvector 和 GIN 索引）。
@@ -794,9 +792,7 @@ class HybridRetriever:
             # 使用新的全文搜索方法（基于 tsvector + GIN 索引）
             # 传递 use_or_semantic 参数控制 OR/AND 语义
             keyword_future = executor.submit(
-                self._keyword_search_fulltext, 
-                keywords, 
-                self._use_or_semantic
+                self._keyword_search_fulltext, keywords, self._use_or_semantic
             )
 
             vector_results = vector_future.result()
