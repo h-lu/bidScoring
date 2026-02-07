@@ -218,5 +218,3 @@ def build_queries(version_tag: str = "multi_scenario_shared") -> list[dict[str, 
         }
         for qid, query, kw, qtype, intent, ans, edge in rows
     ]
-
-

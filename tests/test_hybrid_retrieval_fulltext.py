@@ -1,5 +1,3 @@
-import pytest
-
 # =============================================================================
 # Fulltext Search Tests (New from Task 2)
 # =============================================================================
@@ -176,5 +174,3 @@ def test_fulltext_search_skips_when_querytree_not_indexable():
 
     assert results == []
     assert sum("FROM chunks" in sql for sql, _ in executed_sql) == 0
-
-

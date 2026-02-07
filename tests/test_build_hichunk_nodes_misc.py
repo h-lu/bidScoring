@@ -13,15 +13,14 @@ from build_hichunk_nodes import (  # noqa: E402
     DEFAULT_BATCH_SIZE,
     fetch_pending_versions,
     format_duration,
-    get_chunk_mapping,
-    get_stats,
     insert_hierarchical_nodes,
     process_version,
-    reset_hierarchical_nodes,
 )
 
 # Also need to mock the imports in the module
 import build_hichunk_nodes as bhn_module  # noqa: E402
+
+
 class TestFormatDuration:
     """Test duration formatting."""
 

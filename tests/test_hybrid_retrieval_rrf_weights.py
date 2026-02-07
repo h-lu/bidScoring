@@ -199,5 +199,3 @@ def test_hybrid_retriever_default_weights():
     # Verify default weights
     assert retriever.rrf.vector_weight == 1.0
     assert retriever.rrf.keyword_weight == 1.0
-
-

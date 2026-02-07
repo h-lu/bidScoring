@@ -1,26 +1,17 @@
 """Tests for build_hichunk_nodes script."""
 
-import pytest
-from unittest.mock import Mock, patch
-import sys
 import os
+import sys
+from unittest.mock import Mock, patch
 
 # Add scripts directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from build_hichunk_nodes import (
-    get_stats,
     fetch_pending_versions,
-    get_chunk_mapping,
-    insert_hierarchical_nodes,
-    process_version,
-    format_duration,
+    get_stats,
     reset_hierarchical_nodes,
-    DEFAULT_BATCH_SIZE,
 )
-
-# Also need to mock the imports in the module
-import build_hichunk_nodes as bhn_module
 
 
 class TestResetHierarchicalNodes:
@@ -257,5 +248,3 @@ class TestFetchPendingVersions:
         call_args = mock_cur.execute.call_args
         assert "version-abc" in str(call_args)
         assert len(versions) == 1
-
-

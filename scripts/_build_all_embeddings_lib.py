@@ -95,7 +95,9 @@ def process_chunks_embeddings(
             texts = [r[1] for r in rows]
 
             try:
-                vecs = embed_texts(texts, client=client, model=model, show_progress=False)
+                vecs = embed_texts(
+                    texts, client=client, model=model, show_progress=False
+                )
                 update_data = [(vecs[i], ids[i]) for i in range(len(ids))]
                 cur.executemany(
                     "UPDATE chunks SET embedding = %s WHERE chunk_id = %s", update_data
@@ -258,7 +260,9 @@ def process_contextual_embeddings(
             texts = [r[1] for r in rows]
 
             try:
-                vecs = embed_texts(texts, client=client, model=model, show_progress=False)
+                vecs = embed_texts(
+                    texts, client=client, model=model, show_progress=False
+                )
                 update_data = [(vecs[i], ids[i]) for i in range(len(ids))]
                 cur.executemany(
                     "UPDATE contextual_chunks SET embedding = %s WHERE contextual_id = %s",
@@ -359,7 +363,9 @@ def process_hierarchical_embeddings(
                 texts = [r[1] for r in rows]
 
                 try:
-                    vecs = embed_texts(texts, client=client, model=model, show_progress=False)
+                    vecs = embed_texts(
+                        texts, client=client, model=model, show_progress=False
+                    )
                     update_data = [(vecs[i], ids[i]) for i in range(len(ids))]
                     cur.executemany(
                         "UPDATE hierarchical_nodes SET embedding = %s WHERE node_id = %s",
@@ -382,4 +388,3 @@ def process_hierarchical_embeddings(
         results[level] = (success_count, fail_count)
 
     return results
-

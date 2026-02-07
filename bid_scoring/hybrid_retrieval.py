@@ -35,4 +35,3 @@ from bid_scoring.retrieval import (  # noqa: F401
     build_synonym_index,
     load_retrieval_config,
 )
-

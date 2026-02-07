@@ -279,5 +279,3 @@ class TestHiChunkSectionDetection:
 
         # Both level 1 and level 2 headings create sections
         assert len(section_nodes) == 2
-
-

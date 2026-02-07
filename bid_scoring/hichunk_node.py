@@ -45,4 +45,3 @@ class HiChunkNode:
 
     def set_parent(self, parent_id: str) -> None:
         self.parent_id = parent_id
-

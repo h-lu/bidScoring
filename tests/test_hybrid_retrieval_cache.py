@@ -1,5 +1,3 @@
-import pytest
-
 # =============================================================================
 # Query Caching Tests (New from Task 6)
 # =============================================================================
@@ -318,5 +316,3 @@ def test_cache_key_is_sha256():
     assert len(key) == 64
     # Should only contain hex characters
     assert all(c in "0123456789abcdef" for c in key)
-
-

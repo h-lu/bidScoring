@@ -1,7 +1,8 @@
 """Tests for HiChunk hierarchical chunking builder (advanced cases)."""
 
 import pytest
-from bid_scoring.hichunk import HiChunkBuilder, HiChunkNode
+from bid_scoring.hichunk import HiChunkBuilder
+
 
 class TestHiChunkTextExtraction:
     """Test text extraction from various content types."""

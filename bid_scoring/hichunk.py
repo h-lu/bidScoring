@@ -10,4 +10,3 @@ from bid_scoring.hichunk_builder import HiChunkBuilder
 from bid_scoring.hichunk_node import HiChunkNode
 
 __all__ = ["HiChunkBuilder", "HiChunkNode"]
-

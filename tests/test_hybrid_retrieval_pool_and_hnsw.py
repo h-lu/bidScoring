@@ -1,5 +1,3 @@
-import pytest
-
 # =============================================================================
 # Connection Pool Tests (New from Task 3)
 # =============================================================================
@@ -175,4 +173,3 @@ def test_vector_search_sets_hnsw_ef_search_without_bind_params(monkeypatch):
     set_sql, set_params = hnsw_set_calls[0]
     assert "SET hnsw.ef_search = %s" not in set_sql
     assert set_params is None
-

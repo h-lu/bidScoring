@@ -4,24 +4,19 @@ import os
 import sys
 from unittest.mock import Mock, patch
 
-import pytest
-
 # Add scripts directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from build_hichunk_nodes import (  # noqa: E402
-    DEFAULT_BATCH_SIZE,
-    fetch_pending_versions,
-    format_duration,
     get_chunk_mapping,
-    get_stats,
     insert_hierarchical_nodes,
     process_version,
-    reset_hierarchical_nodes,
 )
 
 # Also need to mock the imports in the module
 import build_hichunk_nodes as bhn_module  # noqa: E402
+
+
 class TestGetChunkMapping:
     """Test chunk mapping retrieval."""
 
@@ -245,5 +240,3 @@ class TestProcessVersion:
         assert success == 0
         assert fail == 0  # No nodes to fail
         mock_conn.rollback.assert_called_once()
-
-

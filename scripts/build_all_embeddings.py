@@ -127,7 +127,12 @@ def main() -> None:
 
             stats = get_hierarchical_stats(conn, args.version_id)
             for level, stat in sorted(stats.items()):
-                level_names = {0: "sentence", 1: "paragraph", 2: "section", 3: "document"}
+                level_names = {
+                    0: "sentence",
+                    1: "paragraph",
+                    2: "section",
+                    3: "document",
+                }
                 name = level_names.get(level, f"level_{level}")
                 print(
                     f"  Level {level} ({name}): 待处理 {stat['null_count']}/{stat['total']}"
@@ -162,4 +167,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

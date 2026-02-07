@@ -27,7 +27,9 @@ def reset_hierarchical_nodes(
 
         if not force:
             scope = f"版本 '{version_id}'" if version_id else "所有版本"
-            print(f"\n⚠️  警告: 这将删除 {scope} 的 {count} 条 hierarchical_nodes 记录！")
+            print(
+                f"\n⚠️  警告: 这将删除 {scope} 的 {count} 条 hierarchical_nodes 记录！"
+            )
             response = input("确认重置? 输入 'yes' 继续: ")
             if response.lower() != "yes":
                 print("❌ 操作已取消")
@@ -323,4 +325,3 @@ def format_duration(seconds: float) -> str:
     if seconds < 3600:
         return f"{seconds / 60:.1f}分钟"
     return f"{seconds / 3600:.1f}小时"
-

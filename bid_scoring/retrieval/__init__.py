@@ -44,4 +44,3 @@ __all__ = [
     "build_synonym_index",
     "load_retrieval_config",
 ]
-

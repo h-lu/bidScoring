@@ -128,7 +128,9 @@ def main() -> None:
         help=f"单个文档最大节点数（默认 {DEFAULT_MAX_NODES_PER_DOC}）",
     )
     parser.add_argument("--show-detail", action="store_true", help="显示详细进度")
-    parser.add_argument("--dry-run", action="store_true", help="干运行模式（不写入数据库）")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="干运行模式（不写入数据库）"
+    )
     parser.add_argument(
         "--reset",
         "-r",
@@ -146,7 +148,9 @@ def main() -> None:
         action="store_true",
         help="(暂未实现) 为非叶子节点生成 embeddings",
     )
-    parser.add_argument("--embedding-model", default=None, help="(暂未实现) embedding 模型名称")
+    parser.add_argument(
+        "--embedding-model", default=None, help="(暂未实现) embedding 模型名称"
+    )
     args = parser.parse_args()
 
     if args.with_embeddings:
@@ -222,7 +226,9 @@ def main() -> None:
 
             if args.dry_run:
                 for v in versions:
-                    print(f"  ⏭️  {v['version_id'][:8]}... ({len(v['content_list'])} items)")
+                    print(
+                        f"  ⏭️  {v['version_id'][:8]}... ({len(v['content_list'])} items)"
+                    )
                 processed += batch_len
                 continue
 
@@ -250,7 +256,11 @@ def main() -> None:
             if batch_num % 10 == 0:
                 progress = 100 * processed / to_process
                 elapsed = time.time() - start_time
-                eta = (elapsed / processed) * (to_process - processed) if processed > 0 else 0
+                eta = (
+                    (elapsed / processed) * (to_process - processed)
+                    if processed > 0
+                    else 0
+                )
                 print(
                     f"\n  📈 进度: {processed}/{to_process} ({progress:.1f}%) | 已用: {format_duration(elapsed)} | 预计剩余: {format_duration(eta)}"
                 )

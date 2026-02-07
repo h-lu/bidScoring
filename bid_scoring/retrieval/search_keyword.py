@@ -73,7 +73,9 @@ def keyword_search_fulltext(
         return keyword_search_legacy(retriever, keywords)
 
 
-def keyword_search_legacy(retriever: object, keywords: List[str]) -> List[Tuple[str, float]]:
+def keyword_search_legacy(
+    retriever: object, keywords: List[str]
+) -> List[Tuple[str, float]]:
     """Legacy ILIKE keyword search (fallback)."""
     if not keywords:
         return []
@@ -110,4 +112,3 @@ def keyword_search_legacy(retriever: object, keywords: List[str]) -> List[Tuple[
             "Keyword search failed with keywords %s: %s", keywords, e, exc_info=True
         )
         return []
-

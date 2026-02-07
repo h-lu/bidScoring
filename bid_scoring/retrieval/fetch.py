@@ -9,13 +9,17 @@ from .types import EvidenceUnit, MergedChunk, RetrievalResult
 logger = logging.getLogger(__name__)
 
 
-def fetch_chunks(retriever: object, merged_results: List[MergedChunk]) -> List[RetrievalResult]:
+def fetch_chunks(
+    retriever: object, merged_results: List[MergedChunk]
+) -> List[RetrievalResult]:
     """Fetch full chunk rows and attach v0.2 unit-level evidence when available."""
     if not merged_results:
         return []
 
     chunk_ids = [doc_id for doc_id, _, _ in merged_results]
-    scores_dict = {doc_id: (rrf_score, sources) for doc_id, rrf_score, sources in merged_results}
+    scores_dict = {
+        doc_id: (rrf_score, sources) for doc_id, rrf_score, sources in merged_results
+    }
 
     try:
         with retriever._get_connection() as conn:  # type: ignore[attr-defined]
@@ -73,8 +77,12 @@ def fetch_chunks(retriever: object, merged_results: List[MergedChunk]) -> List[R
                                 text=text_raw or "",
                                 anchor_json=anchor_json,
                                 unit_order=int(unit_order or 0),
-                                start_char=int(start_char) if start_char is not None else None,
-                                end_char=int(end_char) if end_char is not None else None,
+                                start_char=int(start_char)
+                                if start_char is not None
+                                else None,
+                                end_char=int(end_char)
+                                if end_char is not None
+                                else None,
                             )
                         )
                 except Exception as e:
@@ -123,4 +131,3 @@ def fetch_chunks(retriever: object, merged_results: List[MergedChunk]) -> List[R
     except Exception as e:
         logger.error("Failed to fetch chunks: %s", e, exc_info=True)
         return []
-

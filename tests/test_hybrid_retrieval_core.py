@@ -430,5 +430,3 @@ def test_synonym_index_rebuild_on_add():
     keywords = retriever.extract_keywords_from_query("智能算法应用")
     assert "人工智能" in keywords
     assert "AI" in keywords
-
-
