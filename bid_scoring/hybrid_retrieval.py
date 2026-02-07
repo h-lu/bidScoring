@@ -12,11 +12,12 @@ References:
 """
 
 import asyncio
+import json
 import logging
 import re
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
@@ -406,6 +407,20 @@ MAX_SEARCH_WORKERS = 2
 
 
 @dataclass
+class EvidenceUnit:
+    """Unit-level evidence attached to a retrieval result (v0.2 contract)."""
+
+    unit_id: str
+    unit_index: int
+    unit_type: str
+    text: str
+    anchor_json: Any
+    unit_order: int = 0
+    start_char: int | None = None
+    end_char: int | None = None
+
+
+@dataclass
 class RetrievalResult:
     """Single retrieval result with detailed scoring information."""
 
@@ -420,6 +435,7 @@ class RetrievalResult:
     rerank_score: float | None = (
         None  # Cross-encoder rerank score (if reranking enabled)
     )
+    evidence_units: List[EvidenceUnit] = field(default_factory=list)
 
 
 @dataclass
@@ -1397,6 +1413,66 @@ class HybridRetriever:
 
                     rows = {row[0]: row for row in cur.fetchall()}
 
+                    # v0.2: Attach stable, unit-level evidence for each chunk.
+                    # If the v0.2 tables aren't available (older schema), we degrade gracefully.
+                    evidence_by_chunk: Dict[str, List[EvidenceUnit]] = {}
+                    try:
+                        cur.execute(
+                            """
+                            SELECT
+                                s.chunk_id::text,
+                                cu.unit_id::text,
+                                cu.unit_index,
+                                cu.unit_type,
+                                cu.text_raw,
+                                cu.anchor_json,
+                                s.unit_order,
+                                s.start_char,
+                                s.end_char
+                            FROM chunk_unit_spans s
+                            JOIN content_units cu ON cu.unit_id = s.unit_id
+                            WHERE s.chunk_id = ANY(%s::uuid[])
+                            ORDER BY s.chunk_id, s.unit_order
+                            """,
+                            (chunk_ids,),
+                        )
+                        for (
+                            chunk_id,
+                            unit_id,
+                            unit_index,
+                            unit_type,
+                            text_raw,
+                            anchor_json,
+                            unit_order,
+                            start_char,
+                            end_char,
+                        ) in cur.fetchall():
+                            if isinstance(anchor_json, str):
+                                anchor_json = json.loads(anchor_json)
+
+                            evidence_by_chunk.setdefault(chunk_id, []).append(
+                                EvidenceUnit(
+                                    unit_id=str(unit_id),
+                                    unit_index=int(unit_index),
+                                    unit_type=str(unit_type),
+                                    text=text_raw or "",
+                                    anchor_json=anchor_json,
+                                    unit_order=int(unit_order or 0),
+                                    start_char=int(start_char)
+                                    if start_char is not None
+                                    else None,
+                                    end_char=int(end_char)
+                                    if end_char is not None
+                                    else None,
+                                )
+                            )
+                    except Exception as e:
+                        logger.debug(
+                            "Skip unit evidence attachment (v0.2 tables missing?): %s",
+                            e,
+                            exc_info=True,
+                        )
+
                     # Maintain order from merged results
                     results = []
                     for chunk_id in chunk_ids:
@@ -1429,6 +1505,7 @@ class HybridRetriever:
                                     vector_score=vector_score,
                                     keyword_score=keyword_score,
                                     embedding=row[3] if row[3] else None,
+                                    evidence_units=evidence_by_chunk.get(chunk_id, []),
                                 )
                             )
 

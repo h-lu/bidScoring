@@ -375,6 +375,7 @@ class TestInsertHierarchicalNodes:
         # start_chunk_id and end_chunk_id should be set
         assert insert_data[0][7] == "chunk-id-0"  # start_chunk_id
         assert insert_data[0][8] == "chunk-id-0"  # end_chunk_id
+        assert insert_data[0][9].obj["covered_unit_range"] == {"start": 0, "end": 0}
 
     def test_insert_hierarchical_nodes_failure(self):
         """Should handle insertion failure."""
@@ -682,6 +683,8 @@ class TestNodeChunkMapping:
         assert all_insert_data[0][7] == "chunk-0"  # start_chunk_id
         # Second leaf maps to chunk-1
         assert all_insert_data[1][7] == "chunk-1"
+        assert all_insert_data[0][9].obj["covered_unit_range"] == {"start": 0, "end": 0}
+        assert all_insert_data[1][9].obj["covered_unit_range"] == {"start": 1, "end": 1}
 
     def test_paragraph_node_chunk_mapping(self):
         """Test that paragraph nodes map to chunk ranges."""
@@ -734,6 +737,7 @@ class TestNodeChunkMapping:
         # Paragraph should have start_chunk_id = chunk-0 and end_chunk_id = chunk-1
         assert para_data[7] == "chunk-0"  # start_chunk_id
         assert para_data[8] == "chunk-1"  # end_chunk_id
+        assert para_data[9].obj["covered_unit_range"] == {"start": 0, "end": 1}
 
 
 if __name__ == "__main__":

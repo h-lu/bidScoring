@@ -35,6 +35,55 @@ CREATE TABLE IF NOT EXISTS document_versions (
     status TEXT
 );
 
+-- ============================================
+-- Normalized Layer (v0.2)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS document_pages (
+    version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
+    page_idx INTEGER NOT NULL,
+    page_w NUMERIC,
+    page_h NUMERIC,
+    coord_sys TEXT NOT NULL DEFAULT 'unknown',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (version_id, page_idx)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_pages_version_page
+    ON document_pages(version_id, page_idx);
+
+CREATE TABLE IF NOT EXISTS content_units (
+    unit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
+    unit_index INTEGER NOT NULL,
+    unit_type TEXT NOT NULL,
+    text_raw TEXT,
+    text_norm TEXT,
+    char_count INTEGER DEFAULT 0,
+    anchor_json JSONB NOT NULL DEFAULT '{"anchors":[]}'::jsonb,
+    source_element_id TEXT,
+    unit_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE content_units
+    DROP CONSTRAINT IF EXISTS unique_units_version_unit_index;
+ALTER TABLE content_units
+    ADD CONSTRAINT unique_units_version_unit_index
+    UNIQUE (version_id, unit_index);
+
+ALTER TABLE content_units
+    DROP CONSTRAINT IF EXISTS unique_units_version_source_element;
+ALTER TABLE content_units
+    ADD CONSTRAINT unique_units_version_source_element
+    UNIQUE (version_id, source_element_id);
+
+CREATE INDEX IF NOT EXISTS idx_content_units_version_unit_index
+    ON content_units(version_id, unit_index);
+CREATE INDEX IF NOT EXISTS idx_content_units_version_source_element
+    ON content_units(version_id, source_element_id);
+
 CREATE TABLE IF NOT EXISTS chunks (
     chunk_id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(project_id),
@@ -73,6 +122,19 @@ CREATE INDEX IF NOT EXISTS idx_chunks_text_level
     ON chunks(version_id, text_level) 
     WHERE text_level IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS chunk_unit_spans (
+    chunk_id UUID NOT NULL REFERENCES chunks(chunk_id) ON DELETE CASCADE,
+    unit_id UUID NOT NULL REFERENCES content_units(unit_id) ON DELETE CASCADE,
+    unit_order INTEGER NOT NULL,
+    start_char INTEGER,
+    end_char INTEGER,
+    PRIMARY KEY (chunk_id, unit_id),
+    UNIQUE (chunk_id, unit_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chunk_unit_spans_chunk_id ON chunk_unit_spans(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_chunk_unit_spans_unit_id ON chunk_unit_spans(unit_id);
+
 CREATE TABLE IF NOT EXISTS scoring_runs (
     run_id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(project_id),
@@ -100,11 +162,25 @@ CREATE TABLE IF NOT EXISTS citations (
     citation_id UUID PRIMARY KEY,
     result_id UUID REFERENCES scoring_results(result_id),
     source_id TEXT,
-    chunk_id UUID REFERENCES chunks(chunk_id),
+    chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE SET NULL,
     cited_text TEXT,
     verified BOOLEAN,
     match_type TEXT
 );
+
+ALTER TABLE citations
+    DROP CONSTRAINT IF EXISTS citations_chunk_id_fkey;
+ALTER TABLE citations
+    ADD CONSTRAINT citations_chunk_id_fkey
+    FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE SET NULL;
+
+ALTER TABLE citations
+    ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES content_units(unit_id),
+    ADD COLUMN IF NOT EXISTS quote_text TEXT,
+    ADD COLUMN IF NOT EXISTS quote_start_char INTEGER,
+    ADD COLUMN IF NOT EXISTS quote_end_char INTEGER,
+    ADD COLUMN IF NOT EXISTS anchor_json JSONB,
+    ADD COLUMN IF NOT EXISTS evidence_hash TEXT;
 
 -- ============================================
 -- Contextual Chunks (from 005_cpc_contextual_chunks.sql)
@@ -192,6 +268,12 @@ $$ LANGUAGE 'plpgsql';
 DROP TRIGGER IF EXISTS trigger_contextual_chunks_updated_at ON contextual_chunks;
 CREATE TRIGGER trigger_contextual_chunks_updated_at
     BEFORE UPDATE ON contextual_chunks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trigger_content_units_updated_at ON content_units;
+CREATE TRIGGER trigger_content_units_updated_at
+    BEFORE UPDATE ON content_units
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
