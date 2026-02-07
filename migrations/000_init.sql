@@ -164,12 +164,6 @@ CREATE TABLE IF NOT EXISTS citations (
     source_id TEXT,
     chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE SET NULL,
     cited_text TEXT,
-    unit_id UUID REFERENCES content_units(unit_id),
-    quote_text TEXT,
-    quote_start_char INTEGER,
-    quote_end_char INTEGER,
-    anchor_json JSONB,
-    evidence_hash TEXT,
     verified BOOLEAN,
     match_type TEXT
 );
