@@ -1,16 +1,19 @@
+"""Reciprocal Rank Fusion (RRF) implementation."""
+
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
-from .types import RrfSources
-
-
 # DeepMind recommended value for RRF damping constant.
+# This value balances the influence of top-ranked items vs. deep-ranked items.
 DEFAULT_RRF_K = 60
 
 
 class ReciprocalRankFusion:
-    """Reciprocal Rank Fusion (RRF) for merging ranked lists."""
+    """Reciprocal Rank Fusion for merging ranked lists.
+
+    RRF formula: score = sum(weight / (k + rank)) for each list.
+    """
 
     def __init__(
         self,
@@ -26,9 +29,18 @@ class ReciprocalRankFusion:
         self,
         vector_results: List[Tuple[str, float]],
         keyword_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float, RrfSources]]:
+    ) -> List[Tuple[str, float, Dict[str, dict]]]:
+        """Merge vector and keyword search results using RRF.
+
+        Args:
+            vector_results: List of (chunk_id, similarity_score) from vector search
+            keyword_results: List of (chunk_id, match_score) from keyword search
+
+        Returns:
+            List of (chunk_id, rrf_score, source_scores) sorted by rrf_score desc.
+        """
         scores: Dict[str, float] = {}
-        sources: Dict[str, RrfSources] = {}
+        sources: Dict[str, Dict[str, dict]] = {}
 
         for rank, (doc_id, orig_score) in enumerate(vector_results):
             if doc_id not in scores:

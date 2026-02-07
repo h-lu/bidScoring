@@ -1,3 +1,8 @@
+"""Optional rerankers used by hybrid retrieval.
+
+Keep this module import-safe: all heavyweight deps are behind ImportError guards.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -7,27 +12,27 @@ from .types import RetrievalResult
 
 logger = logging.getLogger(__name__)
 
-
+# Cross-encoder reranker support - graceful fallback if not installed
 try:
     from sentence_transformers import CrossEncoder
 
     HAS_RERANKER = True
 except ImportError:  # pragma: no cover
     HAS_RERANKER = False
-    CrossEncoder = None
+    CrossEncoder = None  # type: ignore[assignment]
 
-
+# ColBERT reranker support - graceful fallback if not installed
 try:
     from ragatouille import RAGPretrainedModel
 
     HAS_COLBERT_RERANKER = True
 except ImportError:  # pragma: no cover
     HAS_COLBERT_RERANKER = False
-    RAGPretrainedModel = None
+    RAGPretrainedModel = None  # type: ignore[assignment]
 
 
 class Reranker:
-    """Cross-encoder reranker (optional dependency)."""
+    """Lightweight cross-encoder reranker adapter."""
 
     DEFAULT_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
@@ -42,7 +47,7 @@ class Reranker:
         self._device = device
         self._model: Optional[CrossEncoder] = None
 
-    def _load_model(self) -> CrossEncoder:
+    def _load_model(self) -> "CrossEncoder":
         if self._model is None:
             logger.debug("Loading reranker model: %s", self._model_name)
             self._model = CrossEncoder(self._model_name, device=self._device)
@@ -64,33 +69,39 @@ class Reranker:
         try:
             model = self._load_model()
             scores = model.predict(pairs)
+
             scored_results = list(zip(candidates, scores))
             scored_results.sort(key=lambda x: x[1], reverse=True)
+
+            logger.debug(
+                "Reranked %d results, top score: %.4f",
+                len(candidates),
+                float(scored_results[0][1]),
+            )
+
             return [r for r, _ in scored_results[:top_n]]
-        except Exception as e:  # pragma: no cover (model errors)
+        except Exception as e:  # pragma: no cover
             logger.error("Reranking failed: %s", e, exc_info=True)
             return results[:top_n]
 
     def rerank_with_scores(
-        self,
-        query: str,
-        results: List[RetrievalResult],
+        self, query: str, results: List[RetrievalResult]
     ) -> List[Tuple[RetrievalResult, float]]:
         if not results:
             return []
 
         pairs = [(query, r.text) for r in results]
-        try:
-            model = self._load_model()
-            scores = model.predict(pairs)
-            return list(zip(results, scores))
-        except Exception as e:  # pragma: no cover (model errors)
-            logger.error("Reranking with scores failed: %s", e, exc_info=True)
-            return [(r, r.score) for r in results]
+        model = self._load_model()
+        scores = model.predict(pairs)
+        out: List[Tuple[RetrievalResult, float]] = []
+        for r, score in zip(results, scores):
+            out.append((r, float(score)))
+        out.sort(key=lambda x: x[1], reverse=True)
+        return out
 
 
 class ColBERTReranker:
-    """ColBERT (late interaction) reranker adapter (optional dependency)."""
+    """ColBERT (late interaction) based reranker adapter."""
 
     DEFAULT_MODEL = "colbert-ir/colbertv2.0"
 
@@ -156,6 +167,6 @@ class ColBERTReranker:
                     ordered.append(item)
 
             return ordered[:top_n]
-        except Exception as e:  # pragma: no cover (model errors)
+        except Exception as e:  # pragma: no cover
             logger.error("ColBERT reranking failed: %s", e, exc_info=True)
             return results[:top_n]
