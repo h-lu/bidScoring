@@ -25,7 +25,6 @@ venv/
 *.swo
 .claude
 .deepeval
-.serena
 
 # OS
 .DS_Store
