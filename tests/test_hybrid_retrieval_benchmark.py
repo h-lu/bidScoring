@@ -22,7 +22,7 @@ from bid_scoring.config import load_settings
 
 
 @dataclass
-class TestQuery:
+class QueryCase:
     """测试查询样本"""
 
     query_text: str
@@ -84,7 +84,7 @@ def calculate_metrics(
 
 
 def compare_search_methods(
-    query: TestQuery,
+    query: QueryCase,
     retriever: HybridRetriever,
     db_connection,
 ) -> Dict[str, RetrievalMetrics]:
@@ -269,7 +269,7 @@ class TestHybridRetrievalBenchmark:
         )
 
         # 模拟关键词关键型查询
-        query = TestQuery(
+        query = QueryCase(
             query_text="培训时长是多少天",
             keywords=["培训", "时长", "天数"],
             expected_chunk_ids={"chunk_training_schedule"},  # 假设的预期文档
@@ -296,7 +296,7 @@ class TestHybridRetrievalBenchmark:
             version_id="test-version", settings=settings, top_k=10
         )
 
-        query = TestQuery(
+        query = QueryCase(
             query_text="售后服务包含哪些内容",
             keywords=["售后", "服务"],
             expected_chunk_ids={"chunk_service_policy"},

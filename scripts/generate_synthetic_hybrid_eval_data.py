@@ -53,7 +53,9 @@ def main() -> int:
     args = parser.parse_args()
 
     scenarios = (
-        DEFAULT_SCENARIOS if args.all_scenarios or not args.scenario else (args.scenario,)
+        DEFAULT_SCENARIOS
+        if args.all_scenarios or not args.scenario
+        else (args.scenario,)
     )
 
     if args.validate_only:

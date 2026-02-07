@@ -1,14 +1,11 @@
 -- Complete database schema for CI
 -- Merged from all migration files
-
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
-
 -- ============================================
 -- Core Tables (from 001_init.sql)
 -- ============================================
-
 CREATE TABLE IF NOT EXISTS projects (
     project_id UUID PRIMARY KEY,
     name TEXT NOT NULL,
@@ -16,7 +13,6 @@ CREATE TABLE IF NOT EXISTS projects (
     status TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE TABLE IF NOT EXISTS documents (
     doc_id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(project_id),
@@ -24,7 +20,6 @@ CREATE TABLE IF NOT EXISTS documents (
     source_type TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE TABLE IF NOT EXISTS document_versions (
     version_id UUID PRIMARY KEY,
     doc_id UUID REFERENCES documents(doc_id),
@@ -34,11 +29,9 @@ CREATE TABLE IF NOT EXISTS document_versions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     status TEXT
 );
-
 -- ============================================
 -- Normalized Layer (v0.2)
 -- ============================================
-
 CREATE TABLE IF NOT EXISTS document_pages (
     version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
     page_idx INTEGER NOT NULL,
@@ -48,10 +41,8 @@ CREATE TABLE IF NOT EXISTS document_pages (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (version_id, page_idx)
 );
-
 CREATE INDEX IF NOT EXISTS idx_document_pages_version_page
     ON document_pages(version_id, page_idx);
-
 CREATE TABLE IF NOT EXISTS content_units (
     unit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
@@ -66,24 +57,20 @@ CREATE TABLE IF NOT EXISTS content_units (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 ALTER TABLE content_units
     DROP CONSTRAINT IF EXISTS unique_units_version_unit_index;
 ALTER TABLE content_units
     ADD CONSTRAINT unique_units_version_unit_index
     UNIQUE (version_id, unit_index);
-
 ALTER TABLE content_units
     DROP CONSTRAINT IF EXISTS unique_units_version_source_element;
 ALTER TABLE content_units
     ADD CONSTRAINT unique_units_version_source_element
     UNIQUE (version_id, source_element_id);
-
 CREATE INDEX IF NOT EXISTS idx_content_units_version_unit_index
     ON content_units(version_id, unit_index);
 CREATE INDEX IF NOT EXISTS idx_content_units_version_source_element
     ON content_units(version_id, source_element_id);
-
 CREATE TABLE IF NOT EXISTS chunks (
     chunk_id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(project_id),
@@ -98,7 +85,6 @@ CREATE TABLE IF NOT EXISTS chunks (
     text_tsv TSVECTOR,
     embedding VECTOR(1536)
 );
-
 -- Add MinerU fields (from 002_add_mineru_fields.sql)
 ALTER TABLE chunks 
     ADD COLUMN IF NOT EXISTS img_path TEXT,
@@ -110,18 +96,15 @@ ALTER TABLE chunks
     ADD COLUMN IF NOT EXISTS list_items TEXT[],
     ADD COLUMN IF NOT EXISTS sub_type TEXT,
     ADD COLUMN IF NOT EXISTS text_level INTEGER;
-
 -- Add unique constraint (from 009_fix_mineru_import.sql)
 ALTER TABLE chunks 
     DROP CONSTRAINT IF EXISTS unique_version_source;
 ALTER TABLE chunks 
     ADD CONSTRAINT unique_version_source 
     UNIQUE (version_id, source_id);
-
 CREATE INDEX IF NOT EXISTS idx_chunks_text_level 
     ON chunks(version_id, text_level) 
     WHERE text_level IS NOT NULL;
-
 CREATE TABLE IF NOT EXISTS chunk_unit_spans (
     chunk_id UUID NOT NULL REFERENCES chunks(chunk_id) ON DELETE CASCADE,
     unit_id UUID NOT NULL REFERENCES content_units(unit_id) ON DELETE CASCADE,
@@ -131,10 +114,8 @@ CREATE TABLE IF NOT EXISTS chunk_unit_spans (
     PRIMARY KEY (chunk_id, unit_id),
     UNIQUE (chunk_id, unit_order)
 );
-
 CREATE INDEX IF NOT EXISTS idx_chunk_unit_spans_chunk_id ON chunk_unit_spans(chunk_id);
 CREATE INDEX IF NOT EXISTS idx_chunk_unit_spans_unit_id ON chunk_unit_spans(unit_id);
-
 CREATE TABLE IF NOT EXISTS scoring_runs (
     run_id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(project_id),
@@ -146,7 +127,6 @@ CREATE TABLE IF NOT EXISTS scoring_runs (
     started_at TIMESTAMPTZ DEFAULT NOW(),
     status TEXT
 );
-
 CREATE TABLE IF NOT EXISTS scoring_results (
     result_id UUID PRIMARY KEY,
     run_id UUID REFERENCES scoring_runs(run_id),
@@ -157,7 +137,6 @@ CREATE TABLE IF NOT EXISTS scoring_results (
     evidence_found BOOLEAN,
     confidence TEXT
 );
-
 CREATE TABLE IF NOT EXISTS citations (
     citation_id UUID PRIMARY KEY,
     result_id UUID REFERENCES scoring_results(result_id),
@@ -165,27 +144,18 @@ CREATE TABLE IF NOT EXISTS citations (
     chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE SET NULL,
     cited_text TEXT,
     verified BOOLEAN,
-    match_type TEXT
+    match_type TEXT,
+    -- v0.2 evidence fields (unit-level, traceable & verifiable)
+    unit_id UUID REFERENCES content_units(unit_id),
+    quote_text TEXT,
+    quote_start_char INTEGER,
+    quote_end_char INTEGER,
+    anchor_json JSONB,
+    evidence_hash TEXT
 );
-
-ALTER TABLE citations
-    DROP CONSTRAINT IF EXISTS citations_chunk_id_fkey;
-ALTER TABLE citations
-    ADD CONSTRAINT citations_chunk_id_fkey
-    FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE SET NULL;
-
-ALTER TABLE citations
-    ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES content_units(unit_id),
-    ADD COLUMN IF NOT EXISTS quote_text TEXT,
-    ADD COLUMN IF NOT EXISTS quote_start_char INTEGER,
-    ADD COLUMN IF NOT EXISTS quote_end_char INTEGER,
-    ADD COLUMN IF NOT EXISTS anchor_json JSONB,
-    ADD COLUMN IF NOT EXISTS evidence_hash TEXT;
-
 -- ============================================
 -- Contextual Chunks (from 005_cpc_contextual_chunks.sql)
 -- ============================================
-
 CREATE TABLE IF NOT EXISTS contextual_chunks (
     contextual_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     chunk_id UUID NOT NULL UNIQUE REFERENCES chunks(chunk_id) ON DELETE CASCADE,
@@ -199,7 +169,6 @@ CREATE TABLE IF NOT EXISTS contextual_chunks (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_contextual_chunks_chunk_id ON contextual_chunks(chunk_id);
 CREATE INDEX IF NOT EXISTS idx_contextual_chunks_version_id ON contextual_chunks(version_id);
 CREATE INDEX IF NOT EXISTS idx_contextual_chunks_embedding_hnsw 
@@ -207,11 +176,9 @@ ON contextual_chunks USING hnsw(embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
 CREATE INDEX IF NOT EXISTS idx_contextual_chunks_version_created 
 ON contextual_chunks(version_id, created_at);
-
 -- ============================================
 -- Hierarchical Nodes (from 006_cpc_hierarchical_nodes.sql + 009_add_source_chunk_ids.sql + 010_small_to_big_chunking.sql)
 -- ============================================
-
 CREATE TABLE IF NOT EXISTS hierarchical_nodes (
     node_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
@@ -230,7 +197,6 @@ CREATE TABLE IF NOT EXISTS hierarchical_nodes (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_version_id ON hierarchical_nodes(version_id);
 CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_parent_id ON hierarchical_nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_version_level ON hierarchical_nodes(version_id, level);
@@ -242,19 +208,15 @@ CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_metadata ON hierarchical_nodes
 CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_embedding_hnsw ON hierarchical_nodes 
 USING hnsw(embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64) WHERE embedding IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_hierarchical_nodes_version_parent ON hierarchical_nodes(version_id, parent_id, level);
-
 -- ============================================
 -- Indexes (from 001_init.sql)
 -- ============================================
-
 CREATE INDEX IF NOT EXISTS idx_chunks_text_tsv ON chunks USING gin(text_tsv);
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON chunks USING hnsw(embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_chunks_project_version_page ON chunks(project_id, version_id, page_idx);
-
 -- ============================================
 -- Functions and Triggers
 -- ============================================
-
 -- Trigger function for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -263,26 +225,22 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
-
 -- Apply triggers
 DROP TRIGGER IF EXISTS trigger_contextual_chunks_updated_at ON contextual_chunks;
 CREATE TRIGGER trigger_contextual_chunks_updated_at
     BEFORE UPDATE ON contextual_chunks
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
-
 DROP TRIGGER IF EXISTS trigger_content_units_updated_at ON content_units;
 CREATE TRIGGER trigger_content_units_updated_at
     BEFORE UPDATE ON content_units
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
-
 DROP TRIGGER IF EXISTS trigger_hierarchical_nodes_updated_at ON hierarchical_nodes;
 CREATE TRIGGER trigger_hierarchical_nodes_updated_at
     BEFORE UPDATE ON hierarchical_nodes
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
-
 -- Hierarchical node functions
 CREATE OR REPLACE FUNCTION get_node_descendants(p_node_id UUID)
 RETURNS TABLE (
@@ -305,9 +263,7 @@ BEGIN
             0 AS depth
         FROM hierarchical_nodes hn
         WHERE hn.node_id = p_node_id
-        
         UNION ALL
-        
         SELECT 
             hn.node_id,
             hn.parent_id,
@@ -321,7 +277,6 @@ BEGIN
     SELECT * FROM descendants;
 END;
 $$ LANGUAGE plpgsql STABLE;
-
 CREATE OR REPLACE FUNCTION get_node_ancestors(p_node_id UUID)
 RETURNS TABLE (
     node_id UUID,
@@ -343,9 +298,7 @@ BEGIN
             0 AS depth
         FROM hierarchical_nodes hn
         WHERE hn.node_id = p_node_id
-        
         UNION ALL
-        
         SELECT 
             hn.node_id,
             hn.parent_id,
@@ -359,7 +312,6 @@ BEGIN
     SELECT * FROM ancestors ORDER BY depth;
 END;
 $$ LANGUAGE plpgsql STABLE;
-
 CREATE OR REPLACE FUNCTION get_document_root_node(p_version_id UUID)
 RETURNS TABLE (
     node_id UUID,
@@ -378,7 +330,6 @@ BEGIN
       AND hn.node_type = 'document';
 END;
 $$ LANGUAGE plpgsql STABLE;
-
 -- Vector search functions (from 003_optimize_pgvector_index.sql)
 CREATE OR REPLACE FUNCTION get_recommended_ef_search(chunk_count BIGINT DEFAULT NULL)
 RETURNS INTEGER AS $$
@@ -390,7 +341,6 @@ BEGIN
     ELSE
         count_val := chunk_count;
     END IF;
-    
     IF count_val < 10000 THEN
         RETURN 64;
     ELSIF count_val < 100000 THEN
@@ -402,7 +352,6 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE OR REPLACE FUNCTION search_chunks_by_vector(
     query_vector VECTOR,
     p_version_id UUID,
@@ -421,7 +370,6 @@ DECLARE
     ef_val INTEGER;
 BEGIN
     ef_val := GREATEST(get_recommended_ef_search(), top_k * 2);
-    
     RETURN QUERY
     SELECT 
         c.chunk_id,
@@ -438,7 +386,6 @@ BEGIN
     LIMIT top_k;
 END;
 $$ LANGUAGE plpgsql;
-
 CREATE OR REPLACE FUNCTION search_contextual_chunks_by_vector(
     query_vector VECTOR,
     p_version_id UUID,
@@ -459,7 +406,6 @@ DECLARE
     ef_val INTEGER;
 BEGIN
     ef_val := GREATEST(64, top_k * 2);
-    
     RETURN QUERY
     SELECT 
         cc.contextual_id,
@@ -479,11 +425,9 @@ BEGIN
     LIMIT top_k;
 END;
 $$ LANGUAGE plpgsql;
-
 -- ============================================
 -- Views (from 010_small_to_big_chunking.sql)
 -- ============================================
-
 CREATE OR REPLACE VIEW v_chunks_with_sections AS
 SELECT 
     c.node_id as chunk_id,
@@ -502,11 +446,9 @@ FROM hierarchical_nodes c
 JOIN hierarchical_nodes s ON c.parent_id = s.node_id
 WHERE c.node_type = 'chunk' 
 AND s.node_type = 'section';
-
 -- ============================================
 -- Multi-vector mappings table (for test compatibility)
 -- ============================================
-
 CREATE TABLE IF NOT EXISTS multi_vector_mappings (
     mapping_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE CASCADE,
@@ -514,15 +456,12 @@ CREATE TABLE IF NOT EXISTS multi_vector_mappings (
     embedding VECTOR(1536),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_multi_vector_mappings_chunk_id ON multi_vector_mappings(chunk_id);
 CREATE INDEX IF NOT EXISTS idx_multi_vector_mappings_embedding_hnsw 
 ON multi_vector_mappings USING hnsw(embedding vector_cosine_ops);
-
 -- ============================================
 -- Table and Column Comments
 -- ============================================
-
 COMMENT ON TABLE hierarchical_nodes IS 'Stores document structure as a tree for HiChunk hierarchical chunking';
 COMMENT ON COLUMN hierarchical_nodes.node_id IS 'Unique identifier for the node';
 COMMENT ON COLUMN hierarchical_nodes.version_id IS 'Reference to document version';
