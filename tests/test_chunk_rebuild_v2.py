@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 import psycopg
 
 from bid_scoring.chunk_rebuild_v2 import rebuild_chunks_from_units
