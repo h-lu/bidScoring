@@ -398,7 +398,16 @@ def insert_hierarchical_nodes(
                         node_id, version_id, parent_id, level, node_type,
                         content, children_ids, start_chunk_id, end_chunk_id, metadata
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (node_id) DO NOTHING
+                    ON CONFLICT (node_id) DO UPDATE SET
+                        version_id = EXCLUDED.version_id,
+                        parent_id = EXCLUDED.parent_id,
+                        level = EXCLUDED.level,
+                        node_type = EXCLUDED.node_type,
+                        content = EXCLUDED.content,
+                        children_ids = EXCLUDED.children_ids,
+                        start_chunk_id = EXCLUDED.start_chunk_id,
+                        end_chunk_id = EXCLUDED.end_chunk_id,
+                        metadata = EXCLUDED.metadata
                     """,
                     insert_data,
                 )
