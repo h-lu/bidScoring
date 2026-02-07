@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS citations (
     citation_id UUID PRIMARY KEY,
     result_id UUID REFERENCES scoring_results(result_id),
     source_id TEXT,
-    chunk_id UUID REFERENCES chunks(chunk_id),
+    chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE SET NULL,
     cited_text TEXT,
     unit_id UUID REFERENCES content_units(unit_id),
     quote_text TEXT,
@@ -173,6 +173,12 @@ CREATE TABLE IF NOT EXISTS citations (
     verified BOOLEAN,
     match_type TEXT
 );
+
+ALTER TABLE citations
+    DROP CONSTRAINT IF EXISTS citations_chunk_id_fkey;
+ALTER TABLE citations
+    ADD CONSTRAINT citations_chunk_id_fkey
+    FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE SET NULL;
 
 ALTER TABLE citations
     ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES content_units(unit_id),
