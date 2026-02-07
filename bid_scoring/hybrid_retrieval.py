@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
 
 import psycopg
 import yaml
@@ -34,6 +34,15 @@ try:
 except ImportError:
     HAS_RERANKER = False
     CrossEncoder = None
+
+# ColBERT reranker support - graceful fallback if not installed
+try:
+    from ragatouille import RAGPretrainedModel
+
+    HAS_COLBERT_RERANKER = True
+except ImportError:
+    HAS_COLBERT_RERANKER = False
+    RAGPretrainedModel = None
 
 # Connection pool support - graceful fallback if not installed
 try:
@@ -225,6 +234,79 @@ class Reranker:
         except Exception as e:
             logger.error(f"Reranking with scores failed: {e}", exc_info=True)
             return [(r, r.score) for r in results]
+
+
+class ColBERTReranker:
+    """ColBERT (late interaction) based reranker adapter."""
+
+    DEFAULT_MODEL = "colbert-ir/colbertv2.0"
+
+    def __init__(self, model_name: str = DEFAULT_MODEL, device: str = "cpu"):
+        if not HAS_COLBERT_RERANKER:
+            raise ImportError(
+                "ragatouille is required for ColBERT reranking. "
+                "Install with: uv add ragatouille"
+            )
+        self._model_name = model_name
+        self._device = device
+        self._model: Optional[Any] = None
+
+    def _load_model(self) -> Any:
+        if self._model is None:
+            logger.debug(f"Loading ColBERT reranker model: {self._model_name}")
+            self._model = RAGPretrainedModel.from_pretrained(self._model_name)
+        return self._model
+
+    def rerank(
+        self, query: str, results: List["RetrievalResult"], top_n: int = 5
+    ) -> List["RetrievalResult"]:
+        if not results:
+            return results
+
+        max_rerank = min(len(results), top_n * 2)
+        candidates = results[:max_rerank]
+        documents = [r.text for r in candidates]
+
+        if not any(documents):
+            return candidates[:top_n]
+
+        try:
+            model = self._load_model()
+            ranked = model.rerank(
+                query=query, documents=documents, k=min(top_n, len(candidates))
+            )
+
+            if not ranked:
+                return candidates[:top_n]
+
+            text_to_indices: Dict[str, List[int]] = {}
+            for idx, item in enumerate(candidates):
+                text_to_indices.setdefault(item.text, []).append(idx)
+
+            used: Set[int] = set()
+            ordered: List[RetrievalResult] = []
+            for row in ranked:
+                content = row.get("content", "") if isinstance(row, dict) else ""
+                score = row.get("score") if isinstance(row, dict) else None
+                candidate_indices = text_to_indices.get(content, [])
+                target_idx = next((i for i in candidate_indices if i not in used), None)
+                if target_idx is None:
+                    continue
+                selected = candidates[target_idx]
+                if score is not None:
+                    selected.rerank_score = float(score)
+                ordered.append(selected)
+                used.add(target_idx)
+
+            # Keep deterministic fallback for any unselected candidates.
+            for idx, item in enumerate(candidates):
+                if idx not in used:
+                    ordered.append(item)
+
+            return ordered[:top_n]
+        except Exception as e:
+            logger.error(f"ColBERT reranking failed: {e}", exc_info=True)
+            return results[:top_n]
 
 
 def load_retrieval_config(config_path: str | Path | None = None) -> dict:
@@ -504,7 +586,8 @@ class HybridRetriever:
         cache_size: int = 1000,
         use_or_semantic: bool = True,
         enable_rerank: bool = False,
-        rerank_model: str = Reranker.DEFAULT_MODEL,
+        rerank_backend: Literal["cross_encoder", "colbert"] = "cross_encoder",
+        rerank_model: str | None = None,
         rerank_top_n: int | None = None,
         enable_dynamic_weights: bool = False,
         enable_metrics: bool = False,
@@ -537,7 +620,11 @@ class HybridRetriever:
                             - True: Match any keyword (higher recall)
                             - False: Match all keywords (higher precision)
             enable_rerank: Whether to enable cross-encoder reranking (default False)
-            rerank_model: Cross-encoder model name for reranking
+            rerank_backend: Reranker backend ("cross_encoder" or "colbert")
+            rerank_model: Model name for selected backend.
+                          Defaults:
+                          - cross_encoder: cross-encoder/ms-marco-MiniLM-L-6-v2
+                          - colbert: colbert-ir/colbertv2.0
             rerank_top_n: Number of results to return after reranking
             enable_dynamic_weights: Whether to enable dynamic weight adjustment (default False)
             enable_metrics: Whether to collect retrieval metrics (default False)
@@ -565,16 +652,40 @@ class HybridRetriever:
 
         # Initialize reranker
         self._enable_rerank = enable_rerank
+        self._rerank_backend = rerank_backend
         self._rerank_top_n = rerank_top_n or top_k
-        self._reranker: Optional[Reranker] = None
+        self._reranker: Optional[Union[Reranker, ColBERTReranker]] = None
         if enable_rerank:
-            if HAS_RERANKER:
-                self._reranker = Reranker(model_name=rerank_model)
-                logger.debug(f"Initialized reranker with model: {rerank_model}")
+            if rerank_backend == "cross_encoder":
+                model_name = rerank_model or Reranker.DEFAULT_MODEL
+                if HAS_RERANKER:
+                    self._reranker = Reranker(model_name=model_name)
+                    logger.debug(
+                        f"Initialized cross-encoder reranker with model: {model_name}"
+                    )
+                else:
+                    logger.warning(
+                        "Reranking enabled (cross_encoder) but sentence-transformers not installed. "
+                        "Install with: uv add sentence-transformers"
+                    )
+                    self._enable_rerank = False
+            elif rerank_backend == "colbert":
+                model_name = rerank_model or ColBERTReranker.DEFAULT_MODEL
+                if HAS_COLBERT_RERANKER:
+                    self._reranker = ColBERTReranker(model_name=model_name)
+                    logger.debug(
+                        f"Initialized ColBERT reranker with model: {model_name}"
+                    )
+                else:
+                    logger.warning(
+                        "Reranking enabled (colbert) but ragatouille not installed. "
+                        "Install with: uv add ragatouille"
+                    )
+                    self._enable_rerank = False
             else:
                 logger.warning(
-                    "Reranking enabled but sentence-transformers not installed. "
-                    "Install with: uv add sentence-transformers"
+                    f"Unknown rerank_backend '{rerank_backend}'. "
+                    "Valid options: 'cross_encoder', 'colbert'. Disabling rerank."
                 )
                 self._enable_rerank = False
 

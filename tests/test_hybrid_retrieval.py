@@ -1615,3 +1615,120 @@ async def test_retrieve_async_applies_reranker_when_enabled():
     assert fake_reranker.query == "培训时长"
     assert fake_reranker.top_n == 2
     assert [r.chunk_id for r in results] == ["chunk-2", "chunk-1"]
+
+
+def test_colbert_backend_selected_when_enabled(monkeypatch):
+    """HybridRetriever should build ColBERT reranker when backend=colbert."""
+    import bid_scoring.hybrid_retrieval as hr
+
+    class FakeColBERTReranker:
+        def __init__(self, model_name: str, device: str = "cpu"):
+            self.model_name = model_name
+            self.device = device
+
+        def rerank(self, query, results, top_n):
+            return results[:top_n]
+
+    monkeypatch.setattr(hr, "HAS_COLBERT_RERANKER", True, raising=False)
+    monkeypatch.setattr(hr, "ColBERTReranker", FakeColBERTReranker, raising=False)
+
+    retriever = hr.HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=5,
+        enable_rerank=True,
+        rerank_backend="colbert",
+        rerank_model="colbert-ir/colbertv2.0",
+    )
+
+    assert isinstance(retriever._reranker, FakeColBERTReranker)
+    assert retriever._enable_rerank is True
+
+
+def test_retrieve_applies_colbert_reranker_when_selected(monkeypatch):
+    """retrieve() should call ColBERT reranker when backend=colbert."""
+    import bid_scoring.hybrid_retrieval as hr
+
+    class FakeColBERTReranker:
+        def __init__(self, model_name: str, device: str = "cpu"):
+            self.called = False
+            self.query = None
+            self.top_n = None
+
+        def rerank(self, query, results, top_n):
+            self.called = True
+            self.query = query
+            self.top_n = top_n
+            return [results[1], results[0]]
+
+    monkeypatch.setattr(hr, "HAS_COLBERT_RERANKER", True, raising=False)
+    monkeypatch.setattr(hr, "ColBERTReranker", FakeColBERTReranker, raising=False)
+
+    retriever = hr.HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=3,
+        enable_rerank=True,
+        rerank_backend="colbert",
+        rerank_model="colbert-ir/colbertv2.0",
+        rerank_top_n=2,
+    )
+
+    retriever._vector_search = lambda query: [("chunk-1", 0.9), ("chunk-2", 0.8)]
+    retriever._keyword_search_fulltext = lambda keywords, use_or_semantic: []
+    retriever._fetch_chunks = lambda merged_results: [
+        hr.RetrievalResult("chunk-1", "text-1", 1, 0.2, "vector"),
+        hr.RetrievalResult("chunk-2", "text-2", 2, 0.1, "vector"),
+    ]
+
+    results = retriever.retrieve("培训时长", keywords=["培训"])
+
+    assert retriever._reranker.called is True
+    assert retriever._reranker.query == "培训时长"
+    assert retriever._reranker.top_n == 2
+    assert [r.chunk_id for r in results] == ["chunk-2", "chunk-1"]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_async_applies_colbert_reranker_when_selected(monkeypatch):
+    """retrieve_async() should call ColBERT reranker when backend=colbert."""
+    import bid_scoring.hybrid_retrieval as hr
+
+    class FakeColBERTReranker:
+        def __init__(self, model_name: str, device: str = "cpu"):
+            self.called = False
+            self.query = None
+            self.top_n = None
+
+        def rerank(self, query, results, top_n):
+            self.called = True
+            self.query = query
+            self.top_n = top_n
+            return [results[1], results[0]]
+
+    monkeypatch.setattr(hr, "HAS_COLBERT_RERANKER", True, raising=False)
+    monkeypatch.setattr(hr, "ColBERTReranker", FakeColBERTReranker, raising=False)
+
+    retriever = hr.HybridRetriever(
+        version_id="test",
+        settings={"DATABASE_URL": "postgresql://test"},
+        top_k=3,
+        enable_rerank=True,
+        rerank_backend="colbert",
+        rerank_model="colbert-ir/colbertv2.0",
+        rerank_top_n=2,
+    )
+
+    retriever._vector_search = lambda query: [("chunk-1", 0.9), ("chunk-2", 0.8)]
+    retriever._keyword_search_fulltext = lambda keywords, use_or_semantic: []
+    retriever._fetch_chunks = lambda merged_results: [
+        hr.RetrievalResult("chunk-1", "text-1", 1, 0.2, "vector"),
+        hr.RetrievalResult("chunk-2", "text-2", 2, 0.1, "vector"),
+    ]
+
+    results = await retriever.retrieve_async("培训时长", keywords=["培训"])
+
+    assert retriever._reranker.called is True
+    assert retriever._reranker.query == "培训时长"
+    assert retriever._reranker.top_n == 2
+    assert [r.chunk_id for r in results] == ["chunk-2", "chunk-1"]
