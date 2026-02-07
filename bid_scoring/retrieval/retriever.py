@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import atexit
 import asyncio
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from hashlib import sha256
 from typing import Dict, List, Literal, Set, Tuple
 
@@ -140,6 +142,9 @@ class HybridRetriever:
                     max_lifetime=3600,
                     open=True,
                 )
+                # Don't rely on pool.__del__ at interpreter shutdown.
+                # Closing from atexit runs in the main thread and is less error-prone.
+                atexit.register(partial(self._pool.close, timeout=5.0))
             except Exception as e:  # pragma: no cover
                 logger.warning(
                     "Failed to initialize connection pool: %s. Using direct connections.",
@@ -193,6 +198,13 @@ class HybridRetriever:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False
+
+    def __del__(self):  # pragma: no cover
+        try:
+            self.close()
+        except Exception:
+            # Best-effort cleanup only; never raise from finalizer.
+            pass
 
     @property
     def stopwords(self) -> Set[str]:
