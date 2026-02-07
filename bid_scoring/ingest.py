@@ -46,6 +46,39 @@ def _normalize_list_field(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _iter_bbox_rects(bbox: Any) -> list[tuple[float, float, float, float]]:
+    """Return bbox rectangles in (x1, y1, x2, y2) form.
+
+    MineRU bbox may appear as:
+    - [x1, y1, x2, y2]
+    - [[x1, y1, x2, y2], ...]
+    - JSON-encoded string of either form
+    """
+    if bbox is None:
+        return []
+    if isinstance(bbox, str):
+        try:
+            bbox = json.loads(bbox)
+        except Exception:
+            return []
+    if not isinstance(bbox, list) or not bbox:
+        return []
+
+    def _is_num(x: Any) -> bool:
+        return isinstance(x, (int, float))
+
+    if len(bbox) == 4 and all(_is_num(x) for x in bbox):
+        return [(float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))]
+
+    rects: list[tuple[float, float, float, float]] = []
+    for item in bbox:
+        if isinstance(item, list) and len(item) == 4 and all(_is_num(x) for x in item):
+            rects.append(
+                (float(item[0]), float(item[1]), float(item[2]), float(item[3]))
+            )
+    return rects
+
+
 def _extract_text_from_item(item: dict) -> str:
     """从任意类型的 item 中提取可索引文本"""
     item_type = item.get("type", "")
@@ -251,16 +284,30 @@ def ingest_content_list(
             (version_id, document_id, source_uri, None, parser_version, status),
         )
 
-        # v0.2: document_pages (page dims unknown for now, but we persist the page index set).
+        # v0.2: document_pages (infer page dims from observed bboxes as a fallback).
+        page_dim_by_idx: dict[int, tuple[float | None, float | None]] = {}
+        for unit in units_data:
+            pidx = int(unit["page_idx"])
+            for _, _, x2, y2 in _iter_bbox_rects(unit.get("bbox")):
+                cur_w, cur_h = page_dim_by_idx.get(pidx, (None, None))
+                page_dim_by_idx[pidx] = (
+                    max(cur_w or 0.0, float(x2)),
+                    max(cur_h or 0.0, float(y2)),
+                )
+
         page_idxs = sorted({int(u["page_idx"]) for u in units_data})
         for pidx in page_idxs:
+            page_w, page_h = page_dim_by_idx.get(pidx, (None, None))
             cur.execute(
                 """
                 INSERT INTO document_pages (version_id, page_idx, page_w, page_h, coord_sys)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (version_id, page_idx) DO NOTHING
+                ON CONFLICT (version_id, page_idx) DO UPDATE SET
+                    page_w = COALESCE(EXCLUDED.page_w, document_pages.page_w),
+                    page_h = COALESCE(EXCLUDED.page_h, document_pages.page_h),
+                    coord_sys = EXCLUDED.coord_sys
                 """,
-                (version_id, pidx, None, None, "mineru_bbox_v1"),
+                (version_id, pidx, page_w, page_h, "mineru_bbox_v1"),
             )
 
         # v0.2: upsert normalized content units (stable evidence layer).
