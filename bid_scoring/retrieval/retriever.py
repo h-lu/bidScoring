@@ -12,12 +12,7 @@ import psycopg
 from .cache import LRUCache
 from .config import FieldKeywordsDict, SynonymIndexDict, build_synonym_index, load_retrieval_config
 from .fetch import fetch_chunks
-from .rerankers import (
-    HAS_COLBERT_RERANKER,
-    HAS_RERANKER,
-    ColBERTReranker,
-    Reranker,
-)
+from . import rerankers as _rerankers
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
 from .search_keyword import keyword_search_fulltext, keyword_search_legacy
 from .search_vector import vector_search
@@ -92,12 +87,12 @@ class HybridRetriever:
         self._enable_rerank = enable_rerank
         self._rerank_backend = rerank_backend
         self._rerank_top_n = rerank_top_n or top_k
-        self._reranker: Optional[Union[Reranker, ColBERTReranker]] = None
+        self._reranker: object | None = None
         if enable_rerank:
             if rerank_backend == "cross_encoder":
-                model_name = rerank_model or Reranker.DEFAULT_MODEL
-                if HAS_RERANKER:
-                    self._reranker = Reranker(model_name=model_name)
+                model_name = rerank_model or _rerankers.Reranker.DEFAULT_MODEL
+                if _rerankers.HAS_RERANKER:
+                    self._reranker = _rerankers.Reranker(model_name=model_name)
                 else:
                     logger.warning(
                         "Reranking enabled (cross_encoder) but sentence-transformers not installed. "
@@ -105,9 +100,9 @@ class HybridRetriever:
                     )
                     self._enable_rerank = False
             elif rerank_backend == "colbert":
-                model_name = rerank_model or ColBERTReranker.DEFAULT_MODEL
-                if HAS_COLBERT_RERANKER:
-                    self._reranker = ColBERTReranker(model_name=model_name)
+                model_name = rerank_model or _rerankers.ColBERTReranker.DEFAULT_MODEL
+                if _rerankers.HAS_COLBERT_RERANKER:
+                    self._reranker = _rerankers.ColBERTReranker(model_name=model_name)
                 else:
                     logger.warning(
                         "Reranking enabled (colbert) but ragatouille not installed. "
