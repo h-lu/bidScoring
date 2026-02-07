@@ -78,3 +78,54 @@ def test_ingest_persists_content_units_and_spans():
             anchor_json = _as_dict(cur.fetchone()[0])
             assert anchor_json["anchors"][0]["page_idx"] == data[0]["page_idx"]
             assert anchor_json["anchors"][0]["bbox"] == data[0]["bbox"]
+
+
+def test_ingest_expands_multi_bbox_into_multiple_anchors_and_sets_page_dims():
+    dsn = load_settings()["DATABASE_URL"]
+
+    project_id = "00000000-0000-0000-0000-000000000111"
+    document_id = "00000000-0000-0000-0000-000000000113"
+    version_id = "00000000-0000-0000-0000-000000000112"
+
+    content_list = [
+        {
+            "type": "text",
+            "text": "Multi bbox item",
+            "page_idx": 0,
+            "bbox": [[0, 0, 10, 10], [0, 20, 10, 30]],
+        }
+    ]
+
+    with psycopg.connect(dsn) as conn:
+        ingest_content_list(
+            conn,
+            project_id=project_id,
+            document_id=document_id,
+            version_id=version_id,
+            document_title="示例文档(multi bbox)",
+            source_type="mineru",
+            content_list=content_list,
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT anchor_json
+                FROM content_units
+                WHERE version_id = %s
+                ORDER BY unit_index
+                LIMIT 1
+                """,
+                (version_id,),
+            )
+            anchor_json = _as_dict(cur.fetchone()[0])
+
+        anchors = anchor_json["anchors"]
+        assert len(anchors) == 2
+        assert anchors[0]["page_idx"] == 0
+        assert list(map(int, anchors[0]["bbox"])) == [0, 0, 10, 10]
+        assert list(map(int, anchors[1]["bbox"])) == [0, 20, 10, 30]
+
+        # Page dims are inferred from observed bbox x2/y2 maxima.
+        assert int(anchors[0]["page_w"]) == 10
+        assert int(anchors[0]["page_h"]) == 30
