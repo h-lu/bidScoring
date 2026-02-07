@@ -1,0 +1,374 @@
+[
+  {
+    "query_id": "Q01",
+    "version_tag": "multi_scenario_shared",
+    "query": "售后响应时间和到场时间分别是多少？",
+    "keywords": [
+      "售后",
+      "响应",
+      "到场",
+      "小时"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "定位核心SLA承诺",
+    "expected_answer": "2小时响应，24小时到场",
+    "edge_focus": [
+      "conflict_clause",
+      "unit_normalization"
+    ]
+  },
+  {
+    "query_id": "Q02",
+    "version_tag": "multi_scenario_shared",
+    "query": "项目免费质保期多久？",
+    "keywords": [
+      "质保",
+      "保修",
+      "月",
+      "年"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "定位质保主承诺",
+    "expected_answer": "5年（60个月），以验收合格日起算",
+    "edge_focus": [
+      "alias_term",
+      "numeric_normalization"
+    ]
+  },
+  {
+    "query_id": "Q03",
+    "version_tag": "multi_scenario_shared",
+    "query": "是否承诺开机率95%以上？",
+    "keywords": [
+      "开机率",
+      "95%",
+      "质保"
+    ],
+    "query_type": "factual",
+    "intent": "识别硬指标承诺",
+    "expected_answer": "是，承诺不低于95%",
+    "edge_focus": [
+      "numeric_threshold"
+    ]
+  },
+  {
+    "query_id": "Q04",
+    "version_tag": "multi_scenario_shared",
+    "query": "备件保障是怎么写的？",
+    "keywords": [
+      "备件",
+      "库存",
+      "易损件"
+    ],
+    "query_type": "semantic",
+    "intent": "检索备件保障策略",
+    "expected_answer": "上海备件仓+关键备件安全库存",
+    "edge_focus": [
+      "table_evidence",
+      "semantic_paraphrase"
+    ]
+  },
+  {
+    "query_id": "Q05",
+    "version_tag": "multi_scenario_shared",
+    "query": "如果72小时修不好，是否提供备用机？",
+    "keywords": [
+      "72小时",
+      "备用机",
+      "修复"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "检索补偿性服务承诺",
+    "expected_answer": "提供同等级备用机",
+    "edge_focus": [
+      "condition_clause"
+    ]
+  },
+  {
+    "query_id": "Q06",
+    "version_tag": "multi_scenario_shared",
+    "query": "第三方软件升级是否包含在免费服务里？",
+    "keywords": [
+      "第三方",
+      "软件",
+      "升级",
+      "免费"
+    ],
+    "query_type": "negation",
+    "intent": "识别否定条款",
+    "expected_answer": "不包含第三方插件授权升级费用",
+    "edge_focus": [
+      "negation"
+    ]
+  },
+  {
+    "query_id": "Q07",
+    "version_tag": "multi_scenario_shared",
+    "query": "培训总共安排几天？",
+    "keywords": [
+      "培训",
+      "第1天",
+      "第2天"
+    ],
+    "query_type": "numeric_reasoning",
+    "intent": "识别培训时长",
+    "expected_answer": "2天（第1天+第2天）",
+    "edge_focus": [
+      "table_evidence",
+      "numeric_reasoning"
+    ]
+  },
+  {
+    "query_id": "Q08",
+    "version_tag": "multi_scenario_shared",
+    "query": "培训对象包括哪些角色？",
+    "keywords": [
+      "培训对象",
+      "使用人员",
+      "维护"
+    ],
+    "query_type": "factual",
+    "intent": "识别培训覆盖人群",
+    "expected_answer": "使用人员、管理员、维护人员",
+    "edge_focus": [
+      "list_evidence"
+    ]
+  },
+  {
+    "query_id": "Q09",
+    "version_tag": "multi_scenario_shared",
+    "query": "交货期承诺是30天还是3个月？",
+    "keywords": [
+      "交货期",
+      "30天",
+      "3个月"
+    ],
+    "query_type": "conflict_resolution",
+    "intent": "区分投标承诺与模板条款",
+    "expected_answer": "投标响应主承诺为3个月；30天为模板条款",
+    "edge_focus": [
+      "conflict_clause",
+      "template_vs_commitment"
+    ]
+  },
+  {
+    "query_id": "Q10",
+    "version_tag": "multi_scenario_shared",
+    "query": "什么情况下算完成交付验收？",
+    "keywords": [
+      "验收",
+      "交付",
+      "安装调试",
+      "验收合格单"
+    ],
+    "query_type": "semantic",
+    "intent": "检索验收完成条件",
+    "expected_answer": "安装调试后双方签署验收合格单",
+    "edge_focus": [
+      "cross_section"
+    ]
+  },
+  {
+    "query_id": "Q11",
+    "version_tag": "multi_scenario_shared",
+    "query": "付款节点怎么约定的？",
+    "keywords": [
+      "预付款",
+      "尾款",
+      "验收"
+    ],
+    "query_type": "factual",
+    "intent": "定位付款比例",
+    "expected_answer": "30%预付款、60%验收后、10%尾款",
+    "edge_focus": [
+      "table_evidence"
+    ]
+  },
+  {
+    "query_id": "Q12",
+    "version_tag": "multi_scenario_shared",
+    "query": "这个设备是否按医疗器械管理，注册证号是什么？",
+    "keywords": [
+      "医疗器械",
+      "注册证",
+      "备案号"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "定位合规属性",
+    "expected_answer": "标注为不按医疗器械管理，注册证号为/",
+    "edge_focus": [
+      "table_evidence",
+      "consistency_check"
+    ]
+  },
+  {
+    "query_id": "Q13",
+    "version_tag": "multi_scenario_shared",
+    "query": "有无反商业贿赂或廉洁条款？",
+    "keywords": [
+      "廉洁",
+      "回扣",
+      "商业贿赂"
+    ],
+    "query_type": "factual",
+    "intent": "检索合规风险条款",
+    "expected_answer": "有，明确禁止回扣和商业贿赂",
+    "edge_focus": [
+      "compliance"
+    ]
+  },
+  {
+    "query_id": "Q14",
+    "version_tag": "multi_scenario_shared",
+    "query": "近三年有几家类似医院项目业绩？",
+    "keywords": [
+      "类似项目",
+      "医院",
+      "2024",
+      "2023",
+      "2022"
+    ],
+    "query_type": "numeric_reasoning",
+    "intent": "统计业绩数量",
+    "expected_answer": "3家",
+    "edge_focus": [
+      "table_evidence",
+      "counting"
+    ]
+  },
+  {
+    "query_id": "Q15",
+    "version_tag": "multi_scenario_shared",
+    "query": "售后团队有多少工程师？",
+    "keywords": [
+      "售后工程师",
+      "团队",
+      "高级工程师"
+    ],
+    "query_type": "factual",
+    "intent": "检索人员配置",
+    "expected_answer": "共6人",
+    "edge_focus": [
+      "numeric_threshold"
+    ]
+  },
+  {
+    "query_id": "Q16",
+    "version_tag": "multi_scenario_shared",
+    "query": "是否支持远程诊断？",
+    "keywords": [
+      "远程诊断",
+      "日志",
+      "远程处置"
+    ],
+    "query_type": "semantic",
+    "intent": "识别远程服务能力",
+    "expected_answer": "支持远程诊断与日志分析",
+    "edge_focus": [
+      "semantic_paraphrase"
+    ]
+  },
+  {
+    "query_id": "Q17",
+    "version_tag": "multi_scenario_shared",
+    "query": "SLA first response within 2 hours 是什么承诺？",
+    "keywords": [
+      "SLA",
+      "first response",
+      "2 hours",
+      "on-site"
+    ],
+    "query_type": "semantic",
+    "intent": "中英混合检索能力",
+    "expected_answer": "2小时响应、24小时到场",
+    "edge_focus": [
+      "bilingual",
+      "alias_term"
+    ]
+  },
+  {
+    "query_id": "Q18",
+    "version_tag": "multi_scenario_shared",
+    "query": "扫描件里写的 响 应 时 间 是多少？",
+    "keywords": [
+      "响 应",
+      "到 场",
+      "2 小 时"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "OCR噪声鲁棒性",
+    "expected_answer": "2小时响应，24小时到场",
+    "edge_focus": [
+      "ocr_noise"
+    ]
+  },
+  {
+    "query_id": "Q19",
+    "version_tag": "multi_scenario_shared",
+    "query": "保修期是不是60个月？",
+    "keywords": [
+      "保修期",
+      "60个月",
+      "质保"
+    ],
+    "query_type": "conflict_resolution",
+    "intent": "同义词与多来源一致性",
+    "expected_answer": "主承诺5年/60个月，与制造商承诺一致",
+    "edge_focus": [
+      "alias_term",
+      "conflict_clause"
+    ]
+  },
+  {
+    "query_id": "Q20",
+    "version_tag": "multi_scenario_shared",
+    "query": "制造商上门时效写的是多久？",
+    "keywords": [
+      "制造商",
+      "上门",
+      "工作日"
+    ],
+    "query_type": "factual",
+    "intent": "区分供应商与制造商措辞",
+    "expected_answer": "2个工作日内上门",
+    "edge_focus": [
+      "conflict_clause"
+    ]
+  },
+  {
+    "query_id": "Q21",
+    "version_tag": "multi_scenario_shared",
+    "query": "质保期外备件价格有没有上限约束？",
+    "keywords": [
+      "质保期外",
+      "备件",
+      "市场价",
+      "上限"
+    ],
+    "query_type": "factual",
+    "intent": "检索价格约束条款",
+    "expected_answer": "不高于市场同期均价",
+    "edge_focus": [
+      "pricing_clause"
+    ]
+  },
+  {
+    "query_id": "Q22",
+    "version_tag": "multi_scenario_shared",
+    "query": "评分索引里售后和培训分别在第几页？",
+    "keywords": [
+      "评分",
+      "索引",
+      "售后",
+      "培训",
+      "页"
+    ],
+    "query_type": "keyword_critical",
+    "intent": "检索索引定位信息",
+    "expected_answer": "售后16-19页，培训20-22页",
+    "edge_focus": [
+      "table_evidence",
+      "cross_section"
+    ]
+  }
+]

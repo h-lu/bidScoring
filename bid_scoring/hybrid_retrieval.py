@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union
 
 import psycopg
+from psycopg import sql
 import yaml
 
 from bid_scoring.embeddings import embed_single_text
@@ -955,7 +956,13 @@ class HybridRetriever:
 
                     # Set HNSW search expansion factor for better recall
                     # Reference: https://github.com/pgvector/pgvector#hnsw
-                    cur.execute("SET hnsw.ef_search = %s", (self._hnsw_ef_search,))
+                    # psycopg3 server-side binding doesn't work with SET.
+                    # Use client-side SQL composition for utility statements.
+                    cur.execute(
+                        sql.SQL("SET hnsw.ef_search = {}").format(
+                            sql.Literal(int(self._hnsw_ef_search))
+                        )
+                    )
 
                     # Use cosine similarity: 1 - (embedding <=> query)
                     # gives similarity in [0, 1]

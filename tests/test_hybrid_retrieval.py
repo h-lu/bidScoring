@@ -739,6 +739,53 @@ def test_hnsw_ef_search_configuration():
     assert retriever_custom._hnsw_ef_search == 200
 
 
+def test_vector_search_sets_hnsw_ef_search_without_bind_params(monkeypatch):
+    """SET hnsw.ef_search should not use bind params in psycopg3."""
+    import bid_scoring.hybrid_retrieval as hr
+
+    retriever = hr.HybridRetriever(
+        version_id="test", settings={"DATABASE_URL": "postgresql://test"}, top_k=5
+    )
+
+    monkeypatch.setattr(hr, "embed_single_text", lambda _: [0.1, 0.2, 0.3])
+
+    executed_sql: list[tuple[str, object]] = []
+
+    class FakeCursor:
+        def execute(self, sql, params=None):
+            executed_sql.append((str(sql), params))
+
+        def fetchall(self):
+            return [("chunk-1", 0.99)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    retriever._get_connection = lambda: FakeConnection()
+
+    results = retriever._vector_search("售后响应时间")
+    assert results == [("chunk-1", 0.99)]
+
+    hnsw_set_calls = [call for call in executed_sql if "SET hnsw.ef_search" in call[0]]
+    assert len(hnsw_set_calls) == 1
+    set_sql, set_params = hnsw_set_calls[0]
+    assert "SET hnsw.ef_search = %s" not in set_sql
+    assert set_params is None
+
+
 # =============================================================================
 # RRF Weight Parameter Tests (New from Task 5)
 # =============================================================================

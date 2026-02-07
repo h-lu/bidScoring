@@ -1,0 +1,33 @@
+{
+  "dataset": "synthetic_medical_hybrid_eval",
+  "shared_queries_file": "queries.json",
+  "scenarios": {
+    "A": {
+      "version_tag": "synthetic_bidder_A_v2",
+      "bidder_name": "上海澄研医疗科技有限公司",
+      "content_file": "content_list.synthetic_bidder_A.json",
+      "qrels_file": "qrels.source_id.A.jsonl",
+      "content_count": 1247,
+      "qrel_count": 45,
+      "query_count": 22
+    },
+    "B": {
+      "version_tag": "synthetic_bidder_B_v2",
+      "bidder_name": "苏州启衡生物仪器有限公司",
+      "content_file": "content_list.synthetic_bidder_B.json",
+      "qrels_file": "qrels.source_id.B.jsonl",
+      "content_count": 1247,
+      "qrel_count": 45,
+      "query_count": 22
+    },
+    "C": {
+      "version_tag": "synthetic_bidder_C_v2",
+      "bidder_name": "杭州赛泓精密医疗设备有限公司",
+      "content_file": "content_list.synthetic_bidder_C.json",
+      "qrels_file": "qrels.source_id.C.jsonl",
+      "content_count": 1247,
+      "qrel_count": 45,
+      "query_count": 22
+    }
+  }
+}
