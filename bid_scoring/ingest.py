@@ -13,7 +13,10 @@ import hashlib
 import json
 import logging
 import re
+import uuid
 from typing import Any
+
+from bid_scoring.anchors_v2 import build_anchor_json, compute_unit_hash, normalize_text
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,7 @@ def ingest_content_list(
     """
     # 准备所有 chunk 数据
     chunks_data = []
+    units_data: list[dict[str, Any]] = []
     type_counts = {}
 
     for i, item in enumerate(content_list):
@@ -180,6 +184,46 @@ def ingest_content_list(
             continue
 
         chunks_data.append(chunk_data)
+
+        # v0.2 normalized unit (stable evidence) derived from the same MineRU item.
+        page_idx = int(item.get("page_idx", 0) or 0)
+        bbox = item.get("bbox", []) or []
+        source_element_id = item.get("source_element_id") or chunk_data["source_id"]
+        anchor_json = build_anchor_json(
+            anchors=[
+                {
+                    "page_idx": page_idx,
+                    "bbox": bbox,
+                    "coord_sys": "mineru_bbox_v1",
+                    "page_w": None,
+                    "page_h": None,
+                    "path": None,
+                    "source": {"element_id": source_element_id},
+                }
+            ]
+        )
+        text_raw = chunk_data.get("text_raw") or ""
+        text_norm = normalize_text(text_raw)
+
+        units_data.append(
+            {
+                "unit_index": int(chunk_data["chunk_index"]),
+                "unit_type": str(chunk_data["element_type"]),
+                "text_raw": text_raw,
+                "text_norm": text_norm,
+                "char_count": len(text_raw),
+                "anchor_json": anchor_json,
+                "source_element_id": source_element_id,
+                "unit_hash": compute_unit_hash(
+                    text_norm=text_norm,
+                    anchor_json=anchor_json,
+                    source_element_id=source_element_id,
+                ),
+                "page_idx": page_idx,
+                "bbox": bbox,
+            }
+        )
+
         item_type = item.get("type", "unknown")
         type_counts[item_type] = type_counts.get(item_type, 0) + 1
 
@@ -207,6 +251,60 @@ def ingest_content_list(
             (version_id, document_id, source_uri, None, parser_version, status),
         )
 
+        # v0.2: document_pages (page dims unknown for now, but we persist the page index set).
+        page_idxs = sorted({int(u["page_idx"]) for u in units_data})
+        for pidx in page_idxs:
+            cur.execute(
+                """
+                INSERT INTO document_pages (version_id, page_idx, page_w, page_h, coord_sys)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (version_id, page_idx) DO NOTHING
+                """,
+                (version_id, pidx, None, None, "mineru_bbox_v1"),
+            )
+
+        # v0.2: upsert normalized content units (stable evidence layer).
+        # Keep unit_id stable across re-ingestion by upserting on (version_id, unit_index).
+        for unit in units_data:
+            cur.execute(
+                """
+                INSERT INTO content_units (
+                    version_id,
+                    unit_index,
+                    unit_type,
+                    text_raw,
+                    text_norm,
+                    char_count,
+                    anchor_json,
+                    source_element_id,
+                    unit_hash
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (version_id, unit_index) DO UPDATE SET
+                    unit_type = EXCLUDED.unit_type,
+                    text_raw = EXCLUDED.text_raw,
+                    text_norm = EXCLUDED.text_norm,
+                    char_count = EXCLUDED.char_count,
+                    anchor_json = EXCLUDED.anchor_json,
+                    source_element_id = EXCLUDED.source_element_id,
+                    unit_hash = EXCLUDED.unit_hash
+                RETURNING unit_id
+                """,
+                (
+                    version_id,
+                    unit["unit_index"],
+                    unit["unit_type"],
+                    unit["text_raw"],
+                    unit["text_norm"],
+                    unit["char_count"],
+                    json.dumps(unit["anchor_json"], ensure_ascii=False),
+                    unit["source_element_id"],
+                    unit["unit_hash"],
+                ),
+            )
+            unit["unit_id"] = str(cur.fetchone()[0])
+
         # ★ FIX: 先删除该 version 的现有 chunks，防止重复导入
         cur.execute("DELETE FROM chunks WHERE version_id = %s", (version_id,))
         if cur.rowcount > 0:
@@ -215,7 +313,11 @@ def ingest_content_list(
             )
 
         # 批量插入 chunks
-        for data in chunks_data:
+        # NOTE: v0.2 keeps chunks as a rebuildable index layer; for now we keep
+        # a 1:1 mapping between chunk and unit, and persist the mapping in
+        # chunk_unit_spans so citations can stay stable even if chunking changes later.
+        for data, unit in zip(chunks_data, units_data, strict=False):
+            chunk_id = str(uuid.uuid4())
             # 根据是否有文本来决定是否生成 tsvector
             if data["text_tsv"]:
                 cur.execute(
@@ -228,12 +330,13 @@ def ingest_content_list(
                         list_items, sub_type, text_level
                     )
                     VALUES (
-                        gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         to_tsvector('simple', %s),
                         %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     (
+                        chunk_id,
                         project_id,
                         version_id,
                         data["source_id"],
@@ -266,12 +369,13 @@ def ingest_content_list(
                         list_items, sub_type, text_level
                     )
                     VALUES (
-                        gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         NULL,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     (
+                        chunk_id,
                         project_id,
                         version_id,
                         data["source_id"],
@@ -293,10 +397,26 @@ def ingest_content_list(
                     ),
                 )
 
+            cur.execute(
+                """
+                INSERT INTO chunk_unit_spans (
+                    chunk_id, unit_id, unit_order, start_char, end_char
+                ) VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    chunk_id,
+                    unit["unit_id"],
+                    0,
+                    0,
+                    len(unit.get("text_raw") or ""),
+                ),
+            )
+
     conn.commit()
 
     return {
         "total_chunks": len(chunks_data),
+        "total_units": len(units_data),
         "type_counts": type_counts,
         "skipped_page_numbers": type_counts.get("page_number", 0),
     }
