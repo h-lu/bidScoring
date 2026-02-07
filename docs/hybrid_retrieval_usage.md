@@ -6,7 +6,7 @@
 
 ```python
 from bid_scoring.config import load_settings
-from bid_scoring.hybrid_retrieval import HybridRetriever
+from bid_scoring.retrieval import HybridRetriever
 
 settings = load_settings()
 
@@ -22,6 +22,31 @@ for r in results:
 
 retriever.close()
 ```
+
+> 兼容说明：历史代码仍可使用 `from bid_scoring.hybrid_retrieval import HybridRetriever`（保留兼容层），但推荐迁移到 `bid_scoring.retrieval`。
+
+## MCP Server (FastMCP)
+
+本项目提供只读 MCP Server：`mcp_servers/retrieval_server.py`，暴露工具 `retrieve`（默认 `mode="hybrid"`，默认返回全文，可用 `max_chars` 截断）。
+
+### 运行（stdio，给 MCP Client 用）
+
+```bash
+uv run fastmcp run mcp_servers/retrieval_server.py -t stdio
+```
+
+### 运行（http，本地调试）
+
+```bash
+uv run fastmcp run mcp_servers/retrieval_server.py -t http --host 127.0.0.1 --port 8000
+```
+
+### 关键环境变量
+
+- `DATABASE_URL`: Postgres 连接串（需要 pgvector + 全文索引）
+- `OPENAI_API_KEY`: query embedding（`mode="vector"/"hybrid"` 必需；`mode="keyword"` 可不需要）
+- `BID_SCORING_RETRIEVER_CACHE_SIZE`: 服务端 retriever LRU（默认 32）
+- `BID_SCORING_QUERY_CACHE_SIZE`: 每个 retriever 的 query LRU（默认 1024）
 
 ## 高级配置
 
