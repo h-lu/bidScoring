@@ -1,12 +1,25 @@
+"""Shared datatypes for retrieval.
+
+These types are intentionally lightweight and dependency-free so they can be
+used across the retrieval package (vector search, keyword search, fetching,
+reranking, MCP formatting).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 
-@dataclass
+SourcesDict = Dict[str, Dict[str, Any]]
+
+# (chunk_id, rrf_score, sources)
+MergedChunk = Tuple[str, float, SourcesDict]
+
+
+@dataclass(frozen=True)
 class EvidenceUnit:
-    """Unit-level evidence attached to a retrieval result (v0.2 contract)."""
+    """Unit-level evidence span for v0.2 schema (content_units + chunk_unit_spans)."""
 
     unit_id: str
     unit_index: int
@@ -27,47 +40,17 @@ class RetrievalResult:
     page_idx: int
     score: float
     source: str  # "vector", "keyword", or "hybrid"
-    vector_score: float | None = None  # Original vector similarity score
-    keyword_score: float | None = None  # Original keyword match score
+    vector_score: float | None = None
+    keyword_score: float | None = None
     embedding: List[float] | None = None
-    rerank_score: float | None = None  # Cross-encoder/ColBERT rerank score
+    rerank_score: float | None = None
     evidence_units: List[EvidenceUnit] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RetrievalMetrics:
-    """Retrieval performance metrics."""
+    """Optional retrieval diagnostics (kept for backwards compatibility)."""
 
-    vector_search_time_ms: float = 0.0
-    keyword_search_time_ms: float = 0.0
-    rrf_fusion_time_ms: float = 0.0
-    fetch_chunks_time_ms: float = 0.0
-    rerank_time_ms: float = 0.0
-    total_time_ms: float = 0.0
-
-    vector_results_count: int = 0
-    keyword_results_count: int = 0
-    final_results_count: int = 0
-
-    cache_hit: bool = False
-    query_type: str = "unknown"  # "technical", "long", "standard"
-
-    def to_dict(self) -> Dict[str, Union[float, int, bool, str]]:
-        return {
-            "vector_search_time_ms": self.vector_search_time_ms,
-            "keyword_search_time_ms": self.keyword_search_time_ms,
-            "rrf_fusion_time_ms": self.rrf_fusion_time_ms,
-            "fetch_chunks_time_ms": self.fetch_chunks_time_ms,
-            "rerank_time_ms": self.rerank_time_ms,
-            "total_time_ms": self.total_time_ms,
-            "vector_results_count": self.vector_results_count,
-            "keyword_results_count": self.keyword_results_count,
-            "final_results_count": self.final_results_count,
-            "cache_hit": self.cache_hit,
-            "query_type": self.query_type,
-        }
-
-
-# Public type aliases used by HybridRetriever.
-RrfSources = Dict[str, dict]
-MergedChunk = Tuple[str, float, RrfSources]
+    query: str
+    mode: str
+    elapsed_ms: float

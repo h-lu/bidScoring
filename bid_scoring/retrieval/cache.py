@@ -1,3 +1,5 @@
+"""Simple in-memory caches used by retrieval code."""
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -5,7 +7,12 @@ from typing import Any
 
 
 class LRUCache:
-    """Simple LRU Cache implementation using OrderedDict."""
+    """Simple LRU Cache implementation using OrderedDict.
+
+    This cache stores key-value pairs with a fixed capacity.
+    When the capacity is exceeded, the least recently accessed item
+    is evicted to make room for the new item.
+    """
 
     def __init__(self, capacity: int = 1000):
         self.capacity = capacity

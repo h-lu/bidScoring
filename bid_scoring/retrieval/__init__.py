@@ -1,35 +1,24 @@
-from __future__ import annotations
+"""Retrieval package.
+
+Public API:
+- HybridRetriever
+- RetrievalResult
+- ReciprocalRankFusion
+"""
 
 from .cache import LRUCache
-from .config import (
-    DEFAULT_CONFIG_PATH,
-    FieldKeywordsDict,
-    SynonymIndexDict,
-    build_synonym_index,
-    load_retrieval_config,
-)
-from .rerankers import (
-    HAS_COLBERT_RERANKER,
-    HAS_RERANKER,
-    ColBERTReranker,
-    Reranker,
-)
-from .retriever import (
-    DEFAULT_HNSW_EF_SEARCH,
-    HAS_CONNECTION_POOL,
-    MAX_SEARCH_WORKERS,
-    HybridRetriever,
-)
+from .config import DEFAULT_CONFIG_PATH, build_synonym_index, load_retrieval_config
+from .db import HAS_CONNECTION_POOL
+from .hybrid import DEFAULT_HNSW_EF_SEARCH, MAX_SEARCH_WORKERS, HybridRetriever
+from .rerankers import HAS_COLBERT_RERANKER, HAS_RERANKER, ColBERTReranker, Reranker
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
-from .types import EvidenceUnit, RetrievalMetrics, RetrievalResult
+from .types import RetrievalResult
 
 __all__ = [
     "ColBERTReranker",
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_HNSW_EF_SEARCH",
     "DEFAULT_RRF_K",
-    "EvidenceUnit",
-    "FieldKeywordsDict",
     "HAS_COLBERT_RERANKER",
     "HAS_CONNECTION_POOL",
     "HAS_RERANKER",
@@ -37,10 +26,8 @@ __all__ = [
     "LRUCache",
     "MAX_SEARCH_WORKERS",
     "ReciprocalRankFusion",
-    "RetrievalMetrics",
-    "RetrievalResult",
     "Reranker",
-    "SynonymIndexDict",
+    "RetrievalResult",
     "build_synonym_index",
     "load_retrieval_config",
 ]

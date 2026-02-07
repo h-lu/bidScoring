@@ -1,3 +1,5 @@
+"""Retrieval configuration loading and keyword expansion helpers."""
+
 from __future__ import annotations
 
 import logging
@@ -6,19 +8,16 @@ from typing import Dict, List
 
 import yaml
 
-logger = logging.getLogger(__name__)
-
 # Type alias for field keywords dictionary
 FieldKeywordsDict = Dict[str, List[str]]
 SynonymIndexDict = Dict[str, str]  # synonym -> key mapping for bidirectional lookup
 
+logger = logging.getLogger(__name__)
 
-def _repo_root() -> Path:
-    # .../bid_scoring/retrieval/config.py -> parents[2] is repo root
-    return Path(__file__).resolve().parents[2]
-
-
-DEFAULT_CONFIG_PATH = _repo_root() / "config" / "retrieval_config.yaml"
+# Default configuration file path (repo_root/config/retrieval_config.yaml)
+DEFAULT_CONFIG_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "retrieval_config.yaml"
+)
 
 
 def load_retrieval_config(config_path: str | Path | None = None) -> dict:
@@ -30,15 +29,18 @@ def load_retrieval_config(config_path: str | Path | None = None) -> dict:
         return {"stopwords": [], "field_keywords": {}}
 
     try:
-        config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        with open(path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+
         config.setdefault("stopwords", [])
         config.setdefault("field_keywords", {})
+
         logger.debug("Loaded retrieval config from %s", path)
         return config
     except yaml.YAMLError as e:
         logger.error("Failed to parse config file %s: %s", path, e)
         return {"stopwords": [], "field_keywords": {}}
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         logger.error("Failed to load config file %s: %s", path, e)
         return {"stopwords": [], "field_keywords": {}}
 
