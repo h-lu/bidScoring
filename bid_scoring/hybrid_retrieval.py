@@ -1461,7 +1461,9 @@ class HybridRetriever:
                                     start_char=int(start_char)
                                     if start_char is not None
                                     else None,
-                                    end_char=int(end_char) if end_char is not None else None,
+                                    end_char=int(end_char)
+                                    if end_char is not None
+                                    else None,
                                 )
                             )
                     except Exception as e:

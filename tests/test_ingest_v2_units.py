@@ -47,7 +47,9 @@ def test_ingest_persists_content_units_and_spans():
             units_count = int(cur.fetchone()[0])
             assert units_count > 0
 
-            cur.execute("SELECT COUNT(*) FROM chunks WHERE version_id = %s", (version_id,))
+            cur.execute(
+                "SELECT COUNT(*) FROM chunks WHERE version_id = %s", (version_id,)
+            )
             chunks_count = int(cur.fetchone()[0])
             assert chunks_count > 0
 
@@ -76,4 +78,3 @@ def test_ingest_persists_content_units_and_spans():
             anchor_json = _as_dict(cur.fetchone()[0])
             assert anchor_json["anchors"][0]["page_idx"] == data[0]["page_idx"]
             assert anchor_json["anchors"][0]["bbox"] == data[0]["bbox"]
-

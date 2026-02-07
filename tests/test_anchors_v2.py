@@ -44,4 +44,3 @@ def test_compute_unit_hash_is_stable():
         text_norm=text_norm, anchor_json=anchor_json, source_element_id="x"
     )
     assert h1 == h2
-

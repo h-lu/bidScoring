@@ -69,5 +69,7 @@ def test_fetch_chunks_attaches_unit_evidence():
         ev = r.evidence_units[0]
         assert isinstance(ev.unit_id, str)
         anchor_json = _as_dict(ev.anchor_json)
-        assert anchor_json["anchors"][0]["page_idx"] in {data[0]["page_idx"], data[1]["page_idx"]}
-
+        assert anchor_json["anchors"][0]["page_idx"] in {
+            data[0]["page_idx"],
+            data[1]["page_idx"],
+        }

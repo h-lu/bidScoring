@@ -69,4 +69,3 @@ def compute_unit_hash(
         ]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
