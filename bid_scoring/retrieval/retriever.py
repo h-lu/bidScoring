@@ -5,12 +5,17 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Dict, List, Literal, Set, Tuple
 
 import psycopg
 
 from .cache import LRUCache
-from .config import FieldKeywordsDict, SynonymIndexDict, build_synonym_index, load_retrieval_config
+from .config import (
+    FieldKeywordsDict,
+    SynonymIndexDict,
+    build_synonym_index,
+    load_retrieval_config,
+)
 from .fetch import fetch_chunks
 from . import rerankers as _rerankers
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
@@ -141,7 +146,9 @@ class HybridRetriever:
                     e,
                 )
         elif use_connection_pool and not HAS_CONNECTION_POOL:
-            logger.warning("psycopg-pool not installed. Install with: uv add psycopg-pool")
+            logger.warning(
+                "psycopg-pool not installed. Install with: uv add psycopg-pool"
+            )
 
         # Config
         config = load_retrieval_config(config_path)
@@ -166,7 +173,9 @@ class HybridRetriever:
             if key not in self._field_keywords[key]:
                 self._field_keywords[key].insert(0, key)
 
-        self._synonym_index: SynonymIndexDict = build_synonym_index(self._field_keywords)
+        self._synonym_index: SynonymIndexDict = build_synonym_index(
+            self._field_keywords
+        )
 
     def _get_connection(self):
         if self._pool:
@@ -201,7 +210,9 @@ class HybridRetriever:
             all_synonyms = [key] + [s for s in synonyms if s != key]
             if key in self._field_keywords:
                 existing = set(self._field_keywords[key])
-                self._field_keywords[key].extend([s for s in all_synonyms if s not in existing])
+                self._field_keywords[key].extend(
+                    [s for s in all_synonyms if s not in existing]
+                )
             else:
                 self._field_keywords[key] = list(all_synonyms)
         self._synonym_index = build_synonym_index(self._field_keywords)
@@ -209,7 +220,9 @@ class HybridRetriever:
     def _analyze_query_type(self, query: str) -> str:
         technical_pattern = r"\b[A-Z]{2,}\b|\b\d+[A-Za-z]+\b"
         technical_matches = len(re.findall(technical_pattern, query))
-        has_chinese_tech_terms = any(term in query for term in self._field_keywords.keys())
+        has_chinese_tech_terms = any(
+            term in query for term in self._field_keywords.keys()
+        )
         if technical_matches >= 2 or has_chinese_tech_terms:
             return "technical"
         if len(query) > 50:
@@ -247,11 +260,16 @@ class HybridRetriever:
     def _vector_search(self, query: str):
         return vector_search(self, query)
 
-    def _keyword_search_fulltext(self, keywords: List[str], use_or_semantic: bool = True):
+    def _keyword_search_fulltext(
+        self, keywords: List[str], use_or_semantic: bool = True
+    ):
         return keyword_search_fulltext(self, keywords, use_or_semantic=use_or_semantic)
 
     def _keyword_search_legacy(self, keywords: List[str]):
         return keyword_search_legacy(self, keywords)
+
+    def _fetch_chunks(self, merged_results: List[MergedChunk]) -> List[RetrievalResult]:
+        return fetch_chunks(self, merged_results)
 
     def extract_keywords_from_query(self, query: str) -> List[str]:
         expanded: Set[str] = set()
@@ -269,7 +287,9 @@ class HybridRetriever:
 
         return list(expanded)
 
-    def retrieve(self, query: str, keywords: List[str] | None = None) -> List[RetrievalResult]:
+    def retrieve(
+        self, query: str, keywords: List[str] | None = None
+    ) -> List[RetrievalResult]:
         if keywords is None:
             keywords = self.extract_keywords_from_query(query)
 
@@ -301,7 +321,7 @@ class HybridRetriever:
             ]
 
         merged_with_scores: List[MergedChunk] = merged[: self.top_k]
-        results = fetch_chunks(self, merged_with_scores)
+        results = self._fetch_chunks(merged_with_scores)
 
         if self._enable_rerank and self._reranker and results:
             results = self._reranker.rerank(query, results, self._rerank_top_n)
@@ -326,7 +346,9 @@ class HybridRetriever:
 
         if keywords is None:
             loop = asyncio.get_event_loop()
-            keywords = await loop.run_in_executor(None, self.extract_keywords_from_query, query)
+            keywords = await loop.run_in_executor(
+                None, self.extract_keywords_from_query, query
+            )
 
         loop = asyncio.get_event_loop()
         with ThreadPoolExecutor(max_workers=MAX_SEARCH_WORKERS) as executor:
@@ -334,7 +356,9 @@ class HybridRetriever:
             keyword_future = loop.run_in_executor(
                 executor, self._keyword_search_fulltext, keywords, self._use_or_semantic
             )
-            vector_results, keyword_results = await asyncio.gather(vector_future, keyword_future)
+            vector_results, keyword_results = await asyncio.gather(
+                vector_future, keyword_future
+            )
 
         if keyword_results:
             merged = self.rrf.fuse(vector_results, keyword_results)
@@ -349,7 +373,9 @@ class HybridRetriever:
             ]
 
         merged_with_scores: List[MergedChunk] = merged[: self.top_k]
-        results = await loop.run_in_executor(None, fetch_chunks, self, merged_with_scores)
+        results = await loop.run_in_executor(
+            None, self._fetch_chunks, merged_with_scores
+        )
 
         if self._enable_rerank and self._reranker and results:
             results = await loop.run_in_executor(

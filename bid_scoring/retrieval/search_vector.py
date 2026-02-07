@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple
 
-import psycopg
 from psycopg import sql
 
 from bid_scoring.embeddings import embed_single_text
@@ -52,4 +51,3 @@ def vector_search(retriever: object, query: str) -> List[Tuple[str, float]]:
             "Vector search failed for query '%s...': %s", query[:50], e, exc_info=True
         )
         return []
-
