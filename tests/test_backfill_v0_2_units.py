@@ -117,6 +117,17 @@ def test_backfill_creates_units_and_spans_from_existing_chunks():
             assert int(cur.fetchone()[0]) == 2
 
             cur.execute(
+                """
+                SELECT page_idx, page_w, page_h
+                FROM document_pages
+                WHERE version_id = %s
+                ORDER BY page_idx
+                """,
+                (version_id,),
+            )
+            assert cur.fetchall() == [(1, 3, 4), (2, 30, 40)]
+
+            cur.execute(
                 "SELECT COUNT(*) FROM chunk_unit_spans WHERE chunk_id IN (%s, %s)",
                 (chunk_id_1, chunk_id_2),
             )
