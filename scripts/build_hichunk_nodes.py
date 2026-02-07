@@ -19,6 +19,7 @@ Tree Structure:
 
 import sys
 import time
+from functools import lru_cache
 from typing import Any
 
 import psycopg
@@ -307,17 +308,38 @@ def insert_hierarchical_nodes(
         if node.level == 0:
             leaf_nodes.append(node)
 
-    # 为叶子节点建立 source_index 到 node 的映射
-    leaf_by_source_idx = {}
-    for node in leaf_nodes:
-        source_idx = node.metadata.get("source_index")
-        if source_idx is not None:
-            leaf_by_source_idx[source_idx] = node
+    nodes_by_id = {n.node_id: n for n in nodes if n.node_id}
+    leaf_by_id = {n.node_id: n for n in leaf_nodes if n.node_id}
+
+    @lru_cache(maxsize=None)
+    def _covered_unit_range(node_id: str) -> tuple[int, int] | None:
+        n = nodes_by_id.get(node_id)
+        if not n:
+            return None
+        if n.level == 0:
+            source_idx = n.metadata.get("source_index")
+            if source_idx is None:
+                return None
+            i = int(source_idx)
+            return (i, i)
+
+        ranges: list[tuple[int, int]] = []
+        for child_id in n.children_ids or []:
+            r = _covered_unit_range(child_id)
+            if r is not None:
+                ranges.append(r)
+        if not ranges:
+            return None
+        return (min(r[0] for r in ranges), max(r[1] for r in ranges))
 
     # 准备所有层级的插入数据
     def prepare_insert_data(node_list):
         data = []
         for node in node_list:
+            cov = _covered_unit_range(node.node_id)
+            if cov is not None:
+                node.metadata["covered_unit_range"] = {"start": cov[0], "end": cov[1]}
+
             # 对于叶子节点，尝试关联 chunks
             start_chunk_id = None
             end_chunk_id = None
@@ -331,9 +353,7 @@ def insert_hierarchical_nodes(
                 # 对于段落，关联其包含的叶子节点的 chunks
                 child_source_indices = []
                 for child_id in node.children_ids:
-                    child_node = next(
-                        (n for n in leaf_nodes if n.node_id == child_id), None
-                    )
+                    child_node = leaf_by_id.get(child_id)
                     if child_node:
                         source_idx = child_node.metadata.get("source_index")
                         if source_idx is not None:
