@@ -1,9 +1,34 @@
-"""Shared datatypes for retrieval."""
+"""Shared datatypes for retrieval.
+
+These types are intentionally lightweight and dependency-free so they can be
+used across the retrieval package (vector search, keyword search, fetching,
+reranking, MCP formatting).
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Tuple
+
+
+SourcesDict = Dict[str, Dict[str, Any]]
+
+# (chunk_id, rrf_score, sources)
+MergedChunk = Tuple[str, float, SourcesDict]
+
+
+@dataclass(frozen=True)
+class EvidenceUnit:
+    """Unit-level evidence span for v0.2 schema (content_units + chunk_unit_spans)."""
+
+    unit_id: str
+    unit_index: int
+    unit_type: str
+    text: str
+    anchor_json: Any
+    unit_order: int = 0
+    start_char: int | None = None
+    end_char: int | None = None
 
 
 @dataclass
@@ -15,7 +40,17 @@ class RetrievalResult:
     page_idx: int
     score: float
     source: str  # "vector", "keyword", or "hybrid"
-    vector_score: float | None = None  # Original vector similarity score
-    keyword_score: float | None = None  # Original keyword match score
+    vector_score: float | None = None
+    keyword_score: float | None = None
     embedding: List[float] | None = None
-    rerank_score: float | None = None  # Reranker score (if enabled)
+    rerank_score: float | None = None
+    evidence_units: List[EvidenceUnit] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RetrievalMetrics:
+    """Optional retrieval diagnostics (kept for backwards compatibility)."""
+
+    query: str
+    mode: str
+    elapsed_ms: float

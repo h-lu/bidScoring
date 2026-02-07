@@ -12,7 +12,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Dict, List, Literal, Set, Tuple
 
 import psycopg
 
@@ -28,19 +28,14 @@ from .config import (
 from .db import (
     HAS_CONNECTION_POOL,
     ConnectionPool,
-    fetch_chunks_by_id,
     keyword_search_fulltext,
     keyword_search_legacy,
     vector_search,
 )
-from .rerankers import (
-    HAS_COLBERT_RERANKER,
-    HAS_RERANKER,
-    ColBERTReranker,
-    Reranker,
-)
+from .fetch import fetch_chunks
+from . import rerankers as _rerankers
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
-from .types import RetrievalResult
+from .types import MergedChunk, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
@@ -154,13 +149,13 @@ class HybridRetriever:
         self._enable_rerank = enable_rerank
         self._rerank_backend = rerank_backend
         self._rerank_top_n = rerank_top_n or top_k
-        self._reranker: Optional[Union[Reranker, ColBERTReranker]] = None
+        self._reranker: object | None = None
 
         if enable_rerank:
             if rerank_backend == "cross_encoder":
-                model_name = rerank_model or Reranker.DEFAULT_MODEL
-                if HAS_RERANKER:
-                    self._reranker = Reranker(model_name=model_name)
+                model_name = rerank_model or _rerankers.Reranker.DEFAULT_MODEL
+                if _rerankers.HAS_RERANKER:
+                    self._reranker = _rerankers.Reranker(model_name=model_name)
                 else:
                     logger.warning(
                         "Reranking enabled (cross_encoder) but sentence-transformers not installed. "
@@ -168,9 +163,9 @@ class HybridRetriever:
                     )
                     self._enable_rerank = False
             elif rerank_backend == "colbert":
-                model_name = rerank_model or ColBERTReranker.DEFAULT_MODEL
-                if HAS_COLBERT_RERANKER:
-                    self._reranker = ColBERTReranker(model_name=model_name)
+                model_name = rerank_model or _rerankers.ColBERTReranker.DEFAULT_MODEL
+                if _rerankers.HAS_COLBERT_RERANKER:
+                    self._reranker = _rerankers.ColBERTReranker(model_name=model_name)
                 else:
                     logger.warning(
                         "Reranking enabled (colbert) but ragatouille not installed. "
@@ -328,57 +323,9 @@ class HybridRetriever:
 
     def _fetch_chunks(
         self,
-        merged_results: List[Tuple[str, float, Dict[str, dict]]],
+        merged_results: List[MergedChunk],
     ) -> List[RetrievalResult]:
-        if not merged_results:
-            return []
-
-        chunk_ids = [doc_id for doc_id, _, _ in merged_results]
-        scores_dict = {
-            doc_id: (rrf_score, sources)
-            for doc_id, rrf_score, sources in merged_results
-        }
-
-        try:
-            rows = fetch_chunks_by_id(
-                get_connection=self._get_connection, chunk_ids=chunk_ids
-            )
-            results: List[RetrievalResult] = []
-            for chunk_id in chunk_ids:
-                if chunk_id not in rows:
-                    continue
-                _, text_raw, page_idx = rows[chunk_id]
-                rrf_score, sources = scores_dict[chunk_id]
-
-                source_types = list(sources.keys())
-                if len(source_types) == 2:
-                    source = "hybrid"
-                elif "vector" in source_types:
-                    source = "vector"
-                elif "keyword" in source_types:
-                    source = "keyword"
-                else:
-                    source = "unknown"
-
-                vector_score = sources.get("vector", {}).get("score")
-                keyword_score = sources.get("keyword", {}).get("score")
-
-                results.append(
-                    RetrievalResult(
-                        chunk_id=chunk_id,
-                        text=text_raw,
-                        page_idx=page_idx,
-                        score=rrf_score,
-                        source=source,
-                        vector_score=vector_score,
-                        keyword_score=keyword_score,
-                        embedding=None,
-                    )
-                )
-            return results
-        except Exception as e:  # pragma: no cover
-            logger.error("Failed to fetch chunks: %s", e, exc_info=True)
-            return []
+        return fetch_chunks(self, merged_results)
 
     def retrieve(
         self, query: str, keywords: List[str] | None = None
