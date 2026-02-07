@@ -42,7 +42,9 @@ def test_ingestable_chunk_count_is_close_to_real_docs(tmp_path: Path):
                 encoding="utf-8"
             )
         )
-        ingestable = [x for x in content if x["type"] not in {"header", "page_number", "footer"}]
+        ingestable = [
+            x for x in content if x["type"] not in {"header", "page_number", "footer"}
+        ]
         assert len(ingestable) >= 950
 
 

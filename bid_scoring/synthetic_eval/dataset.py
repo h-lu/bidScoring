@@ -115,7 +115,9 @@ def generate(
 
     # Per-scenario qrels (version_tag keeps qrels self-describing).
     queries = build_queries(version_tag=profile.version_tag)
-    qrels = build_qrels(anchors=anchors, content=content, version_tag=profile.version_tag)
+    qrels = build_qrels(
+        anchors=anchors, content=content, version_tag=profile.version_tag
+    )
     _assert_dataset(content, queries, qrels)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -172,7 +174,9 @@ def validate(
     summary: dict[str, tuple[int, int, int]] = {}
 
     for scenario in scenarios:
-        content = _read_json(output_dir / f"content_list.synthetic_bidder_{scenario}.json")
+        content = _read_json(
+            output_dir / f"content_list.synthetic_bidder_{scenario}.json"
+        )
         qrels = _read_jsonl(output_dir / f"qrels.source_id.{scenario}.jsonl")
         _assert_dataset(content, shared_queries, qrels)
         summary[scenario] = (len(content), len(shared_queries), len(qrels))

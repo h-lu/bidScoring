@@ -197,9 +197,7 @@ class ContentBuilder:
     @staticmethod
     def _ingestable_count(items: list[dict[str, Any]]) -> int:
         return sum(
-            1
-            for x in items
-            if x.get("type") not in {"header", "page_number", "footer"}
+            1 for x in items if x.get("type") not in {"header", "page_number", "footer"}
         )
 
     def build(self) -> tuple[list[dict[str, Any]], dict[str, int]]:

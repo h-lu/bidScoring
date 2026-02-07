@@ -341,4 +341,3 @@ def emit_core_pages(builder: Any, page_idx: int) -> None:
             text="注：宣传册中的性能描述不作为商务承诺。",
         )
         return
-
