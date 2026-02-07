@@ -62,21 +62,22 @@ def rebuild_chunks_from_units(
 
             texts: list[str] = []
             bboxes: list[Any] = []
-            page_idx = 0
+            page_idx: int | None = None
             for _, _, text_raw, anchor_json in group:
                 texts.append(text_raw or "")
                 anchor_obj = _as_obj(anchor_json) or {}
                 anchors = anchor_obj.get("anchors") or []
                 if anchors and isinstance(anchors, list):
-                    a0 = anchors[0] if anchors else None
-                    if a0 and isinstance(a0, dict):
-                        if "page_idx" in a0 and page_idx == 0:
+                    for a in anchors:
+                        if not isinstance(a, dict):
+                            continue
+                        if page_idx is None and "page_idx" in a:
                             try:
-                                page_idx = int(a0.get("page_idx") or 0)
+                                page_idx = int(a.get("page_idx"))
                             except Exception:
                                 page_idx = 0
-                        if "bbox" in a0 and a0.get("bbox") is not None:
-                            bboxes.append(a0.get("bbox"))
+                        if "bbox" in a and a.get("bbox") is not None:
+                            bboxes.append(a.get("bbox"))
 
             text_raw = "\n".join(t for t in texts if t)
             text_hash = hashlib.sha256((text_raw or "").encode("utf-8")).hexdigest()
@@ -108,7 +109,7 @@ def rebuild_chunks_from_units(
                     version_id,
                     source_id,
                     chunk_index - 1,
-                    page_idx,
+                    page_idx if page_idx is not None else 0,
                     bbox_json,
                     "rechunk",
                     text_raw,
