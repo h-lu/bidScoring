@@ -16,8 +16,6 @@ from typing import Dict, List, Literal, Set, Tuple
 
 import psycopg
 
-from bid_scoring.embeddings import embed_single_text
-
 from .cache import LRUCache
 from .config import (
     FieldKeywordsDict,
@@ -25,16 +23,12 @@ from .config import (
     build_synonym_index,
     load_retrieval_config,
 )
-from .db import (
-    HAS_CONNECTION_POOL,
-    ConnectionPool,
-    keyword_search_fulltext,
-    keyword_search_legacy,
-    vector_search,
-)
+from .db import HAS_CONNECTION_POOL, ConnectionPool
 from .fetch import fetch_chunks
 from . import rerankers as _rerankers
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
+from .search_keyword import keyword_search_fulltext, keyword_search_legacy
+from .search_vector import vector_search
 from .types import MergedChunk, RetrievalResult
 
 logger = logging.getLogger(__name__)
@@ -264,62 +258,17 @@ class HybridRetriever:
         return list(expanded)
 
     def _vector_search(self, query: str) -> List[Tuple[str, float]]:
-        try:
-            query_emb = embed_single_text(query)
-            return vector_search(
-                get_connection=self._get_connection,
-                version_id=self.version_id,
-                query_embedding=query_emb,
-                top_k=self.top_k,
-                hnsw_ef_search=self._hnsw_ef_search,
-            )
-        except Exception as e:  # pragma: no cover
-            logger.error(
-                "Vector search failed for query '%s...': %s",
-                query[:50],
-                e,
-                exc_info=True,
-            )
-            return []
+        # Delegate to module-level implementation so tests can monkeypatch
+        # `bid_scoring.retrieval.search_vector.embed_single_text`.
+        return vector_search(self, query)
 
     def _keyword_search_fulltext(
         self, keywords: List[str], use_or_semantic: bool = True
     ) -> List[Tuple[str, float]]:
-        if not keywords:
-            return []
-
-        cleaned_keywords = [k.strip().replace('"', " ") for k in keywords if k.strip()]
-        if not cleaned_keywords:
-            return []
-
-        joiner = " OR " if use_or_semantic else " "
-        ts_query = joiner.join(cleaned_keywords)
-
-        try:
-            return keyword_search_fulltext(
-                get_connection=self._get_connection,
-                version_id=self.version_id,
-                ts_query=ts_query,
-                top_k=self.top_k,
-            )
-        except psycopg.Error as e:
-            logger.error("Fulltext search failed: %s", e, exc_info=True)
-            logger.warning("Falling back to legacy keyword search")
-            return self._keyword_search_legacy(keywords)
+        return keyword_search_fulltext(self, keywords, use_or_semantic=use_or_semantic)
 
     def _keyword_search_legacy(self, keywords: List[str]) -> List[Tuple[str, float]]:
-        try:
-            return keyword_search_legacy(
-                get_connection=self._get_connection,
-                version_id=self.version_id,
-                keywords=keywords,
-                top_k=self.top_k,
-            )
-        except Exception as e:  # pragma: no cover
-            logger.error(
-                "Keyword search failed with keywords %s: %s", keywords, e, exc_info=True
-            )
-            return []
+        return keyword_search_legacy(self, keywords)
 
     def _fetch_chunks(
         self,
