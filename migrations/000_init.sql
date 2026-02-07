@@ -144,20 +144,15 @@ CREATE TABLE IF NOT EXISTS citations (
     chunk_id UUID REFERENCES chunks(chunk_id) ON DELETE SET NULL,
     cited_text TEXT,
     verified BOOLEAN,
-    match_type TEXT
+    match_type TEXT,
+    -- v0.2 evidence fields (unit-level, traceable & verifiable)
+    unit_id UUID REFERENCES content_units(unit_id),
+    quote_text TEXT,
+    quote_start_char INTEGER,
+    quote_end_char INTEGER,
+    anchor_json JSONB,
+    evidence_hash TEXT
 );
-ALTER TABLE citations
-    DROP CONSTRAINT IF EXISTS citations_chunk_id_fkey;
-ALTER TABLE citations
-    ADD CONSTRAINT citations_chunk_id_fkey
-    FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE SET NULL;
-ALTER TABLE citations
-    ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES content_units(unit_id),
-    ADD COLUMN IF NOT EXISTS quote_text TEXT,
-    ADD COLUMN IF NOT EXISTS quote_start_char INTEGER,
-    ADD COLUMN IF NOT EXISTS quote_end_char INTEGER,
-    ADD COLUMN IF NOT EXISTS anchor_json JSONB,
-    ADD COLUMN IF NOT EXISTS evidence_hash TEXT;
 -- ============================================
 -- Contextual Chunks (from 005_cpc_contextual_chunks.sql)
 -- ============================================
