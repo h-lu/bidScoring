@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from bid_scoring.anchors_v2 import build_anchor_json, compute_unit_hash, normalize_text
 
 
@@ -132,20 +134,22 @@ def backfill_units_from_chunks(
                 source_element_id = source_id or f"chunk_{int(chunk_index):04d}"
                 bbox_obj = _as_obj(bbox) or []
                 page_idx_int = int(page_idx or 0)
+                page_w, page_h = page_dim_by_idx.get(page_idx_int, (None, None))
 
-                anchor_json = build_anchor_json(
-                    anchors=[
+                anchors: list[dict[str, Any]] = []
+                for x1, y1, x2, y2 in _iter_bbox_rects(bbox_obj):
+                    anchors.append(
                         {
                             "page_idx": page_idx_int,
-                            "bbox": bbox_obj,
+                            "bbox": [x1, y1, x2, y2],
                             "coord_sys": "mineru_bbox_v1",
-                            "page_w": None,
-                            "page_h": None,
+                            "page_w": page_w,
+                            "page_h": page_h,
                             "path": None,
                             "source": {"element_id": source_element_id},
                         }
-                    ]
-                )
+                    )
+                anchor_json = build_anchor_json(anchors=anchors)
 
                 text_raw_str = text_raw or ""
                 text_norm = normalize_text(text_raw_str)
@@ -187,7 +191,7 @@ def backfill_units_from_chunks(
                         text_raw_str,
                         text_norm,
                         len(text_raw_str),
-                        json.dumps(anchor_json, ensure_ascii=False),
+                        Jsonb(anchor_json),
                         source_element_id,
                         unit_hash,
                     ),

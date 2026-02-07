@@ -16,6 +16,8 @@ import re
 import uuid
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from bid_scoring.anchors_v2 import build_anchor_json, compute_unit_hash, normalize_text
 
 logger = logging.getLogger(__name__)
@@ -208,6 +210,19 @@ def ingest_content_list(
     units_data: list[dict[str, Any]] = []
     type_counts = {}
 
+    # v0.2: document_pages fallback.
+    # Infer per-page dimensions from observed bbox x2/y2 maxima (even for skipped items),
+    # so anchors can carry page_w/page_h for stable UI rendering.
+    page_dim_by_idx: dict[int, tuple[float | None, float | None]] = {}
+    for item in content_list:
+        page_idx = int(item.get("page_idx", 0) or 0)
+        for _, _, x2, y2 in _iter_bbox_rects(item.get("bbox")):
+            cur_w, cur_h = page_dim_by_idx.get(page_idx, (None, None))
+            page_dim_by_idx[page_idx] = (
+                max(cur_w or 0.0, float(x2)),
+                max(cur_h or 0.0, float(y2)),
+            )
+
     for i, item in enumerate(content_list):
         chunk_data = _prepare_chunk_data(item, i)
         if chunk_data is None:
@@ -219,24 +234,32 @@ def ingest_content_list(
         chunks_data.append(chunk_data)
 
         # v0.2 normalized unit (stable evidence) derived from the same MineRU item.
-        page_idx = int(item.get("page_idx", 0) or 0)
-        bbox = item.get("bbox", []) or []
         source_element_id = item.get("source_element_id") or chunk_data["source_id"]
-        anchor_json = build_anchor_json(
-            anchors=[
+        page_idx = int(item.get("page_idx", 0) or 0)
+        page_w, page_h = page_dim_by_idx.get(page_idx, (None, None))
+
+        anchors: list[dict[str, Any]] = []
+        for x1, y1, x2, y2 in _iter_bbox_rects(item.get("bbox")):
+            anchors.append(
                 {
                     "page_idx": page_idx,
-                    "bbox": bbox,
+                    "bbox": [x1, y1, x2, y2],
                     "coord_sys": "mineru_bbox_v1",
-                    "page_w": None,
-                    "page_h": None,
+                    "page_w": page_w,
+                    "page_h": page_h,
                     "path": None,
                     "source": {"element_id": source_element_id},
                 }
-            ]
-        )
+            )
+
+        anchor_json = build_anchor_json(anchors=anchors)
         text_raw = chunk_data.get("text_raw") or ""
         text_norm = normalize_text(text_raw)
+        unit_hash = compute_unit_hash(
+            text_norm=text_norm,
+            anchor_json=anchor_json,
+            source_element_id=source_element_id,
+        )
 
         units_data.append(
             {
@@ -247,13 +270,7 @@ def ingest_content_list(
                 "char_count": len(text_raw),
                 "anchor_json": anchor_json,
                 "source_element_id": source_element_id,
-                "unit_hash": compute_unit_hash(
-                    text_norm=text_norm,
-                    anchor_json=anchor_json,
-                    source_element_id=source_element_id,
-                ),
-                "page_idx": page_idx,
-                "bbox": bbox,
+                "unit_hash": unit_hash,
             }
         )
 
@@ -284,20 +301,9 @@ def ingest_content_list(
             (version_id, document_id, source_uri, None, parser_version, status),
         )
 
-        # v0.2: document_pages (infer page dims from observed bboxes as a fallback).
-        page_dim_by_idx: dict[int, tuple[float | None, float | None]] = {}
-        for unit in units_data:
-            pidx = int(unit["page_idx"])
-            for _, _, x2, y2 in _iter_bbox_rects(unit.get("bbox")):
-                cur_w, cur_h = page_dim_by_idx.get(pidx, (None, None))
-                page_dim_by_idx[pidx] = (
-                    max(cur_w or 0.0, float(x2)),
-                    max(cur_h or 0.0, float(y2)),
-                )
-
-        page_idxs = sorted({int(u["page_idx"]) for u in units_data})
-        for pidx in page_idxs:
-            page_w, page_h = page_dim_by_idx.get(pidx, (None, None))
+        # v0.2: document_pages (fallback inferred from bboxes).
+        for pidx in sorted(page_dim_by_idx.keys()):
+            page_w, page_h = page_dim_by_idx.get(int(pidx), (None, None))
             cur.execute(
                 """
                 INSERT INTO document_pages (version_id, page_idx, page_w, page_h, coord_sys)
@@ -345,119 +351,120 @@ def ingest_content_list(
                     unit["text_raw"],
                     unit["text_norm"],
                     unit["char_count"],
-                    json.dumps(unit["anchor_json"], ensure_ascii=False),
+                    Jsonb(unit["anchor_json"]),
                     unit["source_element_id"],
                     unit["unit_hash"],
                 ),
             )
             unit["unit_id"] = str(cur.fetchone()[0])
 
-        # ★ FIX: 先删除该 version 的现有 chunks，防止重复导入
-        cur.execute("DELETE FROM chunks WHERE version_id = %s", (version_id,))
-        if cur.rowcount > 0:
-            logger.warning(
-                f"[Ingest] Deleted {cur.rowcount} existing chunks for version {version_id}"
-            )
+        # v0.2: chunks are a rebuildable index layer. Upsert by (version_id, source_id)
+        # to keep chunk_id stable across re-ingestion (preserves citation provenance).
+        cur.execute(
+            """
+            DELETE FROM chunk_unit_spans
+            WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE version_id = %s)
+            """,
+            (version_id,),
+        )
 
-        # 批量插入 chunks
-        # NOTE: v0.2 keeps chunks as a rebuildable index layer; for now we keep
-        # a 1:1 mapping between chunk and unit, and persist the mapping in
-        # chunk_unit_spans so citations can stay stable even if chunking changes later.
+        seen_source_ids: set[str] = set()
+
         for data, unit in zip(chunks_data, units_data, strict=False):
-            chunk_id = str(uuid.uuid4())
-            # 根据是否有文本来决定是否生成 tsvector
-            if data["text_tsv"]:
-                cur.execute(
-                    """
-                    INSERT INTO chunks (
-                        chunk_id, project_id, version_id, source_id, chunk_index, page_idx,
-                        bbox, element_type, text_raw, text_hash, text_tsv,
-                        img_path, image_caption, image_footnote, 
-                        table_body, table_caption, table_footnote,
-                        list_items, sub_type, text_level
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        to_tsvector('simple', %s),
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    """,
-                    (
-                        chunk_id,
-                        project_id,
-                        version_id,
-                        data["source_id"],
-                        data["chunk_index"],
-                        data["page_idx"],
-                        data["bbox"],
-                        data["element_type"],
-                        data["text_raw"],
-                        data["text_hash"],
-                        data["text_tsv"],
-                        data["img_path"],
-                        data["image_caption"],
-                        data["image_footnote"],
-                        data["table_body"],
-                        data["table_caption"],
-                        data["table_footnote"],
-                        data["list_items"],
-                        data["sub_type"],
-                        data["text_level"],
-                    ),
+            seen_source_ids.add(str(data["source_id"]))
+            new_chunk_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO chunks (
+                    chunk_id, project_id, version_id, source_id, chunk_index, page_idx,
+                    bbox, element_type, text_raw, text_hash, text_tsv,
+                    img_path, image_caption, image_footnote,
+                    table_body, table_caption, table_footnote,
+                    list_items, sub_type, text_level
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    to_tsvector('simple', %s),
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s
                 )
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO chunks (
-                        chunk_id, project_id, version_id, source_id, chunk_index, page_idx,
-                        bbox, element_type, text_raw, text_hash, text_tsv,
-                        img_path, image_caption, image_footnote, 
-                        table_body, table_caption, table_footnote,
-                        list_items, sub_type, text_level
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        NULL,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    """,
-                    (
-                        chunk_id,
-                        project_id,
-                        version_id,
-                        data["source_id"],
-                        data["chunk_index"],
-                        data["page_idx"],
-                        data["bbox"],
-                        data["element_type"],
-                        data["text_raw"],
-                        data["text_hash"],
-                        data["img_path"],
-                        data["image_caption"],
-                        data["image_footnote"],
-                        data["table_body"],
-                        data["table_caption"],
-                        data["table_footnote"],
-                        data["list_items"],
-                        data["sub_type"],
-                        data["text_level"],
-                    ),
-                )
+                ON CONFLICT (version_id, source_id) DO UPDATE SET
+                    project_id = EXCLUDED.project_id,
+                    chunk_index = EXCLUDED.chunk_index,
+                    page_idx = EXCLUDED.page_idx,
+                    bbox = EXCLUDED.bbox,
+                    element_type = EXCLUDED.element_type,
+                    text_raw = EXCLUDED.text_raw,
+                    text_hash = EXCLUDED.text_hash,
+                    text_tsv = EXCLUDED.text_tsv,
+                    img_path = EXCLUDED.img_path,
+                    image_caption = EXCLUDED.image_caption,
+                    image_footnote = EXCLUDED.image_footnote,
+                    table_body = EXCLUDED.table_body,
+                    table_caption = EXCLUDED.table_caption,
+                    table_footnote = EXCLUDED.table_footnote,
+                    list_items = EXCLUDED.list_items,
+                    sub_type = EXCLUDED.sub_type,
+                    text_level = EXCLUDED.text_level
+                RETURNING chunk_id
+                """,
+                (
+                    new_chunk_id,
+                    project_id,
+                    version_id,
+                    data["source_id"],
+                    data["chunk_index"],
+                    data["page_idx"],
+                    data["bbox"],
+                    data["element_type"],
+                    data["text_raw"],
+                    data["text_hash"],
+                    (data.get("text_tsv") or ""),
+                    data["img_path"],
+                    data["image_caption"],
+                    data["image_footnote"],
+                    data["table_body"],
+                    data["table_caption"],
+                    data["table_footnote"],
+                    data["list_items"],
+                    data["sub_type"],
+                    data["text_level"],
+                ),
+            )
+            (chunk_id,) = cur.fetchone()
 
             cur.execute(
                 """
                 INSERT INTO chunk_unit_spans (
                     chunk_id, unit_id, unit_order, start_char, end_char
                 ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (chunk_id, unit_order) DO UPDATE SET
+                    unit_id = EXCLUDED.unit_id,
+                    start_char = EXCLUDED.start_char,
+                    end_char = EXCLUDED.end_char
                 """,
                 (
-                    chunk_id,
+                    str(chunk_id),
                     unit["unit_id"],
                     0,
                     0,
                     len(unit.get("text_raw") or ""),
                 ),
             )
+
+        # Remove stale chunks that aren't part of this ingestion run.
+        if seen_source_ids:
+            cur.execute(
+                """
+                DELETE FROM chunks
+                WHERE version_id = %s
+                  AND NOT (source_id = ANY(%s))
+                """,
+                (version_id, sorted(seen_source_ids)),
+            )
+        else:
+            cur.execute("DELETE FROM chunks WHERE version_id = %s", (version_id,))
 
     conn.commit()
 
