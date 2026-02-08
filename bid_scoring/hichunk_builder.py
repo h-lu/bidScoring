@@ -30,7 +30,8 @@ class HiChunkBuilder:
         - text_level=2: 二级标题
         - ...
         """
-        return item.get("type") == "text" and item.get("text_level", 0) > 0
+        text_level = item.get("text_level")
+        return item.get("type") == "text" and text_level is not None and text_level > 0
 
     def _get_heading_level(self, item: dict) -> int:
         """获取标题层级（0 表示不是标题）"""
