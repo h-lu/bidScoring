@@ -41,3 +41,4 @@ temp/
 .worktrees/
 worktrees/
 migrations_backup*/
+.worktrees/

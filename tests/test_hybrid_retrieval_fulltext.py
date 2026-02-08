@@ -82,8 +82,12 @@ def test_fulltext_search_integration():
         assert score >= 0  # ts_rank_cd returns non-negative values
 
 
-def test_fulltext_search_uses_websearch_to_tsquery_and_normalized_rank():
-    """Fulltext SQL should use websearch parser and normalized ts_rank_cd."""
+def test_fulltext_search_uses_legacy_ilike_for_chinese():
+    """Fulltext search now uses legacy ILIKE for better Chinese keyword matching.
+
+    Note: The 'simple' text search configuration does not properly tokenize Chinese
+    text, so we use ILIKE pattern matching which works reliably for Chinese keywords.
+    """
     from bid_scoring.hybrid_retrieval import HybridRetriever
 
     retriever = HybridRetriever(
@@ -96,11 +100,8 @@ def test_fulltext_search_uses_websearch_to_tsquery_and_normalized_rank():
         def execute(self, sql, params=None):
             executed_sql.append((sql, params))
 
-        def fetchone(self):
-            return ("'培训' | '时长'",)
-
         def fetchall(self):
-            return [("chunk-1", 0.42)]
+            return [("chunk-1", 1.0)]
 
         def __enter__(self):
             return self
@@ -122,18 +123,15 @@ def test_fulltext_search_uses_websearch_to_tsquery_and_normalized_rank():
 
     results = retriever._keyword_search_fulltext(["培训", "时长"], use_or_semantic=True)
 
-    assert results == [("chunk-1", 0.42)]
+    assert results == [("chunk-1", 1.0)]
     full_sql = " ".join(sql for sql, _ in executed_sql)
-    assert "websearch_to_tsquery('simple', %s)" in full_sql
-    assert "ts_rank_cd" in full_sql
-    assert ", 32" in full_sql
-    assert "querytree(" in full_sql
-    assert "textsearch @@ to_tsquery('simple', %s)" not in full_sql
-    assert "ts_rank_cd(textsearch, to_tsquery('simple', %s))" not in full_sql
+    # Should use ILIKE for Chinese keyword matching
+    assert "text_raw ILIKE" in full_sql
+    assert "FROM chunks" in full_sql
 
 
-def test_fulltext_search_skips_when_querytree_not_indexable():
-    """When querytree is T/empty, keyword search should return empty directly."""
+def test_fulltext_search_handles_stopwords_gracefully():
+    """Keyword search should handle stopwords gracefully with ILIKE matching."""
     from bid_scoring.hybrid_retrieval import HybridRetriever
 
     retriever = HybridRetriever(
@@ -146,11 +144,9 @@ def test_fulltext_search_skips_when_querytree_not_indexable():
         def execute(self, sql, params=None):
             executed_sql.append((sql, params))
 
-        def fetchone(self):
-            return ("T",)
-
         def fetchall(self):
-            return [("chunk-should-not-appear", 1.0)]
+            # Return empty results for stopword-only queries
+            return []
 
         def __enter__(self):
             return self
@@ -170,7 +166,9 @@ def test_fulltext_search_skips_when_querytree_not_indexable():
 
     retriever._get_connection = lambda: FakeConnection()
 
+    # Even with stopwords, the search should execute (ILIKE doesn't have querytree limitation)
     results = retriever._keyword_search_fulltext(["的", "了"], use_or_semantic=True)
 
     assert results == []
-    assert sum("FROM chunks" in sql for sql, _ in executed_sql) == 0
+    # Should still execute the query
+    assert sum("FROM chunks" in sql for sql, _ in executed_sql) >= 1

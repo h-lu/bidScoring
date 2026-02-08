@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple
 
-import psycopg
-
 logger = logging.getLogger(__name__)
 
 
@@ -13,7 +11,19 @@ def keyword_search_fulltext(
     keywords: List[str],
     use_or_semantic: bool = True,
 ) -> List[Tuple[str, float]]:
-    """PostgreSQL full-text search (tsvector + GIN) keyword matching."""
+    """PostgreSQL keyword search using pg_trgm GIN index.
+
+    For Chinese text, 'simple' tsvector configuration doesn't tokenize properly,
+    so we use ILIKE with pg_trgm GIN index for efficient pattern matching.
+
+    Requires:
+        - pg_trgm extension: CREATE EXTENSION pg_trgm;
+        - GIN index: CREATE INDEX idx_chunks_text_raw_trgm
+                     ON chunks USING gin(text_raw gin_trgm_ops);
+
+    Performance: GIN index makes ILIKE queries efficient even for large tables.
+    See: migrations/003_add_pg_trgm_index_for_keyword_search.sql
+    """
     if not keywords:
         return []
 
@@ -21,62 +31,15 @@ def keyword_search_fulltext(
     if not cleaned_keywords:
         return []
 
-    joiner = " OR " if use_or_semantic else " "
-    ts_query = joiner.join(cleaned_keywords)
-
-    try:
-        with retriever._get_connection() as conn:  # type: ignore[attr-defined]
-            with conn.cursor() as cur:
-                cur.execute("SET LOCAL statement_timeout = '30s'")
-
-                cur.execute(
-                    "SELECT querytree(websearch_to_tsquery('simple', %s))",
-                    (ts_query,),
-                )
-                querytree_result = cur.fetchone()
-                querytree_text = (
-                    str(querytree_result[0]).strip()
-                    if querytree_result and querytree_result[0] is not None
-                    else ""
-                )
-                if querytree_text in {"", "T"}:
-                    logger.debug(
-                        "Skip fulltext search due to non-indexable querytree: %s",
-                        querytree_text,
-                    )
-                    return []
-
-                cur.execute(
-                    """
-                    WITH q AS (
-                        SELECT websearch_to_tsquery('simple', %s) AS tsq
-                    )
-                    SELECT
-                        chunk_id::text,
-                        ts_rank_cd(textsearch, q.tsq, 32) as rank
-                    FROM chunks, q
-                    WHERE version_id = %s
-                      AND textsearch @@ q.tsq
-                    ORDER BY rank DESC
-                    LIMIT %s
-                    """,
-                    (
-                        ts_query,
-                        retriever.version_id,  # type: ignore[attr-defined]
-                        retriever.top_k * 2,  # type: ignore[attr-defined]
-                    ),
-                )
-                return [(row[0], float(row[1])) for row in cur.fetchall()]
-    except psycopg.Error as e:
-        logger.error("Fulltext search failed: %s", e, exc_info=True)
-        logger.warning("Falling back to legacy keyword search")
-        return keyword_search_legacy(retriever, keywords)
+    # Use ILIKE with pg_trgm GIN index for Chinese keyword matching
+    # This provides both accuracy (for Chinese) and performance (via GIN index)
+    return keyword_search_legacy(retriever, cleaned_keywords)
 
 
 def keyword_search_legacy(
     retriever: object, keywords: List[str]
 ) -> List[Tuple[str, float]]:
-    """Legacy ILIKE keyword search (fallback)."""
+    """Legacy ILIKE keyword search with pg_trgm GIN index support."""
     if not keywords:
         return []
 
