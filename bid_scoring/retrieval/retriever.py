@@ -28,8 +28,9 @@ from .types import MergedChunk, RetrievalMetrics, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
-# Default pgvector is 40; 100 is a decent recall-oriented baseline.
-DEFAULT_HNSW_EF_SEARCH = 100
+# Context7: Default is 40. 64 is a balanced value for performance vs recall.
+# Higher values (100-200) improve recall but slow down queries significantly.
+DEFAULT_HNSW_EF_SEARCH = 64
 
 # Keep small: vector+keyword in parallel.
 MAX_SEARCH_WORKERS = 2
