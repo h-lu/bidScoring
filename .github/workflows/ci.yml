@@ -35,20 +35,25 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
       with:
-        version: "latest"
+        version: "0.5.0"
 
     - name: Install dependencies
       run: |
-        uv pip install -e . --system
-        uv pip install --group dev --system
-        uv pip install ruff --system
+        uv --version
+        uv pip install -e ".[dev]" --system || uv pip install -e . --system
+        uv pip install ruff pytest pytest-asyncio --system
 
     - name: Run database migrations
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
       run: |
-        # Run merged schema for CI
+        # Wait for PostgreSQL to be ready
+        sleep 5
+        # Run all migrations in order
         psql "$DATABASE_URL" -f migrations/000_init.sql
+        psql "$DATABASE_URL" -f migrations/002_add_fulltext_search.sql || true
+        psql "$DATABASE_URL" -f migrations/003_add_pg_trgm_index_for_keyword_search.sql || true
+        psql "$DATABASE_URL" -f migrations/004_optimize_vector_storage_and_hnsw.sql || true
 
     - name: Lint with ruff
       run: |
@@ -75,7 +80,7 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v3
       with:
-        version: "latest"
+        version: "0.5.0"
 
     - name: Install ruff
       run: uv pip install ruff --system
