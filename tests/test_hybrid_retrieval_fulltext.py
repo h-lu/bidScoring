@@ -82,11 +82,12 @@ def test_fulltext_search_integration():
         assert score >= 0  # ts_rank_cd returns non-negative values
 
 
-def test_fulltext_search_uses_legacy_ilike_for_chinese():
-    """Fulltext search now uses legacy ILIKE for better Chinese keyword matching.
+def test_fulltext_search_uses_ilikewith_pg_trgm():
+    """Fulltext search now uses ILIKE with pg_trgm GIN index for Chinese text.
 
     Note: The 'simple' text search configuration does not properly tokenize Chinese
-    text, so we use ILIKE pattern matching which works reliably for Chinese keywords.
+    text, so we use ILIKE pattern matching with pg_trgm GIN index which works
+    reliably and efficiently for Chinese keywords.
     """
     from bid_scoring.hybrid_retrieval import HybridRetriever
 
@@ -125,7 +126,7 @@ def test_fulltext_search_uses_legacy_ilike_for_chinese():
 
     assert results == [("chunk-1", 1.0)]
     full_sql = " ".join(sql for sql, _ in executed_sql)
-    # Should use ILIKE for Chinese keyword matching
+    # Should use ILIKE for Chinese keyword matching with pg_trgm GIN index
     assert "text_raw ILIKE" in full_sql
     assert "FROM chunks" in full_sql
 

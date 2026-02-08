@@ -33,8 +33,10 @@ from .types import MergedChunk, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
-# Default HNSW search expansion factor for better recall.
-DEFAULT_HNSW_EF_SEARCH = 100
+# Default HNSW search expansion factor.
+# Context7: Default is 40. Higher values improve recall but slow down queries.
+# For performance-critical applications, use 40-64. For better recall, use 100-200.
+DEFAULT_HNSW_EF_SEARCH = 64
 
 # Maximum number of parallel search workers
 MAX_SEARCH_WORKERS = 2

@@ -277,12 +277,37 @@ def embed_texts(
     return all_embeddings
 
 
+# Embedding 缓存（避免重复 API 调用）
+# 根据 Context7 最佳实践，缓存是减少 Embedding API 延迟的关键优化
+_embedding_cache: dict[tuple[str, str], list[float]] = {}
+_MAX_CACHE_SIZE = 1024
+
+
+def _get_cached_embedding(text: str, model: str) -> list[float] | None:
+    """从缓存获取 embedding"""
+    cache_key = (text.strip(), model)
+    return _embedding_cache.get(cache_key)
+
+
+def _set_cached_embedding(text: str, model: str, embedding: list[float]) -> None:
+    """将 embedding 存入缓存（LRU 策略）"""
+    cache_key = (text.strip(), model)
+    
+    # 如果缓存已满，清除最早的 20%
+    if len(_embedding_cache) >= _MAX_CACHE_SIZE:
+        keys_to_remove = list(_embedding_cache.keys())[: _MAX_CACHE_SIZE // 5]
+        for key in keys_to_remove:
+            del _embedding_cache[key]
+    
+    _embedding_cache[cache_key] = embedding
+
+
 def embed_single_text(
     text: str,
     client: OpenAI | None = None,
     model: str | None = None,
 ) -> list[float]:
-    """生成单条文本的向量
+    """生成单条文本的向量（带缓存）
 
     Args:
         text: 输入文本
@@ -296,8 +321,23 @@ def embed_single_text(
         dim = get_embedding_config()["dim"]
         return [0.0] * dim
 
+    # 使用配置中的默认模型
+    if model is None:
+        model = get_embedding_config()["model"]
+
+    # 检查缓存
+    cached = _get_cached_embedding(text, model)
+    if cached is not None:
+        return cached
+
+    # 调用 API
     results = embed_texts([text], client=client, model=model)
-    return results[0]
+    embedding = results[0]
+
+    # 存入缓存
+    _set_cached_embedding(text, model, embedding)
+
+    return embedding
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
