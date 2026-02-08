@@ -292,13 +292,13 @@ def _get_cached_embedding(text: str, model: str) -> list[float] | None:
 def _set_cached_embedding(text: str, model: str, embedding: list[float]) -> None:
     """将 embedding 存入缓存（LRU 策略）"""
     cache_key = (text.strip(), model)
-    
+
     # 如果缓存已满，清除最早的 20%
     if len(_embedding_cache) >= _MAX_CACHE_SIZE:
         keys_to_remove = list(_embedding_cache.keys())[: _MAX_CACHE_SIZE // 5]
         for key in keys_to_remove:
             del _embedding_cache[key]
-    
+
     _embedding_cache[cache_key] = embedding
 
 
