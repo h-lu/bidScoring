@@ -1,0 +1,28 @@
+{
+  "version_id": "44444444-4444-4444-4444-444444444444",
+  "query": "培训对象包括哪些人",
+  "mode": "keyword",
+  "top_k": 2,
+  "results": [
+    {
+      "chunk_id": "4f80e9fd-f9d8-4dbe-b90d-077d788d30fc",
+      "page_idx": 21,
+      "source": "keyword",
+      "score": 0.01639344262295082,
+      "vector_score": null,
+      "keyword_score": 4.0,
+      "rerank_score": null,
+      "text": "培训对象：设备使用人员、科室管理员、医学工程维护人员。 培训形式：现场授课 + 实机演示 + 问题答疑。"
+    },
+    {
+      "chunk_id": "c157de33-4e57-4a88-94fa-7460098d2bee",
+      "page_idx": 20,
+      "source": "keyword",
+      "score": 0.016129032258064516,
+      "vector_score": null,
+      "keyword_score": 2.0,
+      "rerank_score": null,
+      "text": "培训目标：使使用、管理、维护人员可独立完成日常操作、参数调整、常见故障排查与应急处理。"
+    }
+  ]
+}
