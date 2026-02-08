@@ -9,10 +9,7 @@ Run with:
 
 from __future__ import annotations
 
-import json
 import os
-import uuid
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,6 +22,7 @@ from bid_scoring.retrieval import RetrievalResult
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_settings():
@@ -70,6 +68,7 @@ def mock_retrieval_results():
 # Unit Tests - Server Structure
 # ============================================================================
 
+
 class TestMCPServerStructure:
     """Test MCP server basic structure and exports."""
 
@@ -95,37 +94,29 @@ class TestMCPServerStructure:
 # Unit Tests - Tool Functions
 # ============================================================================
 
+
 class TestRetrieveTool:
     """Test retrieve tool functionality."""
 
     def test_retrieve_validates_version_id(self):
         """Test that empty version_id raises error."""
         with pytest.raises((ValueError, srv.ValidationError), match="version_id"):
-            srv.retrieve_impl(
-                version_id="",
-                query="test query"
-            )
+            srv.retrieve_impl(version_id="", query="test query")
 
     def test_retrieve_validates_top_k(self):
         """Test that invalid top_k raises error."""
         with pytest.raises(ValueError, match="top_k must be positive"):
-            srv.retrieve_impl(
-                version_id="valid-uuid",
-                query="test",
-                top_k=0
-            )
+            srv.retrieve_impl(version_id="valid-uuid", query="test", top_k=0)
 
     def test_retrieve_validates_negative_top_k(self):
         """Test that negative top_k raises error."""
         with pytest.raises(ValueError, match="top_k must be positive"):
-            srv.retrieve_impl(
-                version_id="valid-uuid",
-                query="test",
-                top_k=-1
-            )
+            srv.retrieve_impl(version_id="valid-uuid", query="test", top_k=-1)
 
     @patch.object(srv, "get_retriever")
-    def test_retrieve_returns_correct_structure(self, mock_get_retriever, mock_retrieval_results):
+    def test_retrieve_returns_correct_structure(
+        self, mock_get_retriever, mock_retrieval_results
+    ):
         """Test that retrieve returns expected structure."""
         # Setup mock
         mock_retriever = MagicMock()
@@ -135,10 +126,7 @@ class TestRetrieveTool:
 
         # Call function
         result = srv.retrieve_impl(
-            version_id="test-uuid",
-            query="质保期",
-            top_k=2,
-            mode="hybrid"
+            version_id="test-uuid", query="质保期", top_k=2, mode="hybrid"
         )
 
         # Verify structure
@@ -147,7 +135,7 @@ class TestRetrieveTool:
         assert "mode" in result
         assert "top_k" in result
         assert "results" in result
-        
+
         assert result["version_id"] == "test-uuid"
         assert result["query"] == "质保期"
         assert result["mode"] == "hybrid"
@@ -162,11 +150,7 @@ class TestRetrieveTool:
         mock_retriever.rrf.k = 60
         mock_get_retriever.return_value = mock_retriever
 
-        result = srv.retrieve_impl(
-            version_id="test-uuid",
-            query="test",
-            top_k=10
-        )
+        result = srv.retrieve_impl(version_id="test-uuid", query="test", top_k=10)
 
         for r in result["results"]:
             assert "chunk_id" in r
@@ -179,7 +163,9 @@ class TestRetrieveTool:
             assert isinstance(r["score"], float)
 
     @patch.object(srv, "get_retriever")
-    def test_retrieve_respects_include_text(self, mock_get_retriever, mock_retrieval_results):
+    def test_retrieve_respects_include_text(
+        self, mock_get_retriever, mock_retrieval_results
+    ):
         """Test that include_text=False returns empty text."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = mock_retrieval_results
@@ -187,16 +173,16 @@ class TestRetrieveTool:
         mock_get_retriever.return_value = mock_retriever
 
         result = srv.retrieve_impl(
-            version_id="test-uuid",
-            query="test",
-            include_text=False
+            version_id="test-uuid", query="test", include_text=False
         )
 
         for r in result["results"]:
             assert r["text"] == ""
 
     @patch.object(srv, "get_retriever")
-    def test_retrieve_respects_max_chars(self, mock_get_retriever, mock_retrieval_results):
+    def test_retrieve_respects_max_chars(
+        self, mock_get_retriever, mock_retrieval_results
+    ):
         """Test that max_chars truncates text."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = mock_retrieval_results
@@ -204,10 +190,7 @@ class TestRetrieveTool:
         mock_get_retriever.return_value = mock_retriever
 
         result = srv.retrieve_impl(
-            version_id="test-uuid",
-            query="test",
-            include_text=True,
-            max_chars=10
+            version_id="test-uuid", query="test", include_text=True, max_chars=10
         )
 
         for r in result["results"]:
@@ -217,6 +200,7 @@ class TestRetrieveTool:
 # ============================================================================
 # Unit Tests - Different Modes
 # ============================================================================
+
 
 class TestRetrieveModes:
     """Test different retrieval modes."""
@@ -229,11 +213,7 @@ class TestRetrieveModes:
         mock_retriever.rrf.k = 60
         mock_get_retriever.return_value = mock_retriever
 
-        srv.retrieve_impl(
-            version_id="test",
-            query="质保",
-            mode="hybrid"
-        )
+        srv.retrieve_impl(version_id="test", query="质保", mode="hybrid")
 
         mock_retriever.retrieve.assert_called_once()
 
@@ -249,11 +229,7 @@ class TestRetrieveModes:
         mock_retriever.rrf.k = 60
         mock_get_retriever.return_value = mock_retriever
 
-        srv.retrieve_impl(
-            version_id="test",
-            query="质保",
-            mode="vector"
-        )
+        srv.retrieve_impl(version_id="test", query="质保", mode="vector")
 
         mock_retriever._vector_search.assert_called_once_with("质保")
 
@@ -270,17 +246,15 @@ class TestRetrieveModes:
         mock_retriever.rrf.k = 60
         mock_get_retriever.return_value = mock_retriever
 
-        srv.retrieve_impl(
-            version_id="test",
-            query="质保期多久",
-            mode="keyword"
-        )
+        srv.retrieve_impl(version_id="test", query="质保期多久", mode="keyword")
 
         mock_retriever.extract_keywords_from_query.assert_called_once_with("质保期多久")
         mock_retriever._keyword_search_fulltext.assert_called_once()
 
     @patch.object(srv, "get_retriever")
-    def test_keyword_mode_with_explicit_keywords(self, mock_get_retriever, mock_retrieval_results):
+    def test_keyword_mode_with_explicit_keywords(
+        self, mock_get_retriever, mock_retrieval_results
+    ):
         """Test keyword mode with explicit keywords."""
         mock_retriever = MagicMock()
         mock_retriever._keyword_search_fulltext.return_value = [
@@ -291,17 +265,13 @@ class TestRetrieveModes:
         mock_get_retriever.return_value = mock_retriever
 
         srv.retrieve_impl(
-            version_id="test",
-            query="test",
-            mode="keyword",
-            keywords=["质保", "5年"]
+            version_id="test", query="test", mode="keyword", keywords=["质保", "5年"]
         )
 
         # Should not call extract_keywords_from_query when keywords provided
         mock_retriever.extract_keywords_from_query.assert_not_called()
         mock_retriever._keyword_search_fulltext.assert_called_once_with(
-            ["质保", "5年"],
-            use_or_semantic=True
+            ["质保", "5年"], use_or_semantic=True
         )
 
     @patch.object(srv, "get_retriever")
@@ -312,16 +282,13 @@ class TestRetrieveModes:
         mock_get_retriever.return_value = mock_retriever
 
         with pytest.raises(ValueError, match="Unknown mode"):
-            srv.retrieve_impl(
-                version_id="test",
-                query="test",
-                mode="invalid_mode"
-            )
+            srv.retrieve_impl(version_id="test", query="test", mode="invalid_mode")
 
 
 # ============================================================================
 # Unit Tests - Caching
 # ============================================================================
+
 
 class TestRetrieverCaching:
     """Test retriever caching behavior."""
@@ -351,7 +318,7 @@ class TestRetrieverCaching:
 
         # First call
         retriever1 = srv.get_retriever("version-1", top_k=10)
-        
+
         # Second call with same params should return cached
         retriever2 = srv.get_retriever("version-1", top_k=10)
 
@@ -381,10 +348,11 @@ class TestRetrieverCaching:
 # Integration Tests - Real Database (Optional)
 # ============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     not os.getenv("DATABASE_URL") or not os.getenv("OPENAI_API_KEY"),
-    reason="DATABASE_URL and OPENAI_API_KEY required for integration tests"
+    reason="DATABASE_URL and OPENAI_API_KEY required for integration tests",
 )
 class TestMCPIntegration:
     """Integration tests with real database."""
@@ -392,10 +360,7 @@ class TestMCPIntegration:
     def test_real_retrieve_hybrid(self, sample_version_id):
         """Test real hybrid retrieval."""
         result = srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="售后响应时间",
-            top_k=3,
-            mode="hybrid"
+            version_id=sample_version_id, query="售后响应时间", top_k=3, mode="hybrid"
         )
 
         assert result["version_id"] == sample_version_id
@@ -412,10 +377,7 @@ class TestMCPIntegration:
     def test_real_retrieve_keyword(self, sample_version_id):
         """Test real keyword retrieval."""
         result = srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="质保期",
-            top_k=5,
-            mode="keyword"
+            version_id=sample_version_id, query="质保期", top_k=5, mode="keyword"
         )
 
         assert result["mode"] == "keyword"
@@ -424,10 +386,7 @@ class TestMCPIntegration:
     def test_real_retrieve_vector(self, sample_version_id):
         """Test real vector retrieval."""
         result = srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="培训计划",
-            top_k=3,
-            mode="vector"
+            version_id=sample_version_id, query="培训计划", top_k=3, mode="vector"
         )
 
         assert result["mode"] == "vector"
@@ -436,13 +395,10 @@ class TestMCPIntegration:
     def test_all_modes_return_consistent_structure(self, sample_version_id):
         """Test that all modes return consistent result structure."""
         modes = ["hybrid", "keyword", "vector"]
-        
+
         for mode in modes:
             result = srv.retrieve_impl(
-                version_id=sample_version_id,
-                query="测试查询",
-                top_k=2,
-                mode=mode
+                version_id=sample_version_id, query="测试查询", top_k=2, mode=mode
             )
 
             # Check consistent structure
@@ -465,10 +421,11 @@ class TestMCPIntegration:
 # Performance Tests
 # ============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not os.getenv("DATABASE_URL"),
-    reason="DATABASE_URL required for performance tests"
+    not os.getenv("DATABASE_URL") or not os.getenv("OPENAI_API_KEY"),
+    reason="DATABASE_URL and OPENAI_API_KEY required for performance tests",
 )
 class TestMCPPerformance:
     """Performance tests."""
@@ -479,10 +436,7 @@ class TestMCPPerformance:
 
         start = time.time()
         result = srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="售后响应时间",
-            top_k=10,
-            mode="hybrid"
+            version_id=sample_version_id, query="售后响应时间", top_k=10, mode="hybrid"
         )
         elapsed = time.time() - start
 
@@ -498,20 +452,12 @@ class TestMCPPerformance:
 
         # First call (cold)
         start = time.time()
-        srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="质保期",
-            top_k=5
-        )
+        srv.retrieve_impl(version_id=sample_version_id, query="质保期", top_k=5)
         cold_time = time.time() - start
 
         # Second call (warm)
         start = time.time()
-        srv.retrieve_impl(
-            version_id=sample_version_id,
-            query="培训",
-            top_k=5
-        )
+        srv.retrieve_impl(version_id=sample_version_id, query="培训", top_k=5)
         warm_time = time.time() - start
 
         # Warm should be faster or similar
@@ -522,6 +468,7 @@ class TestMCPPerformance:
 # Error Handling Tests
 # ============================================================================
 
+
 class TestErrorHandling:
     """Test error handling."""
 
@@ -531,10 +478,7 @@ class TestErrorHandling:
         mock_get_retriever.side_effect = Exception("Database connection failed")
 
         with pytest.raises(Exception, match="Database connection failed"):
-            srv.retrieve_impl(
-                version_id="test",
-                query="test"
-            )
+            srv.retrieve_impl(version_id="test", query="test")
 
     @patch.object(srv, "get_retriever")
     def test_malformed_result_handling(self, mock_get_retriever):
@@ -545,17 +489,14 @@ class TestErrorHandling:
                 chunk_id="valid-id",
                 text=None,  # None text
                 page_idx=-1,
-                score=float('nan'),
+                score=float("nan"),
                 source="hybrid",
             )
         ]
         mock_retriever.rrf.k = 60
         mock_get_retriever.return_value = mock_retriever
 
-        result = srv.retrieve_impl(
-            version_id="test",
-            query="test"
-        )
+        result = srv.retrieve_impl(version_id="test", query="test")
 
         # Should handle gracefully
         assert len(result["results"]) == 1

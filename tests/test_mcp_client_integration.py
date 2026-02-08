@@ -8,17 +8,15 @@ Requires server to be running.
 Run with:
     # Terminal 1: Start server
     uv run fastmcp run mcp_servers/retrieval_server.py -t stdio
-    
+
     # Terminal 2: Run tests
     uv run pytest tests/test_mcp_client_integration.py -v --tb=short
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -28,6 +26,7 @@ import pytest
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
@@ -37,6 +36,7 @@ except ImportError:
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture(scope="module")
 def server_params():
@@ -50,14 +50,16 @@ def server_params():
             "run",
             "mcp_servers/retrieval_server.py",
             "-t",
-            "stdio"
+            "stdio",
         ],
         cwd=str(project_root),
         env={
             **os.environ,
-            "DATABASE_URL": os.getenv("DATABASE_URL", "postgresql://localhost:5432/bid_scoring"),
+            "DATABASE_URL": os.getenv(
+                "DATABASE_URL", "postgresql://localhost:5432/bid_scoring"
+            ),
             "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-        }
+        },
     )
 
 
@@ -80,6 +82,7 @@ def version_id():
 # Basic Connection Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="MCP client not available")
 class TestMCPConnection:
@@ -100,7 +103,7 @@ class TestMCPConnection:
         """Test retrieve tool has correct schema."""
         tools = await mcp_session.list_tools()
         retrieve_tool = next((t for t in tools.tools if t.name == "retrieve"), None)
-        
+
         assert retrieve_tool is not None
         assert retrieve_tool.description is not None
         assert "version_id" in retrieve_tool.inputSchema.get("properties", {})
@@ -111,12 +114,10 @@ class TestMCPConnection:
 # Tool Call Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="MCP client not available")
-@pytest.mark.skipif(
-    not os.getenv("DATABASE_URL"),
-    reason="DATABASE_URL not set"
-)
+@pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="DATABASE_URL not set")
 class TestMCPToolCalls:
     """Test MCP tool calls."""
 
@@ -128,14 +129,14 @@ class TestMCPToolCalls:
                 "version_id": version_id,
                 "query": "售后响应时间",
                 "top_k": 3,
-                "mode": "hybrid"
-            }
+                "mode": "hybrid",
+            },
         )
 
         # Check result structure
         assert result.isError is False
         content = json.loads(result.content[0].text)
-        
+
         assert content["version_id"] == version_id
         assert content["mode"] == "hybrid"
         assert "results" in content
@@ -144,18 +145,13 @@ class TestMCPToolCalls:
     async def test_retrieve_different_modes(self, mcp_session, version_id):
         """Test retrieve with different modes."""
         modes = ["hybrid", "keyword", "vector"]
-        
+
         for mode in modes:
             result = await mcp_session.call_tool(
                 "retrieve",
-                {
-                    "version_id": version_id,
-                    "query": "质保期",
-                    "top_k": 2,
-                    "mode": mode
-                }
+                {"version_id": version_id, "query": "质保期", "top_k": 2, "mode": mode},
             )
-            
+
             assert result.isError is False
             content = json.loads(result.content[0].text)
             assert content["mode"] == mode
@@ -170,13 +166,13 @@ class TestMCPToolCalls:
                 "query": "培训计划",
                 "top_k": 2,
                 "max_chars": 50,
-                "include_text": True
-            }
+                "include_text": True,
+            },
         )
 
         assert result.isError is False
         content = json.loads(result.content[0].text)
-        
+
         for r in content["results"]:
             if r["text"]:
                 assert len(r["text"]) <= 50
@@ -189,24 +185,20 @@ class TestMCPToolCalls:
                 "version_id": version_id,
                 "query": "设备安装",
                 "top_k": 2,
-                "include_text": False
-            }
+                "include_text": False,
+            },
         )
 
         assert result.isError is False
         content = json.loads(result.content[0].text)
-        
+
         for r in content["results"]:
             assert r["text"] == ""
 
     async def test_retrieve_invalid_version(self, mcp_session):
         """Test retrieve with invalid version_id."""
         result = await mcp_session.call_tool(
-            "retrieve",
-            {
-                "version_id": "invalid-uuid",
-                "query": "test"
-            }
+            "retrieve", {"version_id": "invalid-uuid", "query": "test"}
         )
 
         # Server may return empty results or error
@@ -218,6 +210,7 @@ class TestMCPToolCalls:
 # Error Handling Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="MCP client not available")
 class TestMCPErrorHandling:
@@ -226,11 +219,7 @@ class TestMCPErrorHandling:
     async def test_retrieve_empty_version(self, mcp_session):
         """Test retrieve with empty version_id."""
         result = await mcp_session.call_tool(
-            "retrieve",
-            {
-                "version_id": "",
-                "query": "test"
-            }
+            "retrieve", {"version_id": "", "query": "test"}
         )
 
         # Should return error
@@ -239,12 +228,7 @@ class TestMCPErrorHandling:
     async def test_retrieve_invalid_top_k(self, mcp_session):
         """Test retrieve with invalid top_k."""
         result = await mcp_session.call_tool(
-            "retrieve",
-            {
-                "version_id": "test-uuid",
-                "query": "test",
-                "top_k": 0
-            }
+            "retrieve", {"version_id": "test-uuid", "query": "test", "top_k": 0}
         )
 
         # Should return error
@@ -257,7 +241,7 @@ class TestMCPErrorHandling:
             {
                 "version_id": "test-uuid"
                 # missing query
-            }
+            },
         )
 
         # Should handle gracefully
@@ -268,47 +252,35 @@ class TestMCPErrorHandling:
 # Performance Tests
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not MCP_AVAILABLE, reason="MCP client not available")
-@pytest.mark.skipif(
-    not os.getenv("DATABASE_URL"),
-    reason="DATABASE_URL not set"
-)
+@pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="DATABASE_URL not set")
 class TestMCPPerformance:
     """Test MCP performance."""
 
     async def test_retrieve_response_time(self, mcp_session, version_id):
         """Test retrieve response time."""
         start = time.time()
-        
+
         result = await mcp_session.call_tool(
-            "retrieve",
-            {
-                "version_id": version_id,
-                "query": "售后响应时间",
-                "top_k": 5
-            }
+            "retrieve", {"version_id": version_id, "query": "售后响应时间", "top_k": 5}
         )
-        
+
         elapsed = time.time() - start
-        
+
         assert result.isError is False
         assert elapsed < 10.0, f"Retrieval took too long: {elapsed:.2f}s"
 
     async def test_multiple_retrieves(self, mcp_session, version_id):
         """Test multiple sequential retrieves."""
         queries = ["质保期", "培训", "响应时间", "安装", "验收"]
-        
+
         for query in queries:
             result = await mcp_session.call_tool(
-                "retrieve",
-                {
-                    "version_id": version_id,
-                    "query": query,
-                    "top_k": 3
-                }
+                "retrieve", {"version_id": version_id, "query": query, "top_k": 3}
             )
-            
+
             assert result.isError is False
             content = json.loads(result.content[0].text)
             assert "results" in content

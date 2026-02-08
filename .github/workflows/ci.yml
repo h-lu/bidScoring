@@ -65,7 +65,8 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        pytest -v --tb=short
+        # Skip client integration tests (require running MCP server)
+        pytest -v --tb=short --ignore=tests/test_mcp_client_integration.py
 
   lint:
     runs-on: ubuntu-latest
