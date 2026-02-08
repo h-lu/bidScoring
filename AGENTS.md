@@ -7,12 +7,6 @@
 <EXTREMELY_IMPORTANT>
 You have superpowers. Superpowers teach you new skills and capabilities.
 
-**Bootstrap (Codex Desktop):** 如需刷新/查看可用 skills，运行：
-
-```bash
-~/.config/agents/skills/superpowers/.codex/superpowers-codex bootstrap
-```
-
 **For Kimi CLI:** Superpowers skills are automatically loaded from `~/.config/agents/skills/superpowers/skills/`. 
 Available skills include:
 - `using-superpowers` - How to find and use skills
