@@ -1578,6 +1578,113 @@ def extract_key_value(
 
 
 # =============================================================================
+# Layer 7: PDF Annotation
+# =============================================================================
+
+
+@mcp.tool
+@tool_wrapper("highlight_pdf")
+def highlight_pdf(
+    version_id: str,
+    chunk_ids: list[str],
+    topic: str,
+    color: str | None = None,
+    increment: bool = True,
+) -> Dict[str, Any]:
+    """Add highlights to PDF for specified chunks.
+
+    Creates visually annotated PDFs for bid review by highlighting
+    relevant content based on chunk bbox coordinates. Supports cumulative
+    layer additions for different analysis topics with color coding.
+
+    Topics are color-coded:
+    - risk: Red (liabilities, penalties)
+    - warranty: Green (after-sales, guarantees)
+    - training: Yellow (training provisions)
+    - delivery: Orange (delivery timeline)
+    - financial: Blue (payment terms)
+    - technical: Purple (technical specs)
+
+    Args:
+        version_id: Document version UUID to highlight.
+        chunk_ids: List of chunk IDs to highlight from search results.
+        topic: Topic name for color coding (e.g., 'warranty', 'training').
+        color: Optional color in hex (#RRGGBB) or RGB format (0-1).
+               Auto-assigned by topic if None.
+        increment: If True, add to existing annotated PDF.
+                  If False, create new from original.
+
+    Returns:
+        Dict with:
+        - success: Whether operation succeeded
+        - annotated_url: Presigned URL to annotated PDF (15 min valid)
+        - highlights_added: Number of highlights added
+        - file_path: MinIO object key for the annotated PDF
+        - topics: List of topics in the annotated PDF
+        - error: Error message if failed
+    """
+    import psycopg
+
+    # Validate inputs
+    version_id = validate_version_id(version_id)
+    chunk_ids = validate_string_list(
+        chunk_ids, "chunk_ids", min_items=1, max_items=500
+    )
+    topic = validate_query(topic)  # Use query validation for topic name
+    if color is not None:
+        if not isinstance(color, str):
+            raise ValidationError("color must be a string")
+
+    increment = validate_bool(increment, "increment")
+
+    settings = load_settings()
+
+    with psycopg.connect(settings["DATABASE_URL"]) as conn:
+        from mineru.minio_storage import MinIOStorage
+        from mcp_servers.pdf_annotator import PDFAnnotator, parse_color
+
+        # Parse color if provided
+        rgb_color = None
+        if color:
+            rgb_color = parse_color(color)
+
+        # Create annotator
+        storage = MinIOStorage()
+        annotator = PDFAnnotator(conn, storage)
+
+        # Perform highlighting
+        result = annotator.highlight_chunks(
+            version_id=version_id,
+            chunk_ids=chunk_ids,
+            topic=topic,
+            color=rgb_color,
+            increment=increment,
+        )
+
+        if result.success:
+            return {
+                "success": True,
+                "annotated_url": result.annotated_url,
+                "highlights_added": result.highlights_added,
+                "file_path": result.file_path,
+                "topics": result.topics,
+                "expires_in_minutes": 15,
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.error,
+            }
+
+
+def validate_bool(value: bool, name: str) -> bool:
+    """Validate boolean parameter."""
+    if not isinstance(value, bool):
+        raise ValidationError(f"{name} must be a boolean")
+    return value
+
+
+# =============================================================================
 # Backward Compatibility: Original retrieve tool
 # =============================================================================
 
