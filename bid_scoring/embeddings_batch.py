@@ -142,8 +142,12 @@ class EmbeddingBatchService:
                 (version_id,),
             )
             chunks = cur.fetchall()
-            # Convert tuples to dicts for compatibility
-            chunks = [{"chunk_id": row[0], "text_raw": row[1]} for row in chunks]
+            # Convert tuples to dicts for compatibility (handle both tuples and dicts)
+            if chunks and isinstance(chunks[0], dict):
+                chunks_list = chunks
+            else:
+                chunks_list = [{"chunk_id": row[0], "text_raw": row[1]} for row in chunks]
+            chunks = chunks_list
 
         if not chunks:
             logger.info(f"No pending chunks for version {version_id}")
