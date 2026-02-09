@@ -5,12 +5,46 @@
 
 ## Quick Start
 
+### Option 1: Run from local source
+
 ```bash
 # Start the server
 uv run fastmcp run mcp_servers/retrieval_server.py -t stdio
 
 # Or with HTTP transport
 uv run fastmcp run mcp_servers/retrieval_server.py -t http --port 8000
+```
+
+### Option 2: Install via uvx from GitHub (Recommended for MCP clients)
+
+```bash
+# Run directly without cloning
+uvx --from git+https://github.com/h-lu/bidScoring.git bid-scoring-retrieval
+
+# Or specify a specific version/branch
+uvx --from git+https://github.com/h-lu/bidScoring.git@main bid-scoring-retrieval
+```
+
+### Claude Code MCP Configuration
+
+Add to your Claude Code MCP config (`~/.claude/mcp.json` or project-specific):
+
+```json
+{
+  "mcpServers": {
+    "bid-scoring": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/h-lu/bidScoring.git",
+        "bid-scoring-retrieval"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/bid_scoring",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
 ```
 
 ## Environment Variables
