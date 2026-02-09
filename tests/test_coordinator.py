@@ -9,7 +9,7 @@ import pytest
 
 needs_all = pytest.mark.skipif(
     not all([os.getenv("DATABASE_URL"), os.getenv("OPENAI_API_KEY")]),
-    reason="Required credentials not set"
+    reason="Required credentials not set",
 )
 
 
@@ -57,10 +57,16 @@ class TestProcessingCoordinator:
 
         # Create temp directory with content_list.json
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
             content_list = [
-                {"type": "text", "text": "Hello", "page_idx": 0, "bbox": [0, 0, 100, 100]},
+                {
+                    "type": "text",
+                    "text": "Hello",
+                    "page_idx": 0,
+                    "bbox": [0, 0, 100, 100],
+                },
                 {"type": "image", "img_path": "images/img1.png", "page_idx": 0},
             ]
             (output_dir / "content_list.json").write_text(json.dumps(content_list))
@@ -109,6 +115,7 @@ class TestHelperFunctions:
         from mineru.coordinator import load_content_list
 
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
             content_list = [
@@ -125,6 +132,7 @@ class TestHelperFunctions:
         from mineru.coordinator import load_content_list
 
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             result = load_content_list(Path(tmpdir))
 

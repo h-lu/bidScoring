@@ -7,8 +7,14 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 needs_minio = pytest.mark.skipif(
-    not all([os.getenv("MINIO_ENDPOINT"), os.getenv("MINIO_ACCESS_KEY"), os.getenv("MINIO_SECRET_KEY")]),
-    reason="MinIO credentials not set"
+    not all(
+        [
+            os.getenv("MINIO_ENDPOINT"),
+            os.getenv("MINIO_ACCESS_KEY"),
+            os.getenv("MINIO_SECRET_KEY"),
+        ]
+    ),
+    reason="MinIO credentials not set",
 )
 
 
@@ -24,7 +30,7 @@ class TestMinIOStorageInit:
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         mock_minio.assert_called_once()
@@ -44,7 +50,7 @@ class TestMinIOStorageInit:
             access_key="key",
             secret_key="secret",
             bucket="test-bucket",
-            secure=True
+            secure=True,
         )
 
         call_kwargs = mock_minio.call_args[1]
@@ -70,11 +76,12 @@ class TestMinIOStorageUpload:
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         # Create temp test file
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("test content")
             temp_path = Path(f.name)
@@ -83,7 +90,7 @@ class TestMinIOStorageUpload:
             result = storage.upload_file(
                 local_path=temp_path,
                 object_key="bids/test/version/test.pdf",
-                metadata={"project_id": "test"}
+                metadata={"project_id": "test"},
             )
 
             assert result["object_key"] == "bids/test/version/test.pdf"
@@ -111,10 +118,11 @@ class TestMinIOStorageUpload:
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("test")
             temp_path = Path(f.name)
@@ -123,7 +131,7 @@ class TestMinIOStorageUpload:
             storage.upload_file(
                 local_path=temp_path,
                 object_key="test.pdf",
-                content_type="application/pdf"
+                content_type="application/pdf",
             )
 
             call_args = mock_client.fput_object.call_args
@@ -144,18 +152,19 @@ class TestMinIOStoragePresignedUrl:
 
         mock_client = MagicMock()
         mock_minio_class.return_value = mock_client
-        mock_client.presigned_get_object.return_value = "https://minio.example.com/test-bucket/test.pdf?expires=123"
+        mock_client.presigned_get_object.return_value = (
+            "https://minio.example.com/test-bucket/test.pdf?expires=123"
+        )
 
         storage = MinIOStorage(
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         url = storage.generate_presigned_url(
-            object_key="bids/test/version/test.pdf",
-            expires=timedelta(hours=1)
+            object_key="bids/test/version/test.pdf", expires=timedelta(hours=1)
         )
 
         assert url == "https://minio.example.com/test-bucket/test.pdf?expires=123"
@@ -174,14 +183,14 @@ class TestMinIOStoragePathHelpers:
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         key = storage.build_object_key(
             project_id=str(uuid.uuid4()),
             version_id=str(uuid.uuid4()),
             file_type="original",
-            file_name="test.pdf"
+            file_name="test.pdf",
         )
 
         assert key.startswith("bids/")
@@ -197,11 +206,19 @@ class TestMinIOStoragePathHelpers:
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
-            bucket="test-bucket"
+            bucket="test-bucket",
         )
 
         # get_file_type expects full object key path
-        assert storage.get_file_type("bids/proj/version/files/original/test.pdf") == "original"
-        assert storage.get_file_type("bids/proj/version/files/parsed/full.md") == "parsed"
-        assert storage.get_file_type("bids/proj/version/files/images/img_001.png") == "images"
+        assert (
+            storage.get_file_type("bids/proj/version/files/original/test.pdf")
+            == "original"
+        )
+        assert (
+            storage.get_file_type("bids/proj/version/files/parsed/full.md") == "parsed"
+        )
+        assert (
+            storage.get_file_type("bids/proj/version/files/images/img_001.png")
+            == "images"
+        )
         assert storage.get_file_type("invalid/path") == "unknown"

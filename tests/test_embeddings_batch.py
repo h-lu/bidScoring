@@ -6,8 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 needs_openai = pytest.mark.skipif(
-    not os.getenv("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY not set"
+    not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set"
 )
 
 
@@ -30,9 +29,7 @@ class TestEmbeddingBatchService:
         from bid_scoring.embeddings_batch import EmbeddingBatchService
 
         service = EmbeddingBatchService(
-            api_key="test-key",
-            batch_size=50,
-            max_retries=3
+            api_key="test-key", batch_size=50, max_retries=3
         )
 
         assert service.batch_size == 50
@@ -95,10 +92,7 @@ class TestEmbeddingBatchService:
         ]
 
         service = EmbeddingBatchService(api_key="test-key")
-        result = service.process_version(
-            version_id=str(uuid.uuid4()),
-            conn=mock_conn
-        )
+        result = service.process_version(version_id=str(uuid.uuid4()), conn=mock_conn)
 
         assert result["total_processed"] == 2
         assert result["succeeded"] == 2
@@ -124,7 +118,11 @@ class TestEmbeddingBatchService:
         mock_cur.fetchone.return_value = {"count": 1}
         test_version_id = str(uuid.uuid4())
         mock_cur.fetchall.return_value = [
-            {"chunk_id": str(uuid.uuid4()), "text_raw": "text 1", "version_id": test_version_id},
+            {
+                "chunk_id": str(uuid.uuid4()),
+                "text_raw": "text 1",
+                "version_id": test_version_id,
+            },
         ]
 
         service = EmbeddingBatchService(api_key="test-key")

@@ -174,7 +174,9 @@ class EmbeddingBatchService:
                 self._save_embeddings(conn, chunk_ids, embeddings)
                 succeeded += len(embeddings)
 
-                logger.info(f"Batch {i // batch_size + 1}: {len(embeddings)} embeddings saved")
+                logger.info(
+                    f"Batch {i // batch_size + 1}: {len(embeddings)} embeddings saved"
+                )
 
             except Exception as e:
                 logger.error(f"Batch {i // batch_size + 1} failed: {e}")

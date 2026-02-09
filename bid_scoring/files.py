@@ -132,7 +132,9 @@ class FileRegistry:
             )
             return cur.fetchone()
 
-    def get_files_by_type(self, version_id: str, file_type: str) -> list[dict[str, Any]]:
+    def get_files_by_type(
+        self, version_id: str, file_type: str
+    ) -> list[dict[str, Any]]:
         """Get files of a specific type for a document version.
 
         Args:
