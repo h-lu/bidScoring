@@ -54,6 +54,7 @@ jobs:
         psql "$DATABASE_URL" -f migrations/002_add_fulltext_search.sql || true
         psql "$DATABASE_URL" -f migrations/003_add_pg_trgm_index_for_keyword_search.sql || true
         psql "$DATABASE_URL" -f migrations/004_optimize_vector_storage_and_hnsw.sql || true
+        psql "$DATABASE_URL" -f migrations/005_add_minio_support.sql || true
 
     - name: Lint with ruff
       run: |
