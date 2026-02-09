@@ -110,7 +110,7 @@ def upload_file_to_presigned_url(presigned_url: str, file_path: Path, max_retrie
         file_path: Path to the local file
         max_retries: Maximum number of retry attempts (default: 3)
     """
-    last_exception = None
+    _last_exception = None  # noqa: F841
     
     for attempt in range(max_retries + 1):
         try:
@@ -120,7 +120,7 @@ def upload_file_to_presigned_url(presigned_url: str, file_path: Path, max_retrie
                 response.raise_for_status()
                 return  # Success
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            last_exception = e
+            _last_exception = e  # noqa: F841
             if attempt < max_retries:
                 wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
                 print(f"   ⚠ Upload failed (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}")
@@ -228,7 +228,7 @@ def wait_for_extraction(batch_id: str, timeout: int = None, poll_interval: int =
         extract_results = data.get("extract_result", [])
         
         if not extract_results:
-            print(f"  Waiting for processing to start...")
+            print("  Waiting for processing to start...")
             time.sleep(poll_interval)
             continue
         
@@ -302,7 +302,7 @@ def process_pdfs(pdf_files: list[Path]):
 
     # Step 2: Upload files to presigned URLs
     # Note: file_urls is a list of URL strings, not objects
-    print(f"\n2. Uploading files to presigned URLs...")
+    print("\n2. Uploading files to presigned URLs...")
     for pdf_path, presigned_url in zip(pdf_files, file_urls):
         print(f"   Uploading: {pdf_path.name}")
         upload_file_to_presigned_url(presigned_url, pdf_path)
@@ -311,12 +311,12 @@ def process_pdfs(pdf_files: list[Path]):
     # Step 3: Wait for extraction to complete
     # After uploading to the presigned URLs, MinerU automatically processes the files
     # We use the batch_id from the upload step to poll for results
-    print(f"\n3. Waiting for extraction to complete...")
+    print("\n3. Waiting for extraction to complete...")
     print(f"   Using batch_id: {batch_id}")
     result = wait_for_extraction(batch_id)
 
     # Step 4: Download results
-    print(f"\n4. Downloading results...")
+    print("\n4. Downloading results...")
     data = result.get("data", {})
     extract_result = data.get("extract_result", [])
 
@@ -357,9 +357,9 @@ def process_pdfs(pdf_files: list[Path]):
                 zip_ref.extractall(extract_dir)
             print(f"    Extracted to: {extract_dir}")
         else:
-            print(f"    No download URL available")
+            print("    No download URL available")
 
-    print(f"\n✓ All files processed successfully!")
+    print("\n✓ All files processed successfully!")
 
 
 def main():
@@ -369,18 +369,18 @@ def main():
         print("Please ensure your .env file contains: apikey=your_api_key_here")
         return
     
-    print(f"MinerU PDF Processing")
-    print(f"=" * 60)
+    print("MinerU PDF Processing")
+    print("=" * 60)
     print(f"API Base URL: {API_BASE_URL}")
     print(f"PDF Directory: {PDF_DIR}")
     print(f"Output Directory: {OUTPUT_DIR}")
-    print(f"\nExtraction Settings:")
+    print("\nExtraction Settings:")
     print(f"  OCR: {ENABLE_OCR}")
     print(f"  Formula: {ENABLE_FORMULA}")
     print(f"  Table: {ENABLE_TABLE}")
     print(f"  Language: {DOCUMENT_LANGUAGE}")
     print(f"  Layout Model: {LAYOUT_MODEL}")
-    print(f"\nPolling Settings:")
+    print("\nPolling Settings:")
     print(f"  Timeout: {POLL_TIMEOUT}s")
     print(f"  Interval: {POLL_INTERVAL}s")
     
@@ -409,7 +409,7 @@ def main():
         print(f"\nSkipping {len(skipped_files)} already processed files.")
     
     if not pending_files:
-        print(f"\nAll files have already been processed. Nothing to do.")
+        print("\nAll files have already been processed. Nothing to do.")
         return
     
     print(f"\nProcessing {len(pending_files)} pending files...")

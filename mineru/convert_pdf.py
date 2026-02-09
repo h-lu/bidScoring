@@ -2,7 +2,6 @@
 """检查PDF结构并尝试多种方法提取内容."""
 
 import pypdf
-from pathlib import Path
 
 pdf_path = "/Users/wangxq/Documents/mineru/pdf/253135-国内公开-投标文件/0811-DSITC253135-上海悦晟生物科技有限公司投标文件.pdf"
 

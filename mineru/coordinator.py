@@ -190,11 +190,11 @@ class ProcessingCoordinator:
             logger.info(f"Generated {embedding_result['succeeded']}/{embedding_result['total_processed']} embeddings")
 
         # Step 5: Build HiChunk (placeholder)
-        hichunk_result = {}
+        _hichunk_result = {}
         if not skip_hichunk and ingest_result.get("total_chunks", 0) > 0:
             logger.info("Step 5: Building HiChunk index...")
             # TODO: Implement HiChunk building
-            hichunk_result = {"status": "skipped"}
+            _hichunk_result = {"status": "skipped"}  # noqa: F841
 
         return {
             "project_id": project_id,

@@ -4,7 +4,7 @@ import uuid
 import json
 import os
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 import pytest
 
 needs_all = pytest.mark.skipif(
@@ -71,7 +71,7 @@ class TestProcessingCoordinator:
             with patch("mineru.coordinator.ingest_content_list") as mock_ingest:
                 mock_ingest.return_value = {"total_chunks": 2}
 
-                result = coord.process_existing_output(
+                _result = coord.process_existing_output(
                     output_dir=output_dir,
                     project_id=str(uuid.uuid4()),
                     document_id=str(uuid.uuid4()),

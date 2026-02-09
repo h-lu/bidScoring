@@ -3,7 +3,7 @@
 import os
 import uuid
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 import pytest
 
 needs_minio = pytest.mark.skipif(
@@ -20,7 +20,7 @@ class TestMinIOStorageInit:
         """Should initialize with default secure=False."""
         from mineru.minio_storage import MinIOStorage
 
-        storage = MinIOStorage(
+        _storage = MinIOStorage(
             endpoint="localhost:9000",
             access_key="key",
             secret_key="secret",
@@ -39,7 +39,7 @@ class TestMinIOStorageInit:
         """Should initialize with secure=True when specified."""
         from mineru.minio_storage import MinIOStorage
 
-        storage = MinIOStorage(
+        _storage = MinIOStorage(
             endpoint="minio.example.com:9000",
             access_key="key",
             secret_key="secret",

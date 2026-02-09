@@ -90,7 +90,7 @@ async def test_all_tools():
                 "aggregate_by": "query"
             })
             data = json.loads(result.content[0].text)
-            print(f"   ✅ Batch search complete")
+            print("   ✅ Batch search complete")
             print(f"   📊 Total results: {data.get('total_results', 0)}")
             print()
             

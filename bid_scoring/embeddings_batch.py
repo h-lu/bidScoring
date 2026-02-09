@@ -16,7 +16,6 @@ Usage:
 
 import logging
 import os
-from datetime import timedelta
 from typing import Any
 
 try:
@@ -307,7 +306,7 @@ class EmbeddingBatchService:
         """
         with conn.cursor() as cur:
             cur.execute(
-                f"""
+                """
                 UPDATE chunks
                 SET embedding_status = %s
                 WHERE chunk_id = ANY(%s)
