@@ -382,20 +382,20 @@ def _format_result(
     max_chars: int | None,
 ) -> Dict[str, Any]:
     """Format retrieval result for output.
-    
+
     Args:
         r: RetrievalResult to format.
         include_text: Whether to include text content.
         max_chars: Maximum characters for text (if included).
-        
+
     Returns:
         Formatted result dictionary.
     """
     text = r.text if include_text else ""
     if include_text and max_chars is not None and max_chars >= 0:
         text = text[:max_chars]
-    
-    return {
+
+    result = {
         "chunk_id": r.chunk_id,
         "page_idx": r.page_idx,
         "source": r.source,
@@ -404,7 +404,12 @@ def _format_result(
         "keyword_score": round(r.keyword_score, 6) if r.keyword_score is not None else None,
         "rerank_score": round(r.rerank_score, 6) if r.rerank_score is not None else None,
         "text": text,
+        "element_type": r.element_type,
+        "bbox": r.bbox,
+        "coord_system": r.coord_system,
     }
+
+    return result
 
 
 # =============================================================================
@@ -1115,10 +1120,14 @@ def get_chunk_with_context(
             # Get the chunk
             cur.execute(
                 """
-                SELECT version_id, page_idx, element_type, text_raw, 
-                       source_id, embedding IS NOT NULL as has_embedding
-                FROM chunks
-                WHERE chunk_id = %s
+                SELECT
+                    c.version_id, c.page_idx, c.element_type, c.text_raw,
+                    c.source_id, c.embedding IS NOT NULL as has_embedding,
+                    c.bbox, dp.coord_sys
+                FROM chunks c
+                LEFT JOIN document_pages dp
+                    ON c.version_id = dp.version_id AND c.page_idx = dp.page_idx
+                WHERE c.chunk_id = %s
                 """,
                 (chunk_id,)
             )
@@ -1126,9 +1135,9 @@ def get_chunk_with_context(
             row = cur.fetchone()
             if not row:
                 raise ValidationError(f"Chunk {chunk_id} not found")
-            
-            version_id, page_idx, element_type, text_raw, source_id, has_embedding = row
-            
+
+            version_id, page_idx, element_type, text_raw, source_id, has_embedding, bbox, coord_sys = row
+
             result = {
                 "chunk_id": chunk_id,
                 "version_id": str(version_id),
@@ -1137,6 +1146,8 @@ def get_chunk_with_context(
                 "text": text_raw,
                 "source_id": source_id,
                 "has_embedding": has_embedding,
+                "bbox": bbox if bbox else None,
+                "coord_system": coord_sys if coord_sys else "mineru_bbox_v1",
             }
             
             # Get context based on depth
@@ -1275,23 +1286,30 @@ def get_unit_evidence(
             if include_anchor:
                 result["anchor"] = anchor_json
             
-            # Get associated chunks
+            # Get associated chunks with bbox
             cur.execute(
                 """
-                SELECT c.chunk_id, c.text_raw, c.page_idx
+                SELECT
+                    c.chunk_id, c.text_raw, c.page_idx, c.bbox, c.element_type,
+                    dp.coord_sys
                 FROM chunks c
                 JOIN chunk_unit_spans span ON c.chunk_id = span.chunk_id
+                LEFT JOIN document_pages dp
+                    ON c.version_id = dp.version_id AND c.page_idx = dp.page_idx
                 WHERE span.unit_id = %s
                 """,
                 (unit_id,)
             )
-            
+
             chunks = cur.fetchall()
             result["associated_chunks"] = [
                 {
                     "chunk_id": str(r[0]),
                     "text_preview": r[1][:200] if r[1] else None,
                     "page_idx": r[2],
+                    "bbox": r[3] if r[3] else None,
+                    "element_type": r[4] if r[4] else None,
+                    "coord_system": r[5] if r[5] else "mineru_bbox_v1",
                 }
                 for r in chunks
             ]
@@ -1717,10 +1735,14 @@ def get_chunk_evidence_resource(chunk_id: str) -> str:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT version_id, page_idx, element_type, text_raw,
-                       text_level, source_id, table_body, img_path
-                FROM chunks
-                WHERE chunk_id = %s
+                SELECT
+                    c.version_id, c.page_idx, c.element_type, c.text_raw,
+                    c.text_level, c.source_id, c.table_body, c.img_path, c.bbox,
+                    dp.coord_sys
+                FROM chunks c
+                LEFT JOIN document_pages dp
+                    ON c.version_id = dp.version_id AND c.page_idx = dp.page_idx
+                WHERE c.chunk_id = %s
                 """,
                 (chunk_id,)
             )
@@ -1732,7 +1754,7 @@ def get_chunk_evidence_resource(chunk_id: str) -> str:
                     "chunk_id": chunk_id,
                 })
 
-            version_id, page_idx, element_type, text_raw, text_level, source_id, table_body, img_path = row
+            version_id, page_idx, element_type, text_raw, text_level, source_id, table_body, img_path, bbox, coord_sys = row
 
             result = {
                 "chunk_id": chunk_id,
@@ -1744,6 +1766,8 @@ def get_chunk_evidence_resource(chunk_id: str) -> str:
                 "source_id": source_id,
                 "has_table": table_body is not None,
                 "has_image": img_path is not None,
+                "bbox": bbox,
+                "coord_system": coord_sys,
             }
 
             # Get adjacent chunks on same page for context
