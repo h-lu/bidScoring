@@ -233,7 +233,7 @@ class TestFileRegistryOperations:
                 )
                 record = cur.fetchone()
 
-            assert record["version_id"] == test_version
+            assert str(record["version_id"]) == test_version
             assert record["file_type"] == "original_pdf"
             assert record["file_name"] == "test.pdf"
             assert record["file_size"] == 12345
