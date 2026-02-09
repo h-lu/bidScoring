@@ -42,3 +42,6 @@ temp/
 worktrees/
 migrations_backup*/
 .worktrees/
+mineru/output/
+mineru/pdf/
+data/raw/
