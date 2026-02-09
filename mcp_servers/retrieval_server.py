@@ -1,6 +1,7 @@
 """Bid scoring retrieval MCP server (FastMCP) - V2 Architecture.
 
-Expose retrieval as tools for LLM clients. Tools are intentionally read-only.
+Expose retrieval as tools and resources for LLM clients. Tools are intentionally
+read-only. Resources provide URI-addressable access to evidence and document structure.
 Designed for automated bid analysis workflows.
 
 V2 Architecture Features:
@@ -11,12 +12,14 @@ V2 Architecture Features:
 - Performance metrics collection
 - Sensitive data sanitization
 - Modular code organization
+- URI-addressable resources for evidence citation
 """
 
 from __future__ import annotations
 
 import atexit
 import functools
+import json
 import logging
 import os
 import re
@@ -1611,6 +1614,326 @@ def retrieve_impl(
         ],
     }
 
+
+# =============================================================================
+# Resources: URI-Addressable Evidence and Document Structure
+# =============================================================================
+#
+# Resources provide direct URI access to document content, enabling:
+# - Precise evidence citation in analysis
+# - Multi-turn conversation context retention
+# - External system integration via URI references
+#
+# URI Schemes:
+# - evidence://unit/{unit_id}  - Content unit (finest-grained evidence)
+# - evidence://chunk/{chunk_id} - Chunk content with context
+# - outline://{version_id}     - Document structure/outline
+# - config://limits            - Query configuration limits
+# - status://health            - Server health status
+# =============================================================================
+
+@mcp.resource("evidence://unit/{unit_id}")
+@tool_wrapper("resource_unit_evidence")
+def get_unit_evidence_resource(unit_id: str) -> str:
+    """Get precise evidence content by unit ID.
+
+    Use this resource when you need to:
+    - Cite specific evidence in bid analysis
+    - Verify exact wording of a commitment
+    - Reference audit-grade evidence with hash verification
+
+    URI: evidence://unit/{unit_id}
+
+    Args:
+        unit_id: UUID of the content unit.
+
+    Returns:
+        JSON string with unit content and verification metadata.
+    """
+    import psycopg
+
+    unit_id = validate_unit_id(unit_id)
+    settings = load_settings()
+
+    with psycopg.connect(settings["DATABASE_URL"]) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT version_id, unit_index, unit_type, text_raw,
+                       anchor_json, unit_hash, source_element_id
+                FROM content_units
+                WHERE unit_id = %s
+                """,
+                (unit_id,)
+            )
+
+            row = cur.fetchone()
+            if not row:
+                return json.dumps({
+                    "error": f"Unit {unit_id} not found",
+                    "unit_id": unit_id,
+                })
+
+            version_id, unit_index, unit_type, text_raw, anchor_json, unit_hash, source_element_id = row
+
+            result = {
+                "unit_id": unit_id,
+                "version_id": str(version_id),
+                "unit_index": unit_index,
+                "unit_type": unit_type,
+                "text": text_raw,
+                "anchor": anchor_json,
+                "unit_hash": unit_hash,
+                "source_element_id": source_element_id,
+            }
+
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.resource("evidence://chunk/{chunk_id}")
+@tool_wrapper("resource_chunk_evidence")
+def get_chunk_evidence_resource(chunk_id: str) -> str:
+    """Get chunk content with surrounding context.
+
+    Use this resource when you need to:
+    - Reference a specific paragraph or section
+    - View chunk content without additional API calls
+    - Maintain context across multiple turns
+
+    URI: evidence://chunk/{chunk_id}
+
+    Args:
+        chunk_id: UUID of the chunk.
+
+    Returns:
+        JSON string with chunk content and context.
+    """
+    import psycopg
+
+    chunk_id = validate_chunk_id(chunk_id)
+    settings = load_settings()
+
+    with psycopg.connect(settings["DATABASE_URL"]) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT version_id, page_idx, element_type, text_raw,
+                       text_level, source_id, table_body, img_path
+                FROM chunks
+                WHERE chunk_id = %s
+                """,
+                (chunk_id,)
+            )
+
+            row = cur.fetchone()
+            if not row:
+                return json.dumps({
+                    "error": f"Chunk {chunk_id} not found",
+                    "chunk_id": chunk_id,
+                })
+
+            version_id, page_idx, element_type, text_raw, text_level, source_id, table_body, img_path = row
+
+            result = {
+                "chunk_id": chunk_id,
+                "version_id": str(version_id),
+                "page_idx": page_idx,
+                "element_type": element_type,
+                "text": text_raw,
+                "text_level": text_level,
+                "source_id": source_id,
+                "has_table": table_body is not None,
+                "has_image": img_path is not None,
+            }
+
+            # Get adjacent chunks on same page for context
+            if page_idx is not None:
+                cur.execute(
+                    """
+                    SELECT chunk_id, text_raw, element_type, chunk_index
+                    FROM chunks
+                    WHERE version_id = %s AND page_idx = %s
+                    AND chunk_id != %s
+                    ORDER BY ABS(chunk_index - (
+                        SELECT chunk_index FROM chunks WHERE chunk_id = %s
+                    ))
+                    LIMIT 3
+                    """,
+                    (version_id, page_idx, chunk_id, chunk_id)
+                )
+
+                adjacent = cur.fetchall()
+                result["context_chunks"] = [
+                    {
+                        "chunk_id": str(r[0]),
+                        "text_preview": r[1][:200] if r[1] else None,
+                        "element_type": r[2],
+                    }
+                    for r in adjacent
+                ]
+
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.resource("outline://{version_id}")
+@tool_wrapper("resource_document_outline")
+def get_outline_resource(version_id: str) -> str:
+    """Get document structure outline (table of contents).
+
+    Use this resource when you need to:
+    - Understand document organization before searching
+    - Navigate to specific sections
+    - Plan multi-section analysis
+
+    URI: outline://{version_id}
+
+    Args:
+        version_id: UUID of the document version.
+
+    Returns:
+        JSON string with hierarchical outline.
+    """
+    import psycopg
+
+    version_id = validate_version_id(version_id)
+    settings = load_settings()
+
+    with psycopg.connect(settings["DATABASE_URL"]) as conn:
+        with conn.cursor() as cur:
+            # Check for hierarchical nodes
+            cur.execute(
+                """
+                SELECT node_id, parent_id, level, node_type,
+                       metadata->>'heading' as heading,
+                       metadata->'page_range' as page_range,
+                       content
+                FROM hierarchical_nodes
+                WHERE version_id = %s
+                ORDER BY level, node_id
+                """,
+                (version_id,)
+            )
+
+            nodes = cur.fetchall()
+
+            if nodes:
+                outline = []
+                for row in nodes:
+                    node_info = {
+                        "node_id": str(row[0]),
+                        "parent_id": str(row[1]) if row[1] else None,
+                        "level": row[2],
+                        "node_type": row[3],
+                        "heading": row[4],
+                        "page_range": row[5],
+                        "content_preview": row[6][:200] if row[6] else None,
+                    }
+                    outline.append(node_info)
+
+                return json.dumps({
+                    "version_id": version_id,
+                    "source": "hierarchical_nodes",
+                    "outline": outline,
+                }, ensure_ascii=False, indent=2)
+
+            # Fallback: use chunks
+            cur.execute(
+                """
+                SELECT DISTINCT page_idx, element_type, text_level,
+                       CASE WHEN text_level IS NOT NULL AND text_level <= 2
+                            THEN text_raw ELSE NULL END as heading
+                FROM chunks
+                WHERE version_id = %s AND page_idx IS NOT NULL
+                ORDER BY page_idx, text_level NULLS LAST
+                """,
+                (version_id,)
+            )
+
+            chunks = cur.fetchall()
+            outline = []
+
+            for row in chunks:
+                page_idx, element_type, text_level, heading = row
+                if heading and len(heading.strip()) > 0:
+                    outline.append({
+                        "page_idx": page_idx,
+                        "element_type": element_type,
+                        "level": text_level or 0,
+                        "heading": heading.strip()[:100],
+                    })
+
+            return json.dumps({
+                "version_id": version_id,
+                "source": "chunks",
+                "outline": outline,
+            }, ensure_ascii=False, indent=2)
+
+
+@mcp.resource("config://limits")
+@tool_wrapper("resource_config_limits")
+def get_config_limits() -> str:
+    """Get query configuration limits.
+
+    Use this resource to understand API constraints before making queries.
+
+    URI: config://limits
+
+    Returns:
+        JSON string with configuration limits.
+    """
+    return json.dumps({
+        "max_top_k": 100,
+        "max_batch_queries": 50,
+        "max_context_window": 1000,
+        "max_version_ids_compare": 20,
+        "max_key_patterns": 50,
+        "default_top_k": 10,
+        "cache": {
+            "retriever_cache_size": _env_int("BID_SCORING_RETRIEVER_CACHE_SIZE", 32),
+            "query_cache_size": _env_int("BID_SCORING_QUERY_CACHE_SIZE", 1024),
+        }
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.resource("status://health")
+@tool_wrapper("resource_health_status")
+def get_health_status() -> str:
+    """Get server health status.
+
+    Use this resource to check server availability and current state.
+
+    URI: status://health
+
+    Returns:
+        JSON string with health status and metrics.
+    """
+    # Calculate metrics
+    total_calls = sum(m.call_count for m in _tool_metrics.values())
+    total_errors = sum(m.error_count for m in _tool_metrics.values())
+
+    return json.dumps({
+        "status": "healthy",
+        "server": "Bid Scoring Retrieval MCP",
+        "cached_retrievers": len(_RETRIEVER_CACHE._cache),
+        "tool_metrics": {
+            "total_calls": total_calls,
+            "total_errors": total_errors,
+            "tool_count": len(_tool_metrics),
+            "per_tool": {
+                name: {
+                    "calls": m.call_count,
+                    "errors": m.error_count,
+                    "avg_time_ms": round(m.avg_execution_time_ms, 2),
+                }
+                for name, m in _tool_metrics.items()
+            }
+        }
+    }, ensure_ascii=False, indent=2)
+
+
+# =============================================================================
+# Entry Point
+# =============================================================================
 
 def main() -> None:
     """Entry point for uvx and pip install."""
