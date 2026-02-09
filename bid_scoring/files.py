@@ -187,3 +187,24 @@ class FileRegistry:
                 (file_id,),
             )
             return cur.fetchone()
+
+    def get_annotated_pdf(self, version_id: str) -> dict[str, Any] | None:
+        """Get the annotated PDF file for a document version.
+
+        Args:
+            version_id: Document version UUID
+
+        Returns:
+            File record or None if not found
+        """
+        with self.conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT * FROM document_files
+                WHERE version_id = %s AND file_type = 'annotated'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (version_id,),
+            )
+            return cur.fetchone()

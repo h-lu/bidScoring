@@ -14,6 +14,7 @@ dependencies = [
     "pgvector",
     "psycopg[binary]",
     "psycopg-pool>=3.3.0",
+    "pymupdf>=1.23.0",
     "python-dotenv",
     "pyyaml",
     "tenacity",
@@ -38,3 +39,6 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "e2e: marks tests as end-to-end (slow, requires external services)",
+]
