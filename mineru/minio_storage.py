@@ -149,12 +149,12 @@ class MinIOStorage:
             )
 
             # Handle different minio library versions
-            size = getattr(result, 'size', None)
+            size = getattr(result, "size", None)
             if size is None:
                 # Try alternative attributes
-                size = getattr(result, 'object_size', getattr(result, 'length', 0))
+                size = getattr(result, "object_size", getattr(result, "length", 0))
 
-            etag = getattr(result, 'etag', getattr(result, 'etag', None))
+            etag = getattr(result, "etag", getattr(result, "etag", None))
 
             return {
                 "object_key": object_key,
@@ -209,10 +209,12 @@ class MinIOStorage:
 
                 except S3Error as e:
                     logger.warning(f"Failed to upload {file_path}: {e}")
-                    results.append({
-                        "object_key": str(rel_path),
-                        "error": str(e),
-                    })
+                    results.append(
+                        {
+                            "object_key": str(rel_path),
+                            "error": str(e),
+                        }
+                    )
 
         return results
 

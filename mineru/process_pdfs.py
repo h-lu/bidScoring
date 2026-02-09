@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
 # Helper function to resolve paths (relative to script or absolute)
 def resolve_path(path_str: str) -> Path:
     """Resolve a path string - if relative, make it relative to script directory."""
@@ -33,6 +34,7 @@ def resolve_path(path_str: str) -> Path:
     if path.is_absolute():
         return path
     return Path(__file__).parent / path
+
 
 # Configuration from .env
 API_BASE_URL = os.getenv("MINERU_API_URL", "https://mineru.net/api/v4")
@@ -80,66 +82,72 @@ def is_pdf_processed(pdf_path: Path) -> bool:
 def get_presigned_urls(file_names: list[str]) -> dict:
     """
     Get presigned URLs for uploading files.
-    
+
     Args:
         file_names: List of file names to get upload URLs for
-    
+
     Returns:
         API response containing presigned URLs and batch_id
     """
     url = f"{API_BASE_URL}/file-urls/batch"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}"
-    }
-    payload = {
-        "files": [{"name": name} for name in file_names]
-    }
-    
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
+    payload = {"files": [{"name": name} for name in file_names]}
+
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()
 
 
-def upload_file_to_presigned_url(presigned_url: str, file_path: Path, max_retries: int = 3):
+def upload_file_to_presigned_url(
+    presigned_url: str, file_path: Path, max_retries: int = 3
+):
     """
     Upload a file to a presigned URL using PUT with retry logic.
-    
+
     Args:
         presigned_url: The presigned URL to upload to
         file_path: Path to the local file
         max_retries: Maximum number of retry attempts (default: 3)
     """
     _last_exception = None  # noqa: F841
-    
+
     for attempt in range(max_retries + 1):
         try:
             # Don't specify Content-Type - must match whatever was used to generate the presigned URL
             with open(file_path, "rb") as f:
-                response = requests.put(presigned_url, data=f, timeout=300)  # 5 min timeout for large files
+                response = requests.put(
+                    presigned_url, data=f, timeout=300
+                )  # 5 min timeout for large files
                 response.raise_for_status()
                 return  # Success
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             _last_exception = e  # noqa: F841
             if attempt < max_retries:
-                wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
-                print(f"   ⚠ Upload failed (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}")
+                wait_time = 2**attempt  # Exponential backoff: 1, 2, 4 seconds
+                print(
+                    f"   ⚠ Upload failed (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}"
+                )
                 print(f"   Retrying in {wait_time}s...")
                 time.sleep(wait_time)
             else:
                 raise  # Re-raise on final attempt
 
 
-def create_extraction_task(file_urls: list[dict], is_ocr: bool = None, enable_formula: bool = None, enable_table: bool = None) -> dict:
+def create_extraction_task(
+    file_urls: list[dict],
+    is_ocr: bool = None,
+    enable_formula: bool = None,
+    enable_table: bool = None,
+) -> dict:
     """
     Create a PDF extraction task using MinerU API.
-    
+
     Args:
         file_urls: List of dicts with file information (url, name, etc.)
         is_ocr: Whether to enable OCR mode (uses global ENABLE_OCR if not specified)
         enable_formula: Whether to extract formulas (uses global ENABLE_FORMULA if not specified)
         enable_table: Whether to extract tables (uses global ENABLE_TABLE if not specified)
-    
+
     Returns:
         API response containing batch_id for polling
     """
@@ -150,13 +158,10 @@ def create_extraction_task(file_urls: list[dict], is_ocr: bool = None, enable_fo
         enable_formula = ENABLE_FORMULA
     if enable_table is None:
         enable_table = ENABLE_TABLE
-    
+
     url = f"{API_BASE_URL}/extract/task"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}"
-    }
-    
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
+
     # The API expects an array of file objects, each with url and optional parameters
     # Based on MinerU API documentation, the format is:
     # [{"url": "...", "is_ocr": false, ...}, ...]
@@ -168,12 +173,14 @@ def create_extraction_task(file_urls: list[dict], is_ocr: bool = None, enable_fo
             "enable_formula": enable_formula,
             "enable_table": enable_table,
             "layout_model": LAYOUT_MODEL,
-            "language": DOCUMENT_LANGUAGE
+            "language": DOCUMENT_LANGUAGE,
         }
         if "name" in file_info:
-            file_payload["data_id"] = file_info["name"]  # Use name as data_id for tracking
+            file_payload["data_id"] = file_info[
+                "name"
+            ]  # Use name as data_id for tracking
         payload.append(file_payload)
-    
+
     response = requests.post(url, headers=headers, json=payload)
     print(f"   Request payload: {json.dumps(payload, indent=2)}")
     print(f"   Response status: {response.status_code}")
@@ -185,32 +192,32 @@ def create_extraction_task(file_urls: list[dict], is_ocr: bool = None, enable_fo
 def get_extraction_result(batch_id: str) -> dict:
     """
     Get the result of an extraction task.
-    
+
     Args:
         batch_id: The batch ID returned when creating the task
-    
+
     Returns:
         API response containing the extraction result
     """
     url = f"{API_BASE_URL}/extract-results/batch/{batch_id}"
-    headers = {
-        "Authorization": f"Bearer {API_KEY}"
-    }
-    
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.json()
 
 
-def wait_for_extraction(batch_id: str, timeout: int = None, poll_interval: int = None) -> dict:
+def wait_for_extraction(
+    batch_id: str, timeout: int = None, poll_interval: int = None
+) -> dict:
     """
     Wait for an extraction task to complete.
-    
+
     Args:
         batch_id: The batch ID returned when creating the task
         timeout: Maximum time to wait in seconds
         poll_interval: Time between polling requests in seconds
-    
+
     Returns:
         The final extraction result
     """
@@ -219,19 +226,19 @@ def wait_for_extraction(batch_id: str, timeout: int = None, poll_interval: int =
         timeout = POLL_TIMEOUT
     if poll_interval is None:
         poll_interval = POLL_INTERVAL
-    
+
     start_time = time.time()
-    
+
     while time.time() - start_time < timeout:
         result = get_extraction_result(batch_id)
         data = result.get("data", {})
         extract_results = data.get("extract_result", [])
-        
+
         if not extract_results:
             print("  Waiting for processing to start...")
             time.sleep(poll_interval)
             continue
-        
+
         # Check the state of each file
         all_done = True
         any_failed = False
@@ -246,28 +253,28 @@ def wait_for_extraction(batch_id: str, timeout: int = None, poll_interval: int =
                     print(f"    Error: {item.get('err_msg', 'Unknown error')}")
             else:
                 print(f"  {file_name}: ✓ done")
-        
+
         if all_done:
             return result
         elif any_failed:
             raise RuntimeError(f"Some files failed extraction: {extract_results}")
-        
+
         time.sleep(poll_interval)
-    
+
     raise TimeoutError(f"Extraction timed out after {timeout} seconds")
 
 
 def download_result(result_url: str, output_path: Path):
     """
     Download the extraction result to a local file.
-    
+
     Args:
         result_url: URL of the result file
         output_path: Local path to save the file
     """
     response = requests.get(result_url)
     response.raise_for_status()
-    
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(response.content)
     print(f"    Downloaded: {output_path}")
@@ -345,15 +352,18 @@ def process_pdfs(pdf_files: list[Path]):
         zip_url = item.get("full_zip_url")
         if zip_url:
             # Preserve directory structure in output
-            output_zip_path = OUTPUT_DIR / output_relative_dir / f"{output_filename_stem}.zip"
+            output_zip_path = (
+                OUTPUT_DIR / output_relative_dir / f"{output_filename_stem}.zip"
+            )
             extract_dir = OUTPUT_DIR / output_relative_dir / output_filename_stem
 
             download_result(zip_url, output_zip_path)
 
             # Extract the ZIP file
             import zipfile
+
             extract_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(output_zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(output_zip_path, "r") as zip_ref:
                 zip_ref.extractall(extract_dir)
             print(f"    Extracted to: {extract_dir}")
         else:
@@ -368,7 +378,7 @@ def main():
         print("Error: API key not found in .env file")
         print("Please ensure your .env file contains: apikey=your_api_key_here")
         return
-    
+
     print("MinerU PDF Processing")
     print("=" * 60)
     print(f"API Base URL: {API_BASE_URL}")
@@ -383,20 +393,20 @@ def main():
     print("\nPolling Settings:")
     print(f"  Timeout: {POLL_TIMEOUT}s")
     print(f"  Interval: {POLL_INTERVAL}s")
-    
+
     # Find all PDF files recursively in subdirectories
     pdf_files = list(PDF_DIR.rglob("*.pdf"))
-    
+
     if not pdf_files:
         print(f"\nNo PDF files found in {PDF_DIR}")
         return
-    
+
     print(f"\nFound {len(pdf_files)} PDF files:")
-    
+
     # Check for already processed files (resume functionality)
     pending_files = []
     skipped_files = []
-    
+
     for pdf in pdf_files:
         if is_pdf_processed(pdf):
             skipped_files.append(pdf)
@@ -404,27 +414,28 @@ def main():
         else:
             pending_files.append(pdf)
             print(f"  - {pdf.name} ({pdf.stat().st_size / 1024:.1f} KB)")
-    
+
     if skipped_files:
         print(f"\nSkipping {len(skipped_files)} already processed files.")
-    
+
     if not pending_files:
         print("\nAll files have already been processed. Nothing to do.")
         return
-    
+
     print(f"\nProcessing {len(pending_files)} pending files...")
-    
+
     # Create output directory
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Process all pending PDFs as a batch
     try:
         process_pdfs(pending_files)
     except Exception as e:
         print(f"\n✗ Error: {e}")
         import traceback
+
         traceback.print_exc()
-    
+
     print(f"\nResults saved to: {OUTPUT_DIR}")
 
 

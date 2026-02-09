@@ -146,7 +146,9 @@ class EmbeddingBatchService:
             if chunks and isinstance(chunks[0], dict):
                 chunks_list = chunks
             else:
-                chunks_list = [{"chunk_id": row[0], "text_raw": row[1]} for row in chunks]
+                chunks_list = [
+                    {"chunk_id": row[0], "text_raw": row[1]} for row in chunks
+                ]
             chunks = chunks_list
 
         if not chunks:

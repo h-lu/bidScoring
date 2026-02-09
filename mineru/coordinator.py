@@ -80,7 +80,9 @@ class ProcessingCoordinator:
         document_id = self.generate_document_id(project_id, pdf_path.name)
         version_id = self.generate_version_id()
 
-        logger.info(f"Generated IDs: project={project_id}, doc={document_id}, version={version_id}")
+        logger.info(
+            f"Generated IDs: project={project_id}, doc={document_id}, version={version_id}"
+        )
 
         # TODO: Call MinerU API
         # TODO: Process output through process_existing_output
@@ -187,7 +189,9 @@ class ProcessingCoordinator:
                 version_id=version_id,
                 conn=conn,
             )
-            logger.info(f"Generated {embedding_result['succeeded']}/{embedding_result['total_processed']} embeddings")
+            logger.info(
+                f"Generated {embedding_result['succeeded']}/{embedding_result['total_processed']} embeddings"
+            )
 
         # Step 5: Build HiChunk (placeholder)
         _hichunk_result = {}

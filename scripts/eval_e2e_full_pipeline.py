@@ -37,7 +37,13 @@ def load_content_list(path: Path) -> list[dict]:
     return data
 
 
-def ensure_project_and_document(conn: psycopg.Connection, project_id: str, document_id: str, version_id: str, bidder_name: str) -> None:
+def ensure_project_and_document(
+    conn: psycopg.Connection,
+    project_id: str,
+    document_id: str,
+    version_id: str,
+    bidder_name: str,
+) -> None:
     """Ensure project, document, and version records exist."""
     with conn.cursor() as cur:
         # Insert project
@@ -79,7 +85,7 @@ def ingest_scenario(
     bidder_name: str,
 ) -> dict:
     """Ingest a single scenario (A/B/C) into database."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Ingesting scenario: {bidder_name}")
     print(f"  version_id: {version_id}")
     print(f"  content_file: {content_file}")
@@ -194,7 +200,7 @@ def build_hichunk_nodes(
 
 def run_evaluation(eval_dir: Path, top_k: int = 10) -> dict:
     """Run multi-version evaluation."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Running retrieval evaluation...")
 
     from scripts.evaluate_hybrid_search_multiversion import (
@@ -291,35 +297,43 @@ def run_evaluation(eval_dir: Path, top_k: int = 10) -> dict:
                 "summary": summary,
             }
 
-            print(f"    hybrid:  MRR={summary['hybrid']['mrr']:.4f} "
-                  f"R@5={summary['hybrid']['recall_at_5']:.4f} "
-                  f"nDCG@5={summary['hybrid']['ndcg_at_5']:.4f}")
+            print(
+                f"    hybrid:  MRR={summary['hybrid']['mrr']:.4f} "
+                f"R@5={summary['hybrid']['recall_at_5']:.4f} "
+                f"nDCG@5={summary['hybrid']['ndcg_at_5']:.4f}"
+            )
 
     # Macro-average
     for method in methods:
         report["macro"][method] = {
-            key: _macro_mean([
-                report["scenarios"][s]["summary"][method][key]
-                for s in scenarios
-            ])
-            for key in ["mrr", "recall_at_5", "precision_at_3", "ndcg_at_5", "ndcg_at_10", "latency_ms"]
+            key: _macro_mean(
+                [report["scenarios"][s]["summary"][method][key] for s in scenarios]
+            )
+            for key in [
+                "mrr",
+                "recall_at_5",
+                "precision_at_3",
+                "ndcg_at_5",
+                "ndcg_at_10",
+                "latency_ms",
+            ]
         }
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Macro-average across all scenarios:")
     for method in methods:
         s = report["macro"][method]
-        print(f"  {method:<6} MRR={s['mrr']:.4f} R@5={s['recall_at_5']:.4f} "
-              f"P@3={s['precision_at_3']:.4f} nDCG@5={s['ndcg_at_5']:.4f} "
-              f"nDCG@10={s['ndcg_at_10']:.4f} Lat={s['latency_ms']:.2f}ms")
+        print(
+            f"  {method:<6} MRR={s['mrr']:.4f} R@5={s['recall_at_5']:.4f} "
+            f"P@3={s['precision_at_3']:.4f} nDCG@5={s['ndcg_at_5']:.4f} "
+            f"nDCG@10={s['ndcg_at_10']:.4f} Lat={s['latency_ms']:.2f}ms"
+        )
 
     return report
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="End-to-end evaluation pipeline"
-    )
+    parser = argparse.ArgumentParser(description="End-to-end evaluation pipeline")
     parser.add_argument(
         "--eval-dir",
         type=Path,
@@ -364,7 +378,7 @@ def main() -> int:
         return 1
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Dataset: {manifest['dataset']}")
     print(f"Scenarios: {', '.join(manifest['scenarios'].keys())}")
 
@@ -389,7 +403,7 @@ def main() -> int:
     with psycopg.connect(settings["DATABASE_URL"]) as conn:
         # Step 1: Ingest data
         if not args.skip_ingest:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("STEP 1: Data Ingestion")
 
             for scenario in ["A", "B", "C"]:
@@ -407,7 +421,7 @@ def main() -> int:
 
         # Step 2: Build hierarchical nodes
         if not args.skip_hichunk:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("STEP 2: Build Hierarchical Nodes (HiChunk)")
 
             for scenario in ["A", "B", "C"]:
@@ -431,10 +445,10 @@ def main() -> int:
             json.dumps(results, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Report saved to: {args.output}")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("✅ Pipeline completed successfully!")
     return 0
 
