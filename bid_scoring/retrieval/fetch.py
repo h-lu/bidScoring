@@ -26,9 +26,13 @@ def fetch_chunks(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT chunk_id::text, text_raw, page_idx, embedding
-                    FROM chunks
-                    WHERE chunk_id = ANY(%s::uuid[])
+                    SELECT
+                        c.chunk_id::text, c.text_raw, c.page_idx, c.embedding,
+                        c.bbox, c.element_type, dp.coord_sys
+                    FROM chunks c
+                    LEFT JOIN document_pages dp
+                        ON c.version_id = dp.version_id AND c.page_idx = dp.page_idx
+                    WHERE c.chunk_id = ANY(%s::uuid[])
                     """,
                     (chunk_ids,),
                 )
@@ -124,6 +128,9 @@ def fetch_chunks(
                             keyword_score=keyword_score,
                             embedding=row[3] if row[3] else None,
                             evidence_units=evidence_by_chunk.get(chunk_id, []),
+                            bbox=row[4] if row[4] else None,
+                            element_type=row[5] if row[5] else None,
+                            coord_system=row[6] if row[6] else None,
                         )
                     )
 

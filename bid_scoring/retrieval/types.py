@@ -45,6 +45,10 @@ class RetrievalResult:
     embedding: List[float] | None = None
     rerank_score: float | None = None
     evidence_units: List[EvidenceUnit] = field(default_factory=list)
+    # PDF position information (mineru_bbox_v1 format)
+    bbox: List[float] | None = None  # [x1, y1, x2, y2] in PDF coordinates
+    element_type: str | None = None  # text, table, image, title, etc.
+    coord_system: str | None = None  # e.g., "mineru_bbox_v1"
 
 
 @dataclass(frozen=True)
