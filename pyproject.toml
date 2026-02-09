@@ -22,6 +22,9 @@ dependencies = [
 where = ["."]
 include = ["bid_scoring*", "mcp_servers*"]
 
+[project.scripts]
+bid-scoring-retrieval = "mcp_servers.retrieval_server:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",

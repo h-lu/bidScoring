@@ -1612,5 +1612,10 @@ def retrieve_impl(
     }
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point for uvx and pip install."""
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
