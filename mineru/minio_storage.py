@@ -29,7 +29,7 @@ import logging
 import os
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 try:
     from minio import Minio
@@ -172,7 +172,7 @@ class MinIOStorage:
         self,
         local_dir: Path,
         prefix: str,
-        callback: callable | None = None,
+        callback: Callable[[int, int], None] | None = None,
     ) -> list[dict[str, Any]]:
         """Upload all files in a directory recursively.
 
