@@ -21,10 +21,8 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import fitz
 import pytest
@@ -44,6 +42,7 @@ needs_database = pytest.mark.skipif(
 @dataclass
 class SearchResult:
     """Content found during search."""
+
     topic: str
     chunk_id: str
     page_idx: int
@@ -55,6 +54,7 @@ class SearchResult:
 @dataclass
 class AnalysisInsight:
     """AI-generated insight for a chunk."""
+
     category: str  # "risk", "benefit", "info"
     title: str
     content: str
@@ -64,6 +64,7 @@ class AnalysisInsight:
 @dataclass
 class AspectAnalysis:
     """Analysis results for one aspect of the bid."""
+
     aspect: str  # "warranty", "delivery", "training", etc.
     chunks_found: int
     risks: list[AnalysisInsight] = field(default_factory=list)
@@ -74,6 +75,7 @@ class AspectAnalysis:
 @dataclass
 class BidAnalysisReport:
     """Complete bid analysis report."""
+
     version_id: str
     bidder_name: str
     project_name: str
@@ -230,7 +232,9 @@ def generate_insights(text: str, topic: str) -> list[AnalysisInsight]:
     ]
 
 
-def analyze_aspect(conn, version_id: str, aspect: str, keywords: list[str]) -> AspectAnalysis:
+def analyze_aspect(
+    conn, version_id: str, aspect: str, keywords: list[str]
+) -> AspectAnalysis:
     """Analyze one aspect of the bid.
 
     Args:
@@ -434,13 +438,13 @@ class TestBidAnalysisE2E:
             print("=" * 60)
             print(f"投标人: {report.bidder_name}")
             print(f"综合评分: {report.overall_score:.1f}/100")
-            print(f"\n分析维度:")
+            print("\n分析维度:")
             for aspect, analysis in report.aspects.items():
                 print(f"  {aspect:12s}: {analysis.summary}")
             print(f"\n风险总计: {report.total_risks}")
             print(f"优势总计: {report.total_benefits}")
             if report.recommendations:
-                print(f"\n建议:")
+                print("\n建议:")
                 for rec in report.recommendations:
                     print(f"  - {rec}")
             print("=" * 60)
@@ -479,6 +483,7 @@ class TestBidAnalysisE2E:
 
                 # Extract warranty period from text
                 import re
+
                 years = re.findall(r"(\d+)\s*年", result.text)
                 months = re.findall(r"(\d+)\s*个月", result.text)
                 if years:
@@ -537,6 +542,7 @@ class TestBidAnalysisE2E:
 
                 # Extract time periods
                 import re
+
                 hours = re.findall(r"(\d+)\s*小时", result.text)
                 days = re.findall(r"(\d+)\s*[天日]", result.text)
                 if hours:
@@ -558,9 +564,7 @@ class TestBidAnalysisE2E:
             print(f"  风险点: {len(insights_by_type['risk'])}")
             print(f"  优势点: {len(insights_by_type['benefit'])}")
 
-    def test_generate_annotated_bid_pdf(
-        self, test_version_id, local_pdf_path
-    ):
+    def test_generate_annotated_bid_pdf(self, test_version_id, local_pdf_path):
         """Test generating annotated PDF with all analysis insights.
 
         Workflow:
@@ -571,7 +575,6 @@ class TestBidAnalysisE2E:
         5. Verify annotations are correctly positioned
         """
         import psycopg
-        import shutil
         from bid_scoring.config import load_settings
         from mcp_servers.pdf_annotator import TOPIC_COLORS
 
@@ -595,7 +598,9 @@ class TestBidAnalysisE2E:
                     conn, test_version_id, aspect, keywords, limit=3
                 )
                 all_results.extend(results)
-                aspect_colors[aspect] = TOPIC_COLORS.get(aspect, TOPIC_COLORS["default"])
+                aspect_colors[aspect] = TOPIC_COLORS.get(
+                    aspect, TOPIC_COLORS["default"]
+                )
 
             # Generate annotated PDF
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -635,7 +640,13 @@ class TestBidAnalysisE2E:
                     # Build annotation content
                     if insights:
                         top_insight = insights[0]
-                        icon = "⚠️" if top_insight.category == "risk" else "✅" if top_insight.category == "benefit" else "ℹ️"
+                        icon = (
+                            "⚠️"
+                            if top_insight.category == "risk"
+                            else "✅"
+                            if top_insight.category == "benefit"
+                            else "ℹ️"
+                        )
                         annotation_content = (
                             f"{icon} {result.topic.upper()}\n"
                             f"{top_insight.title}\n\n"
@@ -643,7 +654,9 @@ class TestBidAnalysisE2E:
                             f"原文: {result.text[:80]}..."
                         )
                     else:
-                        annotation_content = f"{result.topic.upper()}\n{result.text[:100]}"
+                        annotation_content = (
+                            f"{result.topic.upper()}\n{result.text[:100]}"
+                        )
 
                     # Add highlight annotation
                     annot = page.add_highlight_annot(rect)
@@ -679,16 +692,21 @@ class TestBidAnalysisE2E:
                                     round(stroke[1], 1),
                                     round(stroke[2], 1),
                                 )
-                                annotation_colors[color_key] = annotation_colors.get(color_key, 0) + 1
+                                annotation_colors[color_key] = (
+                                    annotation_colors.get(color_key, 0) + 1
+                                )
 
                 doc.close()
 
                 # Verify results
-                assert total_annotations == annotations_added, \
+                assert total_annotations == annotations_added, (
                     f"Should have {annotations_added} annotations, got {total_annotations}"
+                )
 
                 # Verify multiple colors were used (different aspects)
-                assert len(annotation_colors) >= 2, "Should use at least 2 different colors for aspects"
+                assert len(annotation_colors) >= 2, (
+                    "Should use at least 2 different colors for aspects"
+                )
 
                 # Print summary
                 print("\n" + "=" * 60)
@@ -706,7 +724,9 @@ class TestBidAnalysisE2E:
                 for aspect, count in annotations_by_aspect.items():
                     if count > 0:
                         color = aspect_colors.get(aspect, (0.5, 0.5, 0.5))
-                        print(f"  {aspect_names.get(aspect, aspect):8s}: {count} 个 (RGB{color})")
+                        print(
+                            f"  {aspect_names.get(aspect, aspect):8s}: {count} 个 (RGB{color})"
+                        )
                 print("\n颜色统计:")
                 for color, count in annotation_colors.items():
                     print(f"  {color}: {count} 个")
@@ -765,7 +785,10 @@ class TestBidAnalysisE2E:
 
                 # Verify we found differences
                 if len(aspect_scores) > 1:
-                    assert aspect_scores[strongest] != aspect_scores[weakest] or len(set(aspect_scores.values())) == 1
+                    assert (
+                        aspect_scores[strongest] != aspect_scores[weakest]
+                        or len(set(aspect_scores.values())) == 1
+                    )
 
 
 # =============================================================================

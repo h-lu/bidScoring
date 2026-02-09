@@ -32,7 +32,12 @@ class TestTopicColors:
     def test_topic_colors_has_all_expected_topics(self):
         """Should have colors for all expected topics."""
         expected_topics = {
-            "risk", "warranty", "training", "delivery", "financial", "technical"
+            "risk",
+            "warranty",
+            "training",
+            "delivery",
+            "financial",
+            "technical",
         }
         assert expected_topics.issubset(TOPIC_COLORS.keys())
 
@@ -306,7 +311,14 @@ class TestPDFAnnotatorIntegration:
                 cur.execute(
                     """INSERT INTO chunks (chunk_id, version_id, page_idx, bbox, text_raw, element_type)
                     VALUES (%s, %s, %s, %s::jsonb, %s, %s)""",
-                    (chunk_id, version_id, 0, "[100, 200, 300, 250]", "Test warranty clause", "text"),
+                    (
+                        chunk_id,
+                        version_id,
+                        0,
+                        "[100, 200, 300, 250]",
+                        "Test warranty clause",
+                        "text",
+                    ),
                 )
             conn.commit()
 
@@ -327,9 +339,14 @@ class TestPDFAnnotatorIntegration:
                 # Cleanup
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM chunks WHERE chunk_id = %s", (chunk_id,))
-                    cur.execute("DELETE FROM document_versions WHERE version_id = %s", (version_id,))
+                    cur.execute(
+                        "DELETE FROM document_versions WHERE version_id = %s",
+                        (version_id,),
+                    )
                     cur.execute("DELETE FROM documents WHERE doc_id = %s", (doc_id,))
-                    cur.execute("DELETE FROM projects WHERE project_id = %s", (project_id,))
+                    cur.execute(
+                        "DELETE FROM projects WHERE project_id = %s", (project_id,)
+                    )
                 conn.commit()
 
     def test_get_project_id(self):
@@ -375,7 +392,12 @@ class TestPDFAnnotatorIntegration:
             finally:
                 # Cleanup
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM document_versions WHERE version_id = %s", (version_id,))
+                    cur.execute(
+                        "DELETE FROM document_versions WHERE version_id = %s",
+                        (version_id,),
+                    )
                     cur.execute("DELETE FROM documents WHERE doc_id = %s", (doc_id,))
-                    cur.execute("DELETE FROM projects WHERE project_id = %s", (project_id,))
+                    cur.execute(
+                        "DELETE FROM projects WHERE project_id = %s", (project_id,)
+                    )
                 conn.commit()

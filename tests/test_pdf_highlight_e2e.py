@@ -19,9 +19,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import fitz  # PyMuPDF
 import pytest
@@ -59,8 +57,7 @@ def _minio_accessible() -> bool:
 
 
 skip_if_no_minio = pytest.mark.skipif(
-    not _minio_accessible(),
-    reason="MinIO server not accessible"
+    not _minio_accessible(), reason="MinIO server not accessible"
 )
 
 
@@ -105,7 +102,9 @@ def local_pdf_path():
 
     Returns the path to the original PDF file in mineru/pdf directory.
     """
-    pdf_path = Path("/Users/wangxq/Documents/投标分析_kimi/mineru/pdf/0811-DSITC253135-上海悦晟生物科技有限公司投标文件.pdf")
+    pdf_path = Path(
+        "/Users/wangxq/Documents/投标分析_kimi/mineru/pdf/0811-DSITC253135-上海悦晟生物科技有限公司投标文件.pdf"
+    )
     if not pdf_path.exists():
         pytest.skip(f"Local PDF not found: {pdf_path}")
     return pdf_path
@@ -249,8 +248,9 @@ class TestPDFHighlightRealE2E:
                 )
                 doc.close()
 
-                assert warranty_count == warranty_highlights, \
+                assert warranty_count == warranty_highlights, (
                     f"Should have {warranty_highlights} warranty highlights, got {warranty_count}"
+                )
 
                 # Step 4: Search for response time (响应时间) content
                 with conn.cursor(row_factory=dict_row) as cur:
@@ -331,8 +331,9 @@ class TestPDFHighlightRealE2E:
 
                 # Should have all highlights
                 expected_total = warranty_highlights + delivery_highlights
-                assert total_highlights == expected_total, \
+                assert total_highlights == expected_total, (
                     f"Should have {expected_total} total highlights, got {total_highlights}"
+                )
 
                 # Verify both colors are present
                 warranty_color_rounded = (
@@ -346,12 +347,15 @@ class TestPDFHighlightRealE2E:
                     round(delivery_color[2], 1),
                 )
 
-                assert warranty_color_rounded in color_counts, \
+                assert warranty_color_rounded in color_counts, (
                     "Warranty (green) highlights should exist"
-                assert delivery_color_rounded in color_counts, \
+                )
+                assert delivery_color_rounded in color_counts, (
                     "Delivery (orange) highlights should exist"
-                assert color_counts[warranty_color_rounded] >= warranty_highlights, \
+                )
+                assert color_counts[warranty_color_rounded] >= warranty_highlights, (
                     f"Should have at least {warranty_highlights} green highlights"
+                )
 
     def test_verify_annotated_pdf_structure(self, test_version_id, local_pdf_path):
         """Test that annotated PDF maintains document structure.
@@ -369,6 +373,7 @@ class TestPDFHighlightRealE2E:
 
         # Get a chunk to highlight
         import psycopg
+
         with psycopg.connect(settings["DATABASE_URL"]) as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
@@ -428,10 +433,12 @@ class TestPDFHighlightRealE2E:
             ]
             annotated_doc.close()
 
-            assert annotated_page_count == original_page_count, \
+            assert annotated_page_count == original_page_count, (
                 "Page count should remain the same"
-            assert annotated_page_dims == original_page_dims, \
+            )
+            assert annotated_page_dims == original_page_dims, (
                 "Page dimensions should be preserved"
+            )
 
     def test_color_coding_by_topic(self, test_version_id, local_pdf_path):
         """Test that different topics get different colors.
@@ -460,6 +467,7 @@ class TestPDFHighlightRealE2E:
 
             for idx, (topic, keyword) in enumerate(topic_keywords.items()):
                 import psycopg
+
                 with psycopg.connect(settings["DATABASE_URL"]) as conn:
                     with conn.cursor(row_factory=dict_row) as cur:
                         cur.execute(
@@ -546,8 +554,9 @@ class TestPDFHighlightRealE2E:
                         round(expected[1], 1),
                         round(expected[2], 1),
                     )
-                    assert found_color == expected_rounded, \
+                    assert found_color == expected_rounded, (
                         f"Topic '{topic}' should have color {expected_rounded}, got {found_color}"
+                    )
             else:
                 pytest.skip("No topic content found for color verification test")
 
