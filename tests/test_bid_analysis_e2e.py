@@ -950,7 +950,9 @@ class TestBidAnalysisFullE2E:
             )
 
             # Assertions for processing
-            assert result["status"] == "completed", f"Processing failed: {result.get('error')}"
+            assert result["status"] == "completed", (
+                f"Processing failed: {result.get('error')}"
+            )
             assert result["chunks_imported"] > 0, "Should import chunks"
             assert result["embeddings_generated"] > 0, "Should generate embeddings"
 
@@ -968,7 +970,9 @@ class TestBidAnalysisFullE2E:
             # Verify embeddings
             sample_chunk = query_chunk_with_embedding(conn, version_id)
             assert sample_chunk is not None, "Should have chunk with embedding"
-            assert len(sample_chunk["embedding"]) == 1536, "Embedding should be 1536 dims"
+            assert len(sample_chunk["embedding"]) == 1536, (
+                "Embedding should be 1536 dims"
+            )
 
             # Step 6: Analyze bid content
             aspects = {
@@ -1047,8 +1051,14 @@ class TestBidAnalysisFullE2E:
                         k: {
                             "summary": v.summary,
                             "chunks_found": v.chunks_found,
-                            "risks": [{"title": r.title, "content": r.content} for r in v.risks],
-                            "benefits": [{"title": b.title, "content": b.content} for b in v.benefits],
+                            "risks": [
+                                {"title": r.title, "content": r.content}
+                                for r in v.risks
+                            ],
+                            "benefits": [
+                                {"title": b.title, "content": b.content}
+                                for b in v.benefits
+                            ],
                         }
                         for k, v in report.aspects.items()
                     },
@@ -1069,15 +1079,19 @@ class TestBidAnalysisFullE2E:
                     "total_content_units": len(content_units),
                     "analysis": report_dict,
                 }
-                save_db_export(output_dir, pdf_name, chunks, content_units, analysis_summary)
+                save_db_export(
+                    output_dir, pdf_name, chunks, content_units, analysis_summary
+                )
 
-                project_results.append({
-                    "name": pdf_name,
-                    "version_id": version_id,
-                    "project_id": project_id,
-                    "chunks": len(chunks),
-                    "status": "success",
-                })
+                project_results.append(
+                    {
+                        "name": pdf_name,
+                        "version_id": version_id,
+                        "project_id": project_id,
+                        "chunks": len(chunks),
+                        "status": "success",
+                    }
+                )
 
         # Save manifest
         save_manifest(output_dir, execution_time, 1, project_results)
@@ -1123,9 +1137,9 @@ class TestBidAnalysisFullE2E:
 
             for pdf_path in pdf_files:
                 pdf_name = pdf_path.stem[:50]
-                logger.info(f"\n{'='*60}")
+                logger.info(f"\n{'=' * 60}")
                 logger.info(f"Processing: {pdf_name}")
-                logger.info(f"{'='*60}")
+                logger.info(f"{'=' * 60}")
 
                 try:
                     result = coordinator.process_pdf_complete(
@@ -1138,12 +1152,14 @@ class TestBidAnalysisFullE2E:
 
                     if result["status"] != "completed":
                         logger.error(f"Processing failed: {result.get('error')}")
-                        project_results.append({
-                            "name": pdf_name,
-                            "version_id": result.get("version_id", "unknown"),
-                            "status": "failed",
-                            "error": result.get("error"),
-                        })
+                        project_results.append(
+                            {
+                                "name": pdf_name,
+                                "version_id": result.get("version_id", "unknown"),
+                                "status": "failed",
+                                "error": result.get("error"),
+                            }
+                        )
                         continue
 
                     version_id = result["version_id"]
@@ -1186,24 +1202,31 @@ class TestBidAnalysisFullE2E:
                     )
                     save_report(output_dir, pdf_name, report_dict)
                     save_db_export(
-                        output_dir, pdf_name, chunks, content_units,
-                        {"version_id": version_id, "analysis": report_dict}
+                        output_dir,
+                        pdf_name,
+                        chunks,
+                        content_units,
+                        {"version_id": version_id, "analysis": report_dict},
                     )
 
-                    project_results.append({
-                        "name": pdf_name,
-                        "version_id": version_id,
-                        "chunks": len(chunks),
-                        "status": "success",
-                    })
+                    project_results.append(
+                        {
+                            "name": pdf_name,
+                            "version_id": version_id,
+                            "chunks": len(chunks),
+                            "status": "success",
+                        }
+                    )
 
                 except Exception as e:
                     logger.exception(f"Failed to process {pdf_name}")
-                    project_results.append({
-                        "name": pdf_name,
-                        "status": "failed",
-                        "error": str(e),
-                    })
+                    project_results.append(
+                        {
+                            "name": pdf_name,
+                            "status": "failed",
+                            "error": str(e),
+                        }
+                    )
 
         save_manifest(output_dir, execution_time, len(pdf_files), project_results)
 
@@ -1220,211 +1243,4 @@ class TestBidAnalysisFullE2E:
         for p in project_results:
             status_icon = "✓" if p["status"] == "success" else "✗"
             print(f"  {status_icon} {p['name']}")
-        print("=" * 60)
-
-
-# =============================================================================
-# Full E2E Tests (From PDF Import)
-# =============================================================================
-
-
-@pytest.mark.e2e
-@needs_database
-class TestBidAnalysisFullE2E:
-    """Complete end-to-end tests starting from PDF import."""
-
-    def test_complete_workflow_single_pdf(
-        self,
-        pdf_directory,
-        output_base_dir,
-        mineru_client,
-    ):
-        """Test complete workflow with single PDF.
-
-        Workflow:
-        1. Scan PDF directory
-        2. Process first PDF through MinerU
-        3. Upload to MinIO
-        4. Import to database
-        5. Generate embeddings
-        6. Analyze bid content
-        7. Generate annotated PDF
-        8. Archive outputs
-        """
-        import psycopg
-        from bid_scoring.config import load_settings
-
-        settings = load_settings()
-
-        # Find first PDF
-        pdf_files = list(pdf_directory.glob("*.pdf"))
-        if not pdf_files:
-            pytest.skip("No PDF files found")
-
-        pdf_path = pdf_files[0]
-        pdf_name = pdf_path.stem[:50]  # Truncate for filesystem safety
-
-        # Create output directory
-        output_dir = create_timestamp_dir(output_base_dir)
-        execution_time = datetime.now()
-        project_results = []
-
-        with psycopg.connect(settings["DATABASE_URL"]) as conn:
-            # Initialize coordinator
-            coordinator = ProcessingCoordinator()
-
-            # Step 1-5: Process PDF through complete pipeline
-            logger.info(f"Processing PDF: {pdf_path}")
-            result = coordinator.process_pdf_complete(
-                pdf_path=pdf_path,
-                mineru_client=mineru_client,
-                conn=conn,
-                document_title=pdf_name,
-                skip_embeddings=False,
-            )
-
-            # Assertions for processing
-            assert result["status"] == "completed", f"Processing failed: {result.get('error')}"
-            assert result["chunks_imported"] > 0, "Should import chunks"
-            assert result["embeddings_generated"] > 0, "Should generate embeddings"
-
-            version_id = result["version_id"]
-            project_id = result["project_id"]
-
-            # Verify MinIO files registered
-            file_count = verify_minio_files_registered(conn, version_id)
-            assert file_count > 0, "Should register files in MinIO"
-
-            # Verify chunks have bbox
-            chunks_with_bbox = query_chunks_with_bbox(conn, version_id)
-            assert len(chunks_with_bbox) > 0, "Should have chunks with bbox"
-
-            # Verify embeddings
-            sample_chunk = query_chunk_with_embedding(conn, version_id)
-            assert sample_chunk is not None, "Should have chunk with embedding"
-            assert len(sample_chunk["embedding"]) == 1536, "Embedding should be 1536 dims"
-
-            # Step 6: Analyze bid content
-            aspects = {
-                "warranty": ["质保", "保修", "免费维修", "终生"],
-                "delivery": ["交货", "交付", "响应", "小时"],
-                "training": ["培训", "技术指导", "操作培训"],
-                "financial": ["付款", "支付", "费用", "报价"],
-            }
-
-            analyses = {}
-            all_search_results = []
-
-            for aspect, keywords in aspects.items():
-                analysis = analyze_aspect(conn, version_id, aspect, keywords)
-                analyses[aspect] = analysis
-
-                results = search_content_by_topic(
-                    conn, version_id, aspect, keywords, limit=3
-                )
-                all_search_results.extend(results)
-
-            # Generate report
-            total_risks = sum(len(a.risks) for a in analyses.values())
-            total_benefits = sum(len(a.benefits) for a in analyses.values())
-            score = max(0, min(100, (total_benefits * 10) - (total_risks * 5) + 50))
-
-            recommendations = []
-            if analyses.get("warranty") and len(analyses["warranty"].risks) > 0:
-                recommendations.append("建议确认质保期条款是否满足招标要求")
-            if analyses.get("delivery") and len(analyses["delivery"].risks) > 0:
-                recommendations.append("建议确认交付时间是否具有竞争力")
-
-            report = BidAnalysisReport(
-                version_id=version_id,
-                bidder_name=pdf_name,
-                project_name=f"E2E_Test_{pdf_name}",
-                aspects=analyses,
-                total_risks=total_risks,
-                total_benefits=total_benefits,
-                overall_score=score,
-                recommendations=recommendations,
-            )
-
-            # Assertions for analysis
-            assert len(report.aspects) == 4, "Should analyze all 4 aspects"
-            assert 0 <= report.overall_score <= 100, "Score should be 0-100"
-
-            # Step 7: Generate annotated PDF
-            with tempfile.TemporaryDirectory() as tmpdir:
-                annotated_pdf_path = Path(tmpdir) / "annotated.pdf"
-                generate_annotated_pdf(pdf_path, all_search_results, annotated_pdf_path)
-
-                assert annotated_pdf_path.exists(), "Annotated PDF should be created"
-
-                doc = fitz.open(annotated_pdf_path)
-                annotation_count = sum(len(list(page.annots())) for page in doc)
-                doc.close()
-
-                assert annotation_count > 0, "PDF should have annotations"
-
-                # Step 8: Archive outputs
-                # Archive PDF files
-                archive_pdf_outputs(
-                    output_dir=output_dir,
-                    pdf_name=pdf_name,
-                    original_pdf=pdf_path,
-                    mineru_output_dir=None,  # MinerU output is temporary
-                    annotated_pdf=annotated_pdf_path,
-                )
-
-                # Save report
-                report_dict = {
-                    "version_id": report.version_id,
-                    "bidder_name": report.bidder_name,
-                    "project_name": report.project_name,
-                    "aspects": {
-                        k: {
-                            "summary": v.summary,
-                            "chunks_found": v.chunks_found,
-                            "risks": [{"title": r.title, "content": r.content} for r in v.risks],
-                            "benefits": [{"title": b.title, "content": b.content} for b in v.benefits],
-                        }
-                        for k, v in report.aspects.items()
-                    },
-                    "total_risks": report.total_risks,
-                    "total_benefits": report.total_benefits,
-                    "overall_score": report.overall_score,
-                    "recommendations": report.recommendations,
-                }
-                save_report(output_dir, pdf_name, report_dict)
-
-                # Export database data
-                chunks = query_all_chunks_for_export(conn, version_id)
-                content_units = query_content_units_for_export(conn, version_id)
-                analysis_summary = {
-                    "version_id": version_id,
-                    "project_id": project_id,
-                    "total_chunks": len(chunks),
-                    "total_content_units": len(content_units),
-                    "analysis": report_dict,
-                }
-                save_db_export(output_dir, pdf_name, chunks, content_units, analysis_summary)
-
-                # Record project result
-                project_results.append({
-                    "name": pdf_name,
-                    "version_id": version_id,
-                    "project_id": project_id,
-                    "chunks": len(chunks),
-                    "status": "success",
-                })
-
-        # Save manifest
-        save_manifest(output_dir, execution_time, 1, project_results)
-
-        # Print summary
-        print("\n" + "=" * 60)
-        print("完整 E2E 测试完成")
-        print("=" * 60)
-        print(f"输出目录: {output_dir}")
-        print(f"处理 PDF: {pdf_name}")
-        print(f"综合评分: {report.overall_score:.1f}/100")
-        print(f"总风险: {total_risks}")
-        print(f"总优势: {total_benefits}")
         print("=" * 60)

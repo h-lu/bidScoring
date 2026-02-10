@@ -1627,9 +1627,7 @@ def highlight_pdf(
 
     # Validate inputs
     version_id = validate_version_id(version_id)
-    chunk_ids = validate_string_list(
-        chunk_ids, "chunk_ids", min_items=1, max_items=500
-    )
+    chunk_ids = validate_string_list(chunk_ids, "chunk_ids", min_items=1, max_items=500)
     topic = validate_query(topic)  # Use query validation for topic name
     if color is not None:
         if not isinstance(color, str):
@@ -2218,7 +2216,14 @@ def analyze_bids_comprehensive(
     )
 
     if dimensions is None:
-        dimensions = ["warranty", "delivery", "training", "financial", "technical", "compliance"]
+        dimensions = [
+            "warranty",
+            "delivery",
+            "training",
+            "financial",
+            "technical",
+            "compliance",
+        ]
     else:
         dimensions = validate_string_list(
             dimensions, "dimensions", min_items=1, max_items=6
@@ -2229,7 +2234,6 @@ def analyze_bids_comprehensive(
     with psycopg.connect(settings["DATABASE_URL"]) as conn:
         from mcp_servers.bid_analyzer import (
             BidAnalyzer,
-            compare_versions,
             ANALYSIS_DIMENSIONS,
         )
 
@@ -2267,10 +2271,11 @@ def analyze_bids_comprehensive(
                 if title:
                     # Simple extraction: look for company-like patterns
                     import re
+
                     company_patterns = [
-                        r'([^\s]+(?:科技|生物|实业|贸易|有限公司|公司))',
-                        r'([^\s]+有限公司)',
-                        r'([A-Z][a-zA-Z]+\s+(?:Technology|Bio|Science|Co|Ltd|Inc))',
+                        r"([^\s]+(?:科技|生物|实业|贸易|有限公司|公司))",
+                        r"([^\s]+有限公司)",
+                        r"([A-Z][a-zA-Z]+\s+(?:Technology|Bio|Science|Co|Ltd|Inc))",
                     ]
                     for pattern in company_patterns:
                         match = re.search(pattern, title)
@@ -2321,14 +2326,16 @@ def analyze_bids_comprehensive(
             for r in reports:
                 if dim_name in r.dimensions:
                     d = r.dimensions[dim_name]
-                    dim_data.append({
-                        "bidder": r.bidder_name,
-                        "score": round(d.score, 1),
-                        "risk_level": d.risk_level,
-                        "chunks_found": d.chunks_found,
-                        "risks_count": len(d.risks),
-                        "benefits_count": len(d.benefits),
-                    })
+                    dim_data.append(
+                        {
+                            "bidder": r.bidder_name,
+                            "score": round(d.score, 1),
+                            "risk_level": d.risk_level,
+                            "chunks_found": d.chunks_found,
+                            "risks_count": len(d.risks),
+                            "benefits_count": len(d.benefits),
+                        }
+                    )
 
             dimension_comparison[dim_name] = {
                 "display_name": dim_config.display_name,
@@ -2375,7 +2382,6 @@ def analyze_bids_comprehensive(
         if generate_annotations:
             from mineru.minio_storage import MinIOStorage
             from mcp_servers.pdf_annotator import PDFAnnotator
-            from mcp_servers.annotation_insights import RISK_PATTERNS, BENEFIT_PATTERNS
 
             storage = MinIOStorage()
             annotator = PDFAnnotator(conn, storage)
@@ -2389,10 +2395,10 @@ def analyze_bids_comprehensive(
 
                 for dim_result in report.dimensions.values():
                     for insight in dim_result.risks:
-                        if hasattr(insight, 'chunk_id'):
+                        if hasattr(insight, "chunk_id"):
                             risk_chunks.append(insight.chunk_id)
                     for insight in dim_result.benefits:
-                        if hasattr(insight, 'chunk_id'):
+                        if hasattr(insight, "chunk_id"):
                             benefit_chunks.append(insight.chunk_id)
 
                 # Highlight risks (red) and benefits (green)
@@ -2405,7 +2411,10 @@ def analyze_bids_comprehensive(
                     )
                     if result.success:
                         if vid not in annotated_urls:
-                            annotated_urls[vid] = {"bidder_name": report.bidder_name, "topics": {}}
+                            annotated_urls[vid] = {
+                                "bidder_name": report.bidder_name,
+                                "topics": {},
+                            }
                         annotated_urls[vid]["topics"]["risk"] = result.annotated_url
 
                 if benefit_chunks:
@@ -2413,11 +2422,16 @@ def analyze_bids_comprehensive(
                         version_id=vid,
                         chunk_ids=benefit_chunks[:100],  # Limit to 100
                         topic="benefit",
-                        increment=bool(risk_chunks),  # Add to existing if risks were highlighted
+                        increment=bool(
+                            risk_chunks
+                        ),  # Add to existing if risks were highlighted
                     )
                     if result.success:
                         if vid not in annotated_urls:
-                            annotated_urls[vid] = {"bidder_name": report.bidder_name, "topics": {}}
+                            annotated_urls[vid] = {
+                                "bidder_name": report.bidder_name,
+                                "topics": {},
+                            }
                         annotated_urls[vid]["topics"]["benefit"] = result.annotated_url
 
         # Build summary
@@ -2425,7 +2439,9 @@ def analyze_bids_comprehensive(
             "total_bidders": len(reports),
             "winner": rankings[0]["bidder_name"] if rankings else None,
             "winner_score": rankings[0]["overall_score"] if rankings else None,
-            "avg_score": round(sum(r.overall_score for r in reports) / len(reports), 1) if reports else 0,
+            "avg_score": round(sum(r.overall_score for r in reports) / len(reports), 1)
+            if reports
+            else 0,
             "high_risk_count": sum(1 for r in reports if r.risk_level == "high"),
             "dimensions_analyzed": len(dimensions),
         }

@@ -105,21 +105,25 @@ def save_report(output_dir: Path, pdf_name: str, report: dict[str, Any]) -> Path
     ]
 
     for aspect, analysis in report.get("aspects", {}).items():
-        lines.extend([
-            f"### {aspect.upper()}",
-            f"{analysis.get('summary', '无')}",
-            f"- 内容点: {analysis.get('chunks_found', 0)}",
-            f"- 风险: {len(analysis.get('risks', []))}",
-            f"- 优势: {len(analysis.get('benefits', []))}",
-            "",
-        ])
+        lines.extend(
+            [
+                f"### {aspect.upper()}",
+                f"{analysis.get('summary', '无')}",
+                f"- 内容点: {analysis.get('chunks_found', 0)}",
+                f"- 风险: {len(analysis.get('risks', []))}",
+                f"- 优势: {len(analysis.get('benefits', []))}",
+                "",
+            ]
+        )
 
-    lines.extend([
-        f"## 统计",
-        f"- 总风险: {report.get('total_risks', 0)}",
-        f"- 总优势: {report.get('total_benefits', 0)}",
-        "",
-    ])
+    lines.extend(
+        [
+            "## 统计",
+            f"- 总风险: {report.get('total_risks', 0)}",
+            f"- 总优势: {report.get('total_benefits', 0)}",
+            "",
+        ]
+    )
 
     if report.get("recommendations"):
         lines.extend(["## 建议", ""])

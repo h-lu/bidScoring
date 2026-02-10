@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Analysis Dimensions Configuration
 # =============================================================================
 
+
 @dataclass
 class AnalysisDimension:
     """Configuration for a single analysis dimension."""
@@ -48,10 +49,10 @@ ANALYSIS_DIMENSIONS = {
         extract_patterns=[r"(\d+)\s*年", r"(\d+)\s*个月"],
         risk_thresholds={
             "excellent": [5, 999],  # 5+ years
-            "good": [3, 5],         # 3-5 years
-            "medium": [2, 3],       # 2-3 years
-            "poor": [0, 2],          # <2 years
-        }
+            "good": [3, 5],  # 3-5 years
+            "medium": [2, 3],  # 2-3 years
+            "poor": [0, 2],  # <2 years
+        },
     ),
     "delivery": AnalysisDimension(
         name="delivery",
@@ -60,11 +61,11 @@ ANALYSIS_DIMENSIONS = {
         keywords=["交货", "交付", "响应时间", "小时内", "到场", "上门"],
         extract_patterns=[r"(\d+)\s*小时", r"(\d+)\s*天"],
         risk_thresholds={
-            "excellent": [0, 2],     # <2 hours
-            "good": [2, 8],          # 2-8 hours
-            "medium": [8, 24],       # 8-24 hours
-            "poor": [24, 999],       # >24 hours
-        }
+            "excellent": [0, 2],  # <2 hours
+            "good": [2, 8],  # 2-8 hours
+            "medium": [8, 24],  # 8-24 hours
+            "poor": [24, 999],  # >24 hours
+        },
     ),
     "training": AnalysisDimension(
         name="training",
@@ -73,11 +74,11 @@ ANALYSIS_DIMENSIONS = {
         keywords=["培训", "技术指导", "操作培训", "维护培训"],
         extract_patterns=[r"(\d+)\s*[天日]", r"(\d+)\s*人"],
         risk_thresholds={
-            "excellent": [5, 999],   # 5+ days
-            "good": [3, 5],          # 3-5 days
-            "medium": [1, 3],        # 1-3 days
-            "poor": [0, 1],          # <1 day
-        }
+            "excellent": [5, 999],  # 5+ days
+            "good": [3, 5],  # 3-5 days
+            "medium": [1, 3],  # 1-3 days
+            "poor": [0, 1],  # <1 day
+        },
     ),
     "financial": AnalysisDimension(
         name="financial",
@@ -88,8 +89,8 @@ ANALYSIS_DIMENSIONS = {
         risk_thresholds={
             "high_prepayment": [50, 999],  # >50% prepayment
             "medium_prepayment": [30, 50],  # 30-50% prepayment
-            "low_prepayment": [0, 30],       # <30% prepayment
-        }
+            "low_prepayment": [0, 30],  # <30% prepayment
+        },
     ),
     "technical": AnalysisDimension(
         name="technical",
@@ -109,6 +110,7 @@ ANALYSIS_DIMENSIONS = {
 # =============================================================================
 # Analysis Results
 # =============================================================================
+
 
 @dataclass
 class DimensionResult:
@@ -152,6 +154,7 @@ class BidAnalysisReport:
 # =============================================================================
 # Main Analyzer
 # =============================================================================
+
 
 class BidAnalyzer:
     """Analyzes bid documents across multiple dimensions.
@@ -223,9 +226,7 @@ class BidAnalyzer:
         recommendations = self._generate_recommendations(dimension_results)
 
         # Count chunks analyzed
-        chunks_analyzed = sum(
-            d.chunks_found for d in dimension_results.values()
-        )
+        chunks_analyzed = sum(d.chunks_found for d in dimension_results.values())
 
         return BidAnalysisReport(
             version_id=version_id,
@@ -279,9 +280,7 @@ class BidAnalyzer:
 
         # Extract numerical values
         if dimension.extract_patterns:
-            extracted_values = self._extract_values(
-                chunks, dimension.extract_patterns
-            )
+            extracted_values = self._extract_values(chunks, dimension.extract_patterns)
 
         # Calculate dimension score
         score = self._calculate_dimension_score(
@@ -421,8 +420,7 @@ class BidAnalyzer:
             # Example logic for warranty/delivery
             if dimension.name == "warranty":
                 max_years = max(
-                    (v["max"] for v in extracted_values.values()),
-                    default=0
+                    (v["max"] for v in extracted_values.values()), default=0
                 )
                 if max_years >= thresholds["excellent"][0]:
                     score += 20
@@ -433,8 +431,7 @@ class BidAnalyzer:
 
             elif dimension.name == "delivery":
                 min_hours = min(
-                    (v["min"] for v in extracted_values.values()),
-                    default=999
+                    (v["min"] for v in extracted_values.values()), default=999
                 )
                 if min_hours <= thresholds["excellent"][1]:
                     score += 20
@@ -517,31 +514,23 @@ class BidAnalyzer:
             if result.risk_level == "high":
                 if dim_name == "warranty":
                     recommendations.append(
-                        f"[质保] 质保期偏短，建议确认是否可延长或增加服务承诺"
+                        "[质保] 质保期偏短，建议确认是否可延长或增加服务承诺"
                     )
                 elif dim_name == "delivery":
                     recommendations.append(
-                        f"[交付] 响应时间较慢，建议确认紧急情况处理流程"
+                        "[交付] 响应时间较慢，建议确认紧急情况处理流程"
                     )
                 elif dim_name == "training":
-                    recommendations.append(
-                        f"[培训] 培训时间不足，建议增加实操培训天数"
-                    )
+                    recommendations.append("[培训] 培训时间不足，建议增加实操培训天数")
                 elif dim_name == "financial":
-                    recommendations.append(
-                        f"[商务] 付款条件较为严格，建议评估资金压力"
-                    )
+                    recommendations.append("[商务] 付款条件较为严格，建议评估资金压力")
 
             # Check for missing content
             if result.chunks_found == 0:
                 if dim_name == "warranty":
-                    recommendations.append(
-                        "[质保] 文档未找到质保条款，需补充"
-                    )
+                    recommendations.append("[质保] 文档未找到质保条款，需补充")
                 elif dim_name == "delivery":
-                    recommendations.append(
-                        "[交付] 文档未明确交付时间，需确认"
-                    )
+                    recommendations.append("[交付] 文档未明确交付时间，需确认")
 
         # Overall recommendations
         if not recommendations:
@@ -553,6 +542,7 @@ class BidAnalyzer:
 # =============================================================================
 # Multi-Version Comparison
 # =============================================================================
+
 
 def compare_versions(
     conn,
@@ -604,12 +594,14 @@ def compare_versions(
         for r in reports:
             if dim_name in r.dimensions:
                 d = r.dimensions[dim_name]
-                dim_data.append({
-                    "bidder": r.bidder_name,
-                    "score": d.score,
-                    "risk_level": d.risk_level,
-                    "chunks_found": d.chunks_found,
-                })
+                dim_data.append(
+                    {
+                        "bidder": r.bidder_name,
+                        "score": d.score,
+                        "risk_level": d.risk_level,
+                        "chunks_found": d.chunks_found,
+                    }
+                )
 
         comparison["dimension_comparison"][dim_name] = sorted(
             dim_data, key=lambda x: x["score"], reverse=True
