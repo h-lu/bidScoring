@@ -45,3 +45,7 @@ migrations_backup*/
 mineru/output/
 mineru/pdf/
 data/raw/
+
+# Test outputs
+tests/outputs/*/
+!tests/outputs/.gitkeep
