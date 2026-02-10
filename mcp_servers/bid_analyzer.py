@@ -17,8 +17,6 @@ from psycopg.rows import dict_row
 from mcp_servers.annotation_insights import (
     AnnotationInsight,
     analyze_chunk_for_insights,
-    RISK_PATTERNS,
-    BENEFIT_PATTERNS,
 )
 
 logger = logging.getLogger(__name__)
