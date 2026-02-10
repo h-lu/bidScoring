@@ -67,7 +67,8 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         # Skip client integration tests (require running MCP server)
-        pytest -v --tb=short --ignore=tests/test_mcp_client_integration.py
+        # Skip E2E tests (require external APIs: MinerU, MinIO, etc.)
+        pytest -v --tb=short -m "not e2e" --ignore=tests/test_mcp_client_integration.py
 
   lint:
     runs-on: ubuntu-latest
@@ -89,5 +90,5 @@ jobs:
 
     - name: Check code style
       run: |
-        ruff check bid_scoring/ tests/
-        ruff format --check bid_scoring/ tests/
+        ruff check bid_scoring/ mcp_servers/ tests/
+        ruff format --check bid_scoring/ mcp_servers/ tests/
