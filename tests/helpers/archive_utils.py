@@ -13,7 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 def create_timestamp_dir(base_dir: Path) -> Path:
-    """Create timestamped output directory."""
+    """Create timestamped output directory.
+
+    Args:
+        base_dir: Base output directory
+
+    Returns:
+        Path to timestamped directory
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = base_dir / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -28,24 +35,38 @@ def archive_pdf_outputs(
     mineru_output_dir: Path | None,
     annotated_pdf: Path | None,
 ) -> dict[str, str]:
-    """Archive PDF-related outputs."""
+    """Archive PDF-related outputs.
+
+    Args:
+        output_dir: Base output directory for this PDF
+        pdf_name: PDF file name (without extension)
+        original_pdf: Path to original PDF
+        mineru_output_dir: Path to MinerU output directory
+        annotated_pdf: Path to annotated PDF
+
+    Returns:
+        Dict mapping output types to archived paths
+    """
     pdf_dir = output_dir / f"pdf_{pdf_name}"
     pdf_dir.mkdir(exist_ok=True)
 
     archived = {}
 
+    # Archive original PDF
     if original_pdf and original_pdf.exists():
         dest = pdf_dir / "01_original.pdf"
         shutil.copy2(original_pdf, dest)
         archived["original"] = str(dest)
         logger.info(f"Archived original PDF: {dest}")
 
+    # Archive MinerU output
     if mineru_output_dir and mineru_output_dir.exists():
         dest = pdf_dir / "02_mineru_output"
         shutil.copytree(mineru_output_dir, dest, dirs_exist_ok=True)
         archived["mineru_output"] = str(dest)
         logger.info(f"Archived MinerU output: {dest}")
 
+    # Archive annotated PDF
     if annotated_pdf and annotated_pdf.exists():
         dest = pdf_dir / "03_annotated.pdf"
         shutil.copy2(annotated_pdf, dest)
@@ -56,7 +77,16 @@ def archive_pdf_outputs(
 
 
 def save_report(output_dir: Path, pdf_name: str, report: dict[str, Any]) -> Path:
-    """Save analysis report as Markdown."""
+    """Save analysis report as Markdown.
+
+    Args:
+        output_dir: PDF output directory
+        pdf_name: PDF file name
+        report: Report data
+
+    Returns:
+        Path to saved report
+    """
     pdf_dir = output_dir / f"pdf_{pdf_name}"
     pdf_dir.mkdir(exist_ok=True)
 
@@ -109,19 +139,33 @@ def save_db_export(
     content_units: list[dict],
     analysis_summary: dict[str, Any],
 ) -> Path:
-    """Save database export."""
+    """Save database export.
+
+    Args:
+        output_dir: PDF output directory
+        pdf_name: PDF file name
+        chunks: Chunks data
+        content_units: Content units data
+        analysis_summary: Analysis summary
+
+    Returns:
+        Path to export directory
+    """
     pdf_dir = output_dir / f"pdf_{pdf_name}"
     export_dir = pdf_dir / "05_db_export"
     export_dir.mkdir(parents=True, exist_ok=True)
 
+    # Save chunks
     chunks_path = export_dir / "chunks.json"
     with open(chunks_path, "w", encoding="utf-8") as f:
         json.dump(chunks, f, ensure_ascii=False, indent=2, default=str)
 
+    # Save content_units
     units_path = export_dir / "content_units.json"
     with open(units_path, "w", encoding="utf-8") as f:
         json.dump(content_units, f, ensure_ascii=False, indent=2, default=str)
 
+    # Save analysis summary
     summary_path = export_dir / "analysis_summary.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(analysis_summary, f, ensure_ascii=False, indent=2, default=str)
@@ -136,7 +180,17 @@ def save_manifest(
     pdf_count: int,
     projects: list[dict[str, Any]],
 ) -> Path:
-    """Save execution manifest."""
+    """Save execution manifest.
+
+    Args:
+        output_dir: Output directory
+        execution_time: Execution start time
+        pdf_count: Total PDF count
+        projects: List of project results
+
+    Returns:
+        Path to manifest file
+    """
     manifest = {
         "execution_time": execution_time.isoformat(),
         "pdf_count": pdf_count,
@@ -155,7 +209,15 @@ def save_manifest(
 
 
 def save_execution_log(output_dir: Path, log_content: str) -> Path:
-    """Save execution log."""
+    """Save execution log.
+
+    Args:
+        output_dir: Output directory
+        log_content: Log content
+
+    Returns:
+        Path to log file
+    """
     log_path = output_dir / "execution.log"
     log_path.write_text(log_content, encoding="utf-8")
     return log_path
