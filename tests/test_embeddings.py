@@ -275,6 +275,7 @@ class TestCosineSimilarity:
         assert result == 0.0
 
 
+@pytest.mark.integration
 class TestEmbeddingIntegration:
     """Integration tests for embedding workflow."""
 

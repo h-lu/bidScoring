@@ -68,7 +68,8 @@ jobs:
       run: |
         # Skip client integration tests (require running MCP server)
         # Skip E2E tests (require external APIs: MinerU, MinIO, etc.)
-        pytest -v --tb=short -m "not e2e" --ignore=tests/test_mcp_client_integration.py
+        # Skip integration tests (require OpenAI API and other external services)
+        pytest -v --tb=short -m "not e2e and not integration" --ignore=tests/test_mcp_client_integration.py
 
   lint:
     runs-on: ubuntu-latest
