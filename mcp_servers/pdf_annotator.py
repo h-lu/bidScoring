@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 
 # Color coding by topic for visual organization
 TOPIC_COLORS = {
-    "risk": (1.0, 0.4, 0.4),        # Red
-    "warranty": (0.4, 0.8, 0.4),    # Green
-    "training": (0.9, 0.8, 0.3),    # Yellow
-    "delivery": (0.9, 0.6, 0.2),    # Orange
-    "financial": (0.4, 0.6, 0.9),   # Blue
-    "technical": (0.6, 0.4, 0.8),   # Purple
-    "default": (1.0, 0.9, 0.6),     # Light yellow
+    "risk": (1.0, 0.4, 0.4),  # Red
+    "warranty": (0.4, 0.8, 0.4),  # Green
+    "training": (0.9, 0.8, 0.3),  # Yellow
+    "delivery": (0.9, 0.6, 0.2),  # Orange
+    "financial": (0.4, 0.6, 0.9),  # Blue
+    "technical": (0.6, 0.4, 0.8),  # Purple
+    "default": (1.0, 0.9, 0.6),  # Light yellow
 }
 
 
@@ -166,9 +166,7 @@ class PDFAnnotator:
         try:
             # Validate inputs
             if not chunk_ids:
-                return HighlightResult(
-                    success=False, error="chunk_ids cannot be empty"
-                )
+                return HighlightResult(success=False, error="chunk_ids cannot be empty")
 
             # Get chunk bbox coordinates
             chunks = self._get_chunk_bboxes(version_id, chunk_ids)
@@ -188,9 +186,7 @@ class PDFAnnotator:
                 source_pdf = self._download_original_pdf(version_id)
 
             if not source_pdf:
-                return HighlightResult(
-                    success=False, error="No PDF found for version"
-                )
+                return HighlightResult(success=False, error="No PDF found for version")
 
             # Get color for topic
             if color is None:
@@ -198,9 +194,7 @@ class PDFAnnotator:
 
             # Add highlights
             pdf_path = Path(source_pdf["local_path"])
-            highlights_added = self._add_highlights(
-                pdf_path, chunks, topic, color
-            )
+            highlights_added = self._add_highlights(pdf_path, chunks, topic, color)
 
             # Get metadata for tracking
             metadata = source_pdf.get("metadata", {})
@@ -212,7 +206,9 @@ class PDFAnnotator:
                 topics = [topic]
 
             metadata["topics"] = topics
-            metadata["highlights_count"] = metadata.get("highlights_count", 0) + highlights_added
+            metadata["highlights_count"] = (
+                metadata.get("highlights_count", 0) + highlights_added
+            )
             metadata["last_updated"] = datetime.utcnow().isoformat()
 
             # Upload annotated PDF
@@ -452,10 +448,7 @@ class PDFAnnotator:
         Returns:
             Tuple of (object_key, file_id)
         """
-        from bid_scoring.files import FileRegistry
         from psycopg.types.json import Jsonb
-
-        registry = FileRegistry(self.conn)
 
         # Build object key
         file_name = f"{version_id}_annotated.pdf"

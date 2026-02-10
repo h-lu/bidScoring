@@ -94,6 +94,87 @@ class ProcessingCoordinator:
             "status": "pending_mineru_api",
         }
 
+    def process_pdf_complete(
+        self,
+        pdf_path: Path,
+        mineru_client,
+        conn,
+        document_title: str = "untitled",
+        skip_embeddings: bool = False,
+    ) -> dict[str, Any]:
+        """Process a PDF through the complete pipeline including MinerU API.
+
+        Args:
+            pdf_path: Path to PDF file
+            mineru_client: MinerU API client
+            conn: Database connection
+            document_title: Document title
+            skip_embeddings: Skip embedding generation
+
+        Returns:
+            Processing result dict
+        """
+        from datetime import datetime
+
+        logger.info(f"Starting complete PDF processing: {pdf_path}")
+        start_time = datetime.now()
+
+        # Generate IDs
+        project_id = self.generate_project_id(pdf_path.stem)
+        document_id = self.generate_document_id(project_id, pdf_path.name)
+        version_id = self.generate_version_id()
+
+        logger.info(
+            f"Generated IDs: project={project_id}, doc={document_id}, version={version_id}"
+        )
+
+        try:
+            # Step 1: Call MinerU API
+            logger.info("Step 1: Calling MinerU API...")
+            task_id = mineru_client.submit_pdf(pdf_path)
+            if not task_id:
+                raise RuntimeError("Failed to submit PDF to MinerU")
+
+            result = mineru_client.poll_until_complete(task_id)
+            if result.get("state") != "SUCCESS":
+                raise RuntimeError(f"MinerU processing failed: {result}")
+
+            # Download results
+            output_dir = mineru_client.download_results(task_id, pdf_path.stem)
+            logger.info(f"MinerU output downloaded to: {output_dir}")
+
+            # Step 2-5: Process through existing pipeline
+            process_result = self.process_existing_output(
+                output_dir=output_dir,
+                project_id=project_id,
+                document_id=document_id,
+                version_id=version_id,
+                conn=conn,
+                document_title=document_title,
+                skip_embeddings=skip_embeddings,
+            )
+
+            duration = (datetime.now() - start_time).total_seconds()
+
+            return {
+                "project_id": project_id,
+                "document_id": document_id,
+                "version_id": version_id,
+                "status": "completed",
+                "duration_seconds": duration,
+                **process_result,
+            }
+
+        except Exception as e:
+            logger.error(f"PDF processing failed: {e}")
+            return {
+                "project_id": project_id,
+                "document_id": document_id,
+                "version_id": version_id,
+                "status": "failed",
+                "error": str(e),
+            }
+
     def process_existing_output(
         self,
         output_dir: Path,

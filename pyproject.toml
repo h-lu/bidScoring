@@ -41,4 +41,5 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "e2e: marks tests as end-to-end (slow, requires external services)",
+    "integration: marks tests as integration tests (require external APIs)",
 ]

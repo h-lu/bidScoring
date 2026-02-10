@@ -86,24 +86,28 @@ def analyze_chunk_for_insights(
     for risk_type, pattern in RISK_PATTERNS.items():
         for keyword in pattern["keywords"]:
             if keyword in text:
-                insights.append(AnnotationInsight(
-                    category="risk",
-                    title=pattern["label"],
-                    content=f"检测到{pattern['label']}关键词：'{keyword}'。需确认具体数值和条件。",
-                    risk_level=pattern["risk_level"],
-                ))
+                insights.append(
+                    AnnotationInsight(
+                        category="risk",
+                        title=pattern["label"],
+                        content=f"检测到{pattern['label']}关键词：'{keyword}'。需确认具体数值和条件。",
+                        risk_level=pattern["risk_level"],
+                    )
+                )
                 break  # Only add one insight per risk type
 
     # Check for benefit patterns
     for benefit_type, pattern in BENEFIT_PATTERNS.items():
         for keyword in pattern["keywords"]:
             if keyword in text:
-                insights.append(AnnotationInsight(
-                    category="benefit",
-                    title=pattern["label"],
-                    content=f"发现{pattern['label']}：'{keyword}'。可作为评分优势。",
-                    risk_level=None,
-                ))
+                insights.append(
+                    AnnotationInsight(
+                        category="benefit",
+                        title=pattern["label"],
+                        content=f"发现{pattern['label']}：'{keyword}'。可作为评分优势。",
+                        risk_level=None,
+                    )
+                )
                 break
 
     # Specific analysis by topic
@@ -116,12 +120,14 @@ def analyze_chunk_for_insights(
 
     # If no specific insights found, provide a general one
     if not insights:
-        insights.append(AnnotationInsight(
-            category="info",
-            title="内容标记",
-            content=f"已标记{topic}相关内容，建议进一步详细评审。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="info",
+                title="内容标记",
+                content=f"已标记{topic}相关内容，建议进一步详细评审。",
+                risk_level=None,
+            )
+        )
 
     return insights
 
@@ -131,41 +137,49 @@ def _analyze_warranty(text: str) -> list[AnnotationInsight]:
     insights = []
 
     # Check for warranty period
-    years = re.findall(r'(\d+)\s*年', text)
+    years = re.findall(r"(\d+)\s*年", text)
     if years:
         max_years = max(int(y) for y in years)
         if max_years >= 5:
-            insights.append(AnnotationInsight(
-                category="benefit",
-                title="长期质保",
-                content=f"承诺{max_years}年质保，优于行业标准。重点强调此优势。",
-                risk_level=None,
-            ))
+            insights.append(
+                AnnotationInsight(
+                    category="benefit",
+                    title="长期质保",
+                    content=f"承诺{max_years}年质保，优于行业标准。重点强调此优势。",
+                    risk_level=None,
+                )
+            )
         elif max_years < 3:
-            insights.append(AnnotationInsight(
-                category="risk",
-                title="质保期偏短",
-                content=f"质保期仅{max_years}年，可能存在竞争劣势。建议确认是否可延长。",
-                risk_level="medium",
-            ))
+            insights.append(
+                AnnotationInsight(
+                    category="risk",
+                    title="质保期偏短",
+                    content=f"质保期仅{max_years}年，可能存在竞争劣势。建议确认是否可延长。",
+                    risk_level="medium",
+                )
+            )
 
     # Check for lifetime warranty
     if "终生" in text or "终身" in text or "永久" in text:
-        insights.append(AnnotationInsight(
-            category="benefit",
-            title="终身质保",
-            content="发现终身质保承诺，这是强有力的竞争优势。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="benefit",
+                title="终身质保",
+                content="发现终身质保承诺，这是强有力的竞争优势。",
+                risk_level=None,
+            )
+        )
 
     # Check for warranty scope
     if "整机" in text:
-        insights.append(AnnotationInsight(
-            category="info",
-            title="质保范围",
-            content="承诺整机质保，覆盖范围较广。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="info",
+                title="质保范围",
+                content="承诺整机质保，覆盖范围较广。",
+                risk_level=None,
+            )
+        )
 
     return insights
 
@@ -175,32 +189,38 @@ def _analyze_delivery(text: str) -> list[AnnotationInsight]:
     insights = []
 
     # Check response time
-    hours = re.findall(r'(\d+)\s*小时', text)
+    hours = re.findall(r"(\d+)\s*小时", text)
     if hours:
         min_hours = min(int(h) for h in hours)
         if min_hours <= 2:
-            insights.append(AnnotationInsight(
-                category="benefit",
-                title="快速响应",
-                content=f"承诺{min_hours}小时内响应，响应速度较快。",
-                risk_level=None,
-            ))
+            insights.append(
+                AnnotationInsight(
+                    category="benefit",
+                    title="快速响应",
+                    content=f"承诺{min_hours}小时内响应，响应速度较快。",
+                    risk_level=None,
+                )
+            )
         elif min_hours > 24:
-            insights.append(AnnotationInsight(
-                category="risk",
-                title="响应较慢",
-                content=f"响应时间{min_hours}小时，可能影响紧急情况处理。",
-                risk_level="medium",
-            ))
+            insights.append(
+                AnnotationInsight(
+                    category="risk",
+                    title="响应较慢",
+                    content=f"响应时间{min_hours}小时，可能影响紧急情况处理。",
+                    risk_level="medium",
+                )
+            )
 
     # Check for on-site support
     if "现场" in text or "上门" in text:
-        insights.append(AnnotationInsight(
-            category="info",
-            title="现场服务",
-            content="包含现场/上门服务承诺。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="info",
+                title="现场服务",
+                content="包含现场/上门服务承诺。",
+                risk_level=None,
+            )
+        )
 
     return insights
 
@@ -210,33 +230,39 @@ def _analyze_training(text: str) -> list[AnnotationInsight]:
     insights = []
 
     # Check for training days
-    days = re.findall(r'(\d+)\s*[天日]', text)
+    days = re.findall(r"(\d+)\s*[天日]", text)
     if days:
         total_days = sum(int(d) for d in days)
         if total_days >= 5:
-            insights.append(AnnotationInsight(
-                category="benefit",
-                title="充足培训",
-                content=f"提供{total_days}天培训，培训内容较全面。",
-                risk_level=None,
-            ))
+            insights.append(
+                AnnotationInsight(
+                    category="benefit",
+                    title="充足培训",
+                    content=f"提供{total_days}天培训，培训内容较全面。",
+                    risk_level=None,
+                )
+            )
 
     # Check for training content
     if "操作" in text or "使用" in text:
-        insights.append(AnnotationInsight(
-            category="info",
-            title="操作培训",
-            content="包含设备操作培训。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="info",
+                title="操作培训",
+                content="包含设备操作培训。",
+                risk_level=None,
+            )
+        )
 
     if "维护" in text or "保养" in text:
-        insights.append(AnnotationInsight(
-            category="info",
-            title="维护培训",
-            content="包含设备维护保养培训。",
-            risk_level=None,
-        ))
+        insights.append(
+            AnnotationInsight(
+                category="info",
+                title="维护培训",
+                content="包含设备维护保养培训。",
+                risk_level=None,
+            )
+        )
 
     return insights
 
@@ -287,13 +313,16 @@ def generate_annotation_content(
     insights = analyze_chunk_for_insights(text, topic)
 
     if not insights:
-        return f"【{topic}】{text[:max_length-10]}..."
+        return f"【{topic}】{text[: max_length - 10]}..."
 
     # Use the most important insight (prioritize risks, then benefits)
-    prioritized = sorted(insights, key=lambda x: (
-        0 if x.category == "risk" else 1 if x.category == "benefit" else 2,
-        {"high": 0, "medium": 1, "low": 2}.get(x.risk_level or "", 3),
-    ))
+    prioritized = sorted(
+        insights,
+        key=lambda x: (
+            0 if x.category == "risk" else 1 if x.category == "benefit" else 2,
+            {"high": 0, "medium": 1, "low": 2}.get(x.risk_level or "", 3),
+        ),
+    )
 
     best_insight = prioritized[0]
     formatted = format_insight_for_annotation(best_insight)
@@ -303,6 +332,6 @@ def generate_annotation_content(
     result = f"{formatted}\n\n原文: {preview}"
 
     if len(result) > max_length:
-        result = result[:max_length-3] + "..."
+        result = result[: max_length - 3] + "..."
 
     return result

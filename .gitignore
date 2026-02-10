@@ -8,7 +8,6 @@ __pycache__/
 dist/
 build/
 data/clean/
-.claude/
 .deepeval
 .pytest_cache/
 .serena/
@@ -23,7 +22,7 @@ venv/
 .vscode/
 *.swp
 *.swo
-.claude
+# .claude  # Allow skill files to be committed
 .deepeval
 
 # OS
@@ -45,3 +44,7 @@ migrations_backup*/
 mineru/output/
 mineru/pdf/
 data/raw/
+
+# Test outputs
+tests/outputs/*/
+!tests/outputs/.gitkeep

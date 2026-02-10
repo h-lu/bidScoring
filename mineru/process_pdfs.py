@@ -16,15 +16,20 @@ Usage:
     python process_pdfs.py
 """
 
+import logging
 import os
 import time
 import json
 import requests
+import zipfile
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 # Helper function to resolve paths (relative to script or absolute)
@@ -52,6 +57,227 @@ LAYOUT_MODEL = os.getenv("LAYOUT_MODEL", "doclayout_yolo")
 # Polling settings
 POLL_TIMEOUT = int(os.getenv("POLL_TIMEOUT", "600"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "10"))
+
+
+# =============================================================================
+# MinerUClient Class - Single PDF Processing API
+# =============================================================================
+
+
+class MinerUClient:
+    """Client for processing single PDFs through MinerU API.
+
+    Used by coordinator.process_pdf_complete() for E2E tests.
+
+    Usage:
+        client = MinerUClient(api_key="...", api_base_url="...")
+        task_id = client.submit_pdf(pdf_path)
+        result = client.poll_until_complete(task_id)
+        output_dir = client.download_results(task_id, pdf_stem)
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        api_base_url: str | None = None,
+        output_dir: Path | str | None = None,
+        enable_ocr: bool = False,
+        enable_formula: bool = True,
+        enable_table: bool = True,
+        language: str = "zh",
+    ):
+        """Initialize MinerU client.
+
+        Args:
+            api_key: MinerU API key (defaults to MINERU_API_KEY env var)
+            api_base_url: API base URL (defaults to MINERU_API_URL env var)
+            output_dir: Where to save downloaded results
+            enable_ocr: Enable OCR processing
+            enable_formula: Extract formulas
+            enable_table: Extract tables
+            language: Document language
+        """
+        self.api_key = api_key or os.getenv("MINERU_API_KEY")
+        self.api_base_url = api_base_url or os.getenv(
+            "MINERU_API_URL", "https://mineru.net/api/v4"
+        )
+        self.output_dir = Path(output_dir or OUTPUT_DIR)
+
+        self.enable_ocr = enable_ocr
+        self.enable_formula = enable_formula
+        self.enable_table = enable_table
+        self.language = language
+        self.layout_model = LAYOUT_MODEL
+
+        self.poll_timeout = POLL_TIMEOUT
+        self.poll_interval = POLL_INTERVAL
+
+        if not self.api_key:
+            raise ValueError("MINERU_API_KEY not set")
+
+    def submit_pdf(self, pdf_path: Path | str) -> str | None:
+        """Submit a PDF for processing.
+
+        Args:
+            pdf_path: Path to PDF file
+
+        Returns:
+            Task ID (batch_id) for polling, or None if failed
+        """
+        pdf_path = Path(pdf_path)
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        logger.info(f"Submitting PDF: {pdf_path.name}")
+
+        try:
+            # Step 1: Get presigned URL
+            presigned_response = get_presigned_urls([pdf_path.name])
+            data = presigned_response.get("data", {})
+            batch_id = data.get("batch_id")
+            file_urls = data.get("file_urls", [])
+
+            if not batch_id or not file_urls:
+                logger.error(f"Failed to get presigned URLs: {presigned_response}")
+                return None
+
+            # Step 2: Upload file
+            presigned_url = file_urls[0]
+            logger.info(f"Uploading PDF (size: {pdf_path.stat().st_size / 1024:.1f} KB)...")
+            upload_file_to_presigned_url(presigned_url, pdf_path)
+
+            # Step 3: Create extraction task
+            logger.info("Creating extraction task...")
+            task_response = create_extraction_task(
+                file_urls=[{"url": presigned_url, "name": pdf_path.name}],
+                is_ocr=self.enable_ocr,
+                enable_formula=self.enable_formula,
+                enable_table=self.enable_table,
+            )
+
+            logger.info(f"Task created, batch_id: {batch_id}")
+            return batch_id
+
+        except Exception as e:
+            logger.error(f"Failed to submit PDF: {e}")
+            return None
+
+    def poll_until_complete(
+        self, task_id: str, timeout: int | None = None
+    ) -> dict[str, Any]:
+        """Poll for extraction results until complete.
+
+        Args:
+            task_id: Batch ID from submit_pdf
+            timeout: Max wait time in seconds (defaults to POLL_TIMEOUT)
+
+        Returns:
+            Result dict with 'state' key ('SUCCESS', 'FAILED', etc.)
+        """
+        timeout = timeout or self.poll_timeout
+        logger.info(f"Polling for task {task_id} (timeout: {timeout}s)...")
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            result = get_extraction_result(task_id)
+            data = result.get("data", {})
+            extract_results = data.get("extract_result", [])
+
+            if not extract_results:
+                logger.debug("Waiting for processing to start...")
+                time.sleep(self.poll_interval)
+                continue
+
+            item = extract_results[0]
+            state = item.get("state", "unknown")
+
+            logger.debug(f"Task state: {state}")
+
+            if state == "done":
+                logger.info("Extraction completed successfully")
+                return item
+            elif state == "failed":
+                error_msg = item.get("err_msg", "Unknown error")
+                logger.error(f"Extraction failed: {error_msg}")
+                return {"state": "FAILED", "error": error_msg}
+
+            time.sleep(self.poll_interval)
+
+        logger.error(f"Polling timed out after {timeout}s")
+        return {"state": "TIMEOUT", "error": f"Timeout after {timeout}s"}
+
+    def download_results(
+        self, task_id: str, pdf_stem: str, output_dir: Path | str | None = None
+    ) -> Path:
+        """Download extraction results.
+
+        Args:
+            task_id: Batch ID
+            pdf_stem: PDF filename stem (without extension)
+            output_dir: Output directory (defaults to self.output_dir)
+
+        Returns:
+            Path to extracted results directory
+        """
+        result = get_extraction_result(task_id)
+        data = result.get("data", {})
+        extract_results = data.get("extract_result", [])
+
+        if not extract_results:
+            raise RuntimeError(f"No results found for task {task_id}")
+
+        item = extract_results[0]
+        if item.get("state") != "done":
+            raise RuntimeError(f"Task not completed: {item.get('state')}")
+
+        output_dir = Path(output_dir or self.output_dir)
+        extract_dir = output_dir / pdf_stem
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download ZIP
+        zip_url = item.get("full_zip_url")
+        if not zip_url:
+            raise RuntimeError("No download URL in result")
+
+        output_zip_path = extract_dir / f"{pdf_stem}.zip"
+        logger.info(f"Downloading results to {output_zip_path}...")
+
+        response = requests.get(zip_url, timeout=300)
+        response.raise_for_status()
+        output_zip_path.write_bytes(response.content)
+
+        # Extract ZIP
+        logger.info(f"Extracting to {extract_dir}...")
+        with zipfile.ZipFile(output_zip_path, "r") as zip_ref:
+            zip_ref.extractall(extract_dir)
+
+        # Remove ZIP file
+        output_zip_path.unlink()
+
+        logger.info(f"Results extracted to: {extract_dir}")
+        return extract_dir
+
+
+def create_client_from_env(**kwargs) -> MinerUClient | None:
+    """Create MinerUClient from environment variables.
+
+    Args:
+        **kwargs: Additional arguments to pass to MinerUClient
+
+    Returns:
+        MinerUClient instance or None if API key not set
+    """
+    api_key = os.getenv("MINERU_API_KEY")
+    if not api_key:
+        return None
+
+    return MinerUClient(**kwargs)
+
+
+# =============================================================================
+# Original Functions (deprecated, kept for compatibility)
+# =============================================================================
 
 
 def is_pdf_processed(pdf_path: Path) -> bool:
