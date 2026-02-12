@@ -126,6 +126,7 @@ class DimensionResult:
     score: float = 0.0  # 0-100
     risk_level: str = "medium"  # "low", "medium", "high"
     summary: str = ""
+    evidence_warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -145,6 +146,7 @@ class BidAnalysisReport:
 
     # Recommendations
     recommendations: list[str] = field(default_factory=list)
+    evidence_warnings: list[str] = field(default_factory=list)
 
     # Metadata
     analyzed_at: datetime = field(default_factory=datetime.now)
@@ -203,6 +205,8 @@ class BidAnalyzer:
         dimension_results = {}
         total_risks = 0
         total_benefits = 0
+        evidence_warnings: list[str] = []
+        warning_seen: set[str] = set()
 
         for dim_name in dimensions:
             dim_config = ANALYSIS_DIMENSIONS.get(dim_name)
@@ -215,6 +219,11 @@ class BidAnalyzer:
 
             total_risks += len(result.risks)
             total_benefits += len(result.benefits)
+            for warn in result.evidence_warnings:
+                if warn in warning_seen:
+                    continue
+                warning_seen.add(warn)
+                evidence_warnings.append(warn)
 
         # Calculate overall score (weighted average)
         overall_score = self._calculate_overall_score(dimension_results)
@@ -238,6 +247,7 @@ class BidAnalyzer:
             total_benefits=total_benefits,
             risk_level=risk_level,
             recommendations=recommendations,
+            evidence_warnings=evidence_warnings,
             chunks_analyzed=chunks_analyzed,
         )
 
@@ -257,6 +267,7 @@ class BidAnalyzer:
         """
         # Search for chunks matching this dimension
         chunks = self._search_chunks(version_id, dimension.keywords)
+        evidence_warnings = self._collect_evidence_warnings(chunks)
 
         # Analyze each chunk
         risks = []
@@ -314,7 +325,19 @@ class BidAnalyzer:
             score=score,
             risk_level=risk_level,
             summary=summary,
+            evidence_warnings=evidence_warnings,
         )
+
+    @staticmethod
+    def _collect_evidence_warnings(chunks: list[dict[str, Any]]) -> list[str]:
+        warnings: list[str] = []
+        for chunk in chunks:
+            bbox = chunk.get("bbox")
+            if not bbox:
+                warnings.append("missing_bbox")
+        if warnings:
+            return sorted(set(warnings))
+        return []
 
     def _search_chunks(
         self,

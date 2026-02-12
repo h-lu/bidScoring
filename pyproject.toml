@@ -27,6 +27,7 @@ include = ["bid_scoring*", "mcp_servers*", "mineru*"]
 
 [project.scripts]
 bid-scoring-retrieval = "mcp_servers.retrieval_server:main"
+bid-pipeline = "bid_scoring.pipeline.interfaces.cli:main"
 
 [dependency-groups]
 dev = [
@@ -40,6 +41,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
+    "unit: marks tests as pure unit tests",
+    "integration: marks tests requiring db/filesystem integration",
     "e2e: marks tests as end-to-end (slow, requires external services)",
-    "integration: marks tests as integration tests (require external APIs)",
 ]

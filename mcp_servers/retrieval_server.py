@@ -424,9 +424,34 @@ def _format_result(
         "element_type": r.element_type,
         "bbox": r.bbox,
         "coord_system": r.coord_system,
+        "evidence_units": _format_evidence_units(r.evidence_units),
     }
 
+    if result["evidence_units"]:
+        result["evidence_status"] = "verified"
+        result["warnings"] = []
+    else:
+        result["evidence_status"] = "unverifiable"
+        result["warnings"] = ["missing_evidence_chain"]
+
     return result
+
+
+def _format_evidence_units(evidence_units: List[Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for ev in evidence_units:
+        items.append(
+            {
+                "unit_id": getattr(ev, "unit_id", None),
+                "unit_index": getattr(ev, "unit_index", None),
+                "unit_type": getattr(ev, "unit_type", None),
+                "text": getattr(ev, "text", None),
+                "anchor": getattr(ev, "anchor_json", None),
+                "start_char": getattr(ev, "start_char", None),
+                "end_char": getattr(ev, "end_char", None),
+            }
+        )
+    return items
 
 
 # =============================================================================
@@ -1365,15 +1390,15 @@ def get_unit_evidence(
             ]
 
             if verify_hash and unit_hash:
-                from bid_scoring.citations_v2 import compute_evidence_hash
+                from bid_scoring.anchors_v2 import compute_unit_hash
 
-                computed_hash = compute_evidence_hash(
-                    quote_text=text_raw or "",
-                    unit_hash=unit_hash,
-                    anchor_json=anchor_json,
+                recomputed_unit_hash = compute_unit_hash(
+                    text_norm=text_norm or "",
+                    anchor_json=anchor_json or {"anchors": []},
+                    source_element_id=source_element_id,
                 )
-                result["hash_verified"] = computed_hash == unit_hash
-                result["computed_hash"] = computed_hash
+                result["hash_verified"] = recomputed_unit_hash == unit_hash
+                result["computed_unit_hash"] = recomputed_unit_hash
 
             return result
 
@@ -1791,15 +1816,25 @@ def retrieve_impl(
     else:  # pragma: no cover
         raise ValidationError(f"Unknown mode: {mode}")
 
+    formatted_results = [
+        _format_result(r, include_text=include_text, max_chars=max_chars) for r in results
+    ]
+
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for item in formatted_results:
+        for code in item.get("warnings", []):
+            if code not in seen:
+                seen.add(code)
+                warnings.append(code)
+
     return {
         "version_id": version_id,
         "query": query,
         "mode": mode,
         "top_k": top_k,
-        "results": [
-            _format_result(r, include_text=include_text, max_chars=max_chars)
-            for r in results
-        ],
+        "warnings": warnings,
+        "results": formatted_results,
     }
 
 
@@ -2311,6 +2346,7 @@ def analyze_bids_comprehensive(
                 "total_risks": r.total_risks,
                 "total_benefits": r.total_benefits,
                 "chunks_analyzed": r.chunks_analyzed,
+                "evidence_warnings": r.evidence_warnings,
             }
             for i, r in enumerate(reports)
         ]
@@ -2444,6 +2480,9 @@ def analyze_bids_comprehensive(
             else 0,
             "high_risk_count": sum(1 for r in reports if r.risk_level == "high"),
             "dimensions_analyzed": len(dimensions),
+            "versions_with_evidence_warnings": sum(
+                1 for r in reports if r.evidence_warnings
+            ),
         }
 
         return {
