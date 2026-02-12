@@ -156,6 +156,7 @@ def search_chunks(
     mode: Literal["hybrid", "vector", "keyword"] = "hybrid",
     page_range: tuple[int, int] | None = None,
     element_types: list[str] | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     return _search_chunks(
         retrieve_fn=retrieve_impl,
@@ -165,6 +166,7 @@ def search_chunks(
         mode=mode,
         page_range=page_range,
         element_types=element_types,
+        include_diagnostics=include_diagnostics,
     )
 
 
@@ -210,6 +212,7 @@ def batch_search(
     top_k_per_query: int = 5,
     mode: Literal["hybrid", "vector", "keyword"] = "hybrid",
     aggregate_by: Literal["query", "chunk", "page"] | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     return _batch_search(
         retrieve_fn=retrieve_impl,
@@ -218,6 +221,7 @@ def batch_search(
         top_k_per_query=top_k_per_query,
         mode=mode,
         aggregate_by=aggregate_by,
+        include_diagnostics=include_diagnostics,
     )
 
 
@@ -256,6 +260,7 @@ def compare_across_versions(
     query: str,
     top_k_per_version: int = 3,
     normalize_scores: bool = True,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     return _compare_across_versions(
         retrieve_fn=retrieve_impl,
@@ -263,6 +268,7 @@ def compare_across_versions(
         query=query,
         top_k_per_version=top_k_per_version,
         normalize_scores=normalize_scores,
+        include_diagnostics=include_diagnostics,
     )
 
 

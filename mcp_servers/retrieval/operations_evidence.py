@@ -277,6 +277,7 @@ def compare_across_versions(
     query: str,
     top_k_per_version: int = 3,
     normalize_scores: bool = True,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     """Compare responses across multiple bidding versions for the same query.
 
@@ -303,6 +304,7 @@ def compare_across_versions(
 
     all_results = {}
     all_scores = []
+    per_version_diagnostics: dict[str, Any] = {}
 
     for version_id in version_ids:
         result = retrieve_fn(
@@ -312,9 +314,12 @@ def compare_across_versions(
             mode="hybrid",
             include_text=True,
             max_chars=500,
+            include_diagnostics=include_diagnostics,
         )
 
         all_results[version_id] = result["results"]
+        if include_diagnostics:
+            per_version_diagnostics[version_id] = result.get("diagnostics") or {}
         all_scores.extend(
             [
                 score
@@ -339,13 +344,20 @@ def compare_across_versions(
                 else:
                     r["normalized_score"] = 1.0
 
-    return {
+    response = {
         "query": query,
         "version_count": len(version_ids),
         "versions_compared": version_ids,
         "normalize_scores": normalize_scores,
         "results_by_version": all_results,
     }
+    if include_diagnostics:
+        response["diagnostics"] = {
+            "version_count": len(version_ids),
+            "per_version": per_version_diagnostics,
+            "score_sample_size": len(all_scores),
+        }
+    return response
 
 def extract_key_value(
     version_id: str,

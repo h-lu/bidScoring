@@ -22,6 +22,7 @@ def search_chunks(
     mode: Literal["hybrid", "vector", "keyword"] = "hybrid",
     page_range: tuple[int, int] | None = None,
     element_types: list[str] | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     """Advanced chunk search with filtering capabilities.
 
@@ -51,9 +52,11 @@ def search_chunks(
         top_k=top_k * 2,  # Get more for filtering
         mode=mode,
         include_text=True,
+        include_diagnostics=include_diagnostics,
     )
 
-    results = result["results"]
+    source_results = result["results"]
+    results = source_results
 
     # Apply page range filter
     if page_range:
@@ -71,7 +74,7 @@ def search_chunks(
     # Limit to top_k after filtering
     results = results[:top_k]
 
-    return {
+    response = {
         "version_id": version_id,
         "query": query,
         "mode": mode,
@@ -82,6 +85,15 @@ def search_chunks(
         "top_k": top_k,
         "results": results,
     }
+    if include_diagnostics:
+        response["diagnostics"] = {
+            "source_result_count": len(source_results),
+            "filtered_result_count": len(results),
+            "has_filters": bool(page_range or element_types),
+            "source": result.get("diagnostics"),
+        }
+
+    return response
 
 def search_by_heading(
     version_id: str,
@@ -257,6 +269,7 @@ def batch_search(
     top_k_per_query: int = 5,
     mode: Literal["hybrid", "vector", "keyword"] = "hybrid",
     aggregate_by: Literal["query", "chunk", "page"] | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     """Execute multiple searches in batch and aggregate results.
 
@@ -281,6 +294,7 @@ def batch_search(
     )
 
     all_results = []
+    per_query_diagnostics: dict[str, Any] = {}
 
     for query in queries:
         result = retrieve_fn(
@@ -289,7 +303,10 @@ def batch_search(
             top_k=top_k_per_query,
             mode=mode,
             include_text=True,
+            include_diagnostics=include_diagnostics,
         )
+        if include_diagnostics:
+            per_query_diagnostics[query] = result.get("diagnostics") or {}
 
         for r in result["results"]:
             r["matched_query"] = query
@@ -304,13 +321,19 @@ def batch_search(
                 aggregated[q] = []
             aggregated[q].append(r)
 
-        return {
+        response = {
             "version_id": version_id,
             "queries": queries,
             "total_results": len(all_results),
             "aggregated_by": "query",
             "results": aggregated,
         }
+        if include_diagnostics:
+            response["diagnostics"] = {
+                "query_count": len(queries),
+                "per_query": per_query_diagnostics,
+            }
+        return response
 
     elif aggregate_by == "chunk":
         # Group by chunk_id, merge query info
@@ -330,7 +353,7 @@ def batch_search(
             if "matched_query" in item:
                 del item["matched_query"]
 
-        return {
+        response = {
             "version_id": version_id,
             "queries": queries,
             "total_results": len(all_results),
@@ -338,6 +361,12 @@ def batch_search(
             "aggregated_by": "chunk",
             "results": aggregated,
         }
+        if include_diagnostics:
+            response["diagnostics"] = {
+                "query_count": len(queries),
+                "per_query": per_query_diagnostics,
+            }
+        return response
 
     elif aggregate_by == "page":
         # Group by page
@@ -348,18 +377,30 @@ def batch_search(
                 page_map[page] = []
             page_map[page].append(r)
 
-        return {
+        response = {
             "version_id": version_id,
             "queries": queries,
             "total_results": len(all_results),
             "aggregated_by": "page",
             "results": {k: v for k, v in sorted(page_map.items()) if k is not None},
         }
+        if include_diagnostics:
+            response["diagnostics"] = {
+                "query_count": len(queries),
+                "per_query": per_query_diagnostics,
+            }
+        return response
 
     else:  # No aggregation
-        return {
+        response = {
             "version_id": version_id,
             "queries": queries,
             "total_results": len(all_results),
             "results": all_results,
         }
+        if include_diagnostics:
+            response["diagnostics"] = {
+                "query_count": len(queries),
+                "per_query": per_query_diagnostics,
+            }
+        return response
