@@ -60,6 +60,7 @@ class HybridRetriever:
         hnsw_ef_search: int = DEFAULT_HNSW_EF_SEARCH,
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        enable_dynamic_weights: bool = False,
         enable_cache: bool = False,
         cache_size: int = 1000,
         use_or_semantic: bool = True,
@@ -80,6 +81,9 @@ class HybridRetriever:
         # Ensure ef_search >= top_k*2 (pgvector best practice) and >= 100.
         self._hnsw_ef_search = max(100, int(hnsw_ef_search), top_k * 2)
         self._use_or_semantic = use_or_semantic
+        self._enable_dynamic_weights = enable_dynamic_weights
+        self._default_vector_weight = vector_weight
+        self._default_keyword_weight = keyword_weight
 
         self.rrf = ReciprocalRankFusion(
             k=rrf_k, vector_weight=vector_weight, keyword_weight=keyword_weight
@@ -259,6 +263,47 @@ class HybridRetriever:
 
         return list(expanded)
 
+    def _analyze_query_type(self, query: str) -> str:
+        technical_pattern = r"\b[A-Z]{2,}\b|\b\d+[A-Za-z]+\b"
+        technical_matches = len(re.findall(technical_pattern, query))
+        has_chinese_tech_terms = any(term in query for term in self._field_keywords.keys())
+        if technical_matches >= 2 or has_chinese_tech_terms:
+            return "technical"
+        if len(query) > 50:
+            return "long"
+        return "standard"
+
+    def _adjust_weights_for_query(self, query: str) -> Tuple[float, float]:
+        if not self._enable_dynamic_weights:
+            return self._default_vector_weight, self._default_keyword_weight
+
+        query_type = self._analyze_query_type(query)
+        if query_type == "technical":
+            return 0.7, 1.3
+        if query_type == "long":
+            return 1.3, 0.7
+        return self._default_vector_weight, self._default_keyword_weight
+
+    def _fuse_results(
+        self,
+        query: str,
+        vector_results: List[Tuple[str, float]],
+        keyword_results: List[Tuple[str, float]],
+    ) -> List[MergedChunk]:
+        vector_weight, keyword_weight = self._adjust_weights_for_query(query)
+        if (
+            vector_weight == self.rrf.vector_weight
+            and keyword_weight == self.rrf.keyword_weight
+        ):
+            return self.rrf.fuse(vector_results, keyword_results)
+
+        fusion = ReciprocalRankFusion(
+            k=self.rrf.k,
+            vector_weight=vector_weight,
+            keyword_weight=keyword_weight,
+        )
+        return fusion.fuse(vector_results, keyword_results)
+
     def _vector_search(self, query: str) -> List[Tuple[str, float]]:
         # Delegate to module-level implementation so tests can monkeypatch
         # `bid_scoring.retrieval.search_vector.embed_single_text`.
@@ -300,7 +345,7 @@ class HybridRetriever:
             keyword_results = keyword_future.result()
 
         if keyword_results:
-            merged = self.rrf.fuse(vector_results, keyword_results)
+            merged = self._fuse_results(query, vector_results, keyword_results)
         else:
             merged = [
                 (
@@ -351,7 +396,7 @@ class HybridRetriever:
             )
 
         if keyword_results:
-            merged = self.rrf.fuse(vector_results, keyword_results)
+            merged = self._fuse_results(query, vector_results, keyword_results)
         else:
             merged = [
                 (
