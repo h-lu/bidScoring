@@ -18,19 +18,28 @@ V2 Architecture Features:
 from __future__ import annotations
 
 import atexit
-import functools
 import json
 import logging
 import os
 import re
-import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Literal, TypeVar
+from typing import Any, Dict, List, Literal
 
 from fastmcp import FastMCP
 
 from bid_scoring.config import load_settings
-from bid_scoring.retrieval import HybridRetriever, LRUCache, RetrievalResult
+from bid_scoring.retrieval import HybridRetriever, LRUCache
+from mcp_servers.retrieval.execution import _tool_metrics, tool_wrapper
+from mcp_servers.retrieval.formatting import format_evidence_units, format_result
+from mcp_servers.retrieval.validation import (
+    ValidationError,
+    validate_bool,
+    validate_chunk_id,
+    validate_positive_int,
+    validate_query,
+    validate_string_list,
+    validate_unit_id,
+    validate_version_id,
+)
 
 # =============================================================================
 # Logging Configuration
@@ -40,37 +49,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("bid_scoring.mcp")
-
-# =============================================================================
-# Data Models
-# =============================================================================
-
-
-@dataclass
-class ToolResult:
-    """Standardized tool execution result."""
-
-    success: bool
-    data: Dict[str, Any] = field(default_factory=dict)
-    error: str | None = None
-    execution_time_ms: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ToolMetrics:
-    """Tool execution metrics for monitoring."""
-
-    call_count: int = 0
-    total_execution_time_ms: float = 0.0
-    error_count: int = 0
-
-    @property
-    def avg_execution_time_ms(self) -> float:
-        if self.call_count == 0:
-            return 0.0
-        return self.total_execution_time_ms / self.call_count
-
 
 # =============================================================================
 # Utilities
@@ -95,250 +73,6 @@ _SETTINGS = load_settings()
 # Caches
 _RETRIEVER_CACHE = LRUCache(capacity=_env_int("BID_SCORING_RETRIEVER_CACHE_SIZE", 32))
 _QUERY_CACHE_SIZE = _env_int("BID_SCORING_QUERY_CACHE_SIZE", 1024)
-
-# Metrics tracking
-_tool_metrics: Dict[str, ToolMetrics] = {}
-
-T = TypeVar("T")
-
-
-# =============================================================================
-# Tool Execution Wrapper
-# =============================================================================
-
-
-def tool_wrapper(tool_name: str) -> Callable:
-    """Decorator for tool execution with logging, metrics, and error handling.
-
-    Features:
-    - Input validation before execution
-    - Structured logging with context
-    - Execution time tracking
-    - Standardized error responses
-    """
-
-    def decorator(func: Callable[..., T]) -> Callable[..., ToolResult | T]:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> ToolResult | T:
-            # Initialize metrics
-            if tool_name not in _tool_metrics:
-                _tool_metrics[tool_name] = ToolMetrics()
-
-            metrics = _tool_metrics[tool_name]
-            metrics.call_count += 1
-            start_time = time.time()
-
-            # Log execution start
-            logger.info(
-                f"Executing tool: {tool_name}",
-                extra={
-                    "tool_name": tool_name,
-                    "parameters": _sanitize_parameters(kwargs),
-                },
-            )
-
-            try:
-                # Execute tool
-                result = func(*args, **kwargs)
-
-                # Record success
-                execution_time = (time.time() - start_time) * 1000
-                metrics.total_execution_time_ms += execution_time
-
-                logger.info(
-                    f"Tool execution completed: {tool_name}",
-                    extra={
-                        "tool_name": tool_name,
-                        "execution_time_ms": execution_time,
-                        "success": True,
-                    },
-                )
-
-                # If result is already a ToolResult, add timing
-                if isinstance(result, ToolResult):
-                    result.execution_time_ms = execution_time
-                    return result
-
-                return result
-
-            except Exception as e:
-                # Record failure
-                execution_time = (time.time() - start_time) * 1000
-                metrics.total_execution_time_ms += execution_time
-                metrics.error_count += 1
-
-                logger.error(
-                    f"Tool execution failed: {tool_name}",
-                    extra={
-                        "tool_name": tool_name,
-                        "execution_time_ms": execution_time,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    exc_info=True,
-                )
-
-                # Return standardized error response
-                return ToolResult(
-                    success=False,
-                    error=f"{tool_name} failed: {str(e)}",
-                    execution_time_ms=execution_time,
-                    metadata={"error_type": type(e).__name__},
-                )
-
-        return wrapper
-
-    return decorator
-
-
-def _sanitize_parameters(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove sensitive data from parameters for logging."""
-    sensitive_keys = {"password", "token", "secret", "api_key", "key"}
-    sanitized = {}
-    for key, value in params.items():
-        if any(sk in key.lower() for sk in sensitive_keys):
-            sanitized[key] = "***REDACTED***"
-        else:
-            sanitized[key] = value
-    return sanitized
-
-
-# =============================================================================
-# Validation Utilities
-# =============================================================================
-
-
-class ValidationError(ValueError):
-    """Raised when input validation fails."""
-
-    pass
-
-
-def validate_version_id(version_id: str | None) -> str:
-    """Validate version ID format.
-
-    Args:
-        version_id: The version ID to validate.
-
-    Returns:
-        The validated version ID.
-
-    Raises:
-        ValidationError: If version_id is invalid.
-    """
-    if not version_id:
-        raise ValidationError("version_id is required and cannot be empty")
-    if not isinstance(version_id, str):
-        raise ValidationError("version_id must be a string")
-    return version_id
-
-
-def validate_chunk_id(chunk_id: str | None) -> str:
-    """Validate chunk ID format.
-
-    Args:
-        chunk_id: The chunk ID to validate.
-
-    Returns:
-        The validated chunk ID.
-
-    Raises:
-        ValidationError: If chunk_id is invalid.
-    """
-    if not chunk_id:
-        raise ValidationError("chunk_id is required and cannot be empty")
-    if not isinstance(chunk_id, str):
-        raise ValidationError("chunk_id must be a string")
-    return chunk_id
-
-
-def validate_unit_id(unit_id: str | None) -> str:
-    """Validate unit ID format.
-
-    Args:
-        unit_id: The unit ID to validate.
-
-    Returns:
-        The validated unit ID.
-
-    Raises:
-        ValidationError: If unit_id is invalid.
-    """
-    if not unit_id:
-        raise ValidationError("unit_id is required and cannot be empty")
-    if not isinstance(unit_id, str):
-        raise ValidationError("unit_id must be a string")
-    return unit_id
-
-
-def validate_positive_int(value: int, name: str, max_value: int = 1000) -> int:
-    """Validate positive integer parameter.
-
-    Args:
-        value: The value to validate.
-        name: Parameter name for error messages.
-        max_value: Maximum allowed value.
-
-    Returns:
-        The validated value.
-
-    Raises:
-        ValidationError: If value is invalid.
-    """
-    if not isinstance(value, int):
-        raise ValidationError(f"{name} must be an integer")
-    if value <= 0:
-        raise ValidationError(f"{name} must be positive")
-    if value > max_value:
-        raise ValidationError(f"{name} exceeds maximum allowed value of {max_value}")
-    return value
-
-
-def validate_query(query: str | None) -> str:
-    """Validate search query.
-
-    Args:
-        query: The query to validate.
-
-    Returns:
-        The validated query.
-
-    Raises:
-        ValidationError: If query is invalid.
-    """
-    if not query:
-        raise ValidationError("query is required and cannot be empty")
-    if not isinstance(query, str):
-        raise ValidationError("query must be a string")
-    if len(query) > 10000:
-        raise ValidationError("query exceeds maximum length of 10000 characters")
-    return query
-
-
-def validate_string_list(
-    value: list, name: str, min_items: int = 1, max_items: int = 100
-) -> list:
-    """Validate list of strings.
-
-    Args:
-        value: The list to validate.
-        name: Parameter name for error messages.
-        min_items: Minimum number of items.
-        max_items: Maximum number of items.
-
-    Returns:
-        The validated list.
-
-    Raises:
-        ValidationError: If value is invalid.
-    """
-    if not isinstance(value, list):
-        raise ValidationError(f"{name} must be a list")
-    if len(value) < min_items:
-        raise ValidationError(f"{name} must have at least {min_items} item(s)")
-    if len(value) > max_items:
-        raise ValidationError(f"{name} exceeds maximum of {max_items} items")
-    return value
 
 
 # =============================================================================
@@ -386,72 +120,9 @@ def _close_cached_retrievers() -> None:  # pragma: no cover
             logger.warning(f"Error closing retriever: {e}")
 
 
-def _format_result(
-    r: RetrievalResult,
-    *,
-    include_text: bool,
-    max_chars: int | None,
-) -> Dict[str, Any]:
-    """Format retrieval result for output.
-
-    Args:
-        r: RetrievalResult to format.
-        include_text: Whether to include text content.
-        max_chars: Maximum characters for text (if included).
-
-    Returns:
-        Formatted result dictionary.
-    """
-    text = r.text if include_text else ""
-    if include_text and max_chars is not None and max_chars >= 0:
-        text = text[:max_chars]
-
-    result = {
-        "chunk_id": r.chunk_id,
-        "page_idx": r.page_idx,
-        "source": r.source,
-        "score": round(r.score, 6) if r.score is not None else None,
-        "vector_score": round(r.vector_score, 6)
-        if r.vector_score is not None
-        else None,
-        "keyword_score": round(r.keyword_score, 6)
-        if r.keyword_score is not None
-        else None,
-        "rerank_score": round(r.rerank_score, 6)
-        if r.rerank_score is not None
-        else None,
-        "text": text,
-        "element_type": r.element_type,
-        "bbox": r.bbox,
-        "coord_system": r.coord_system,
-        "evidence_units": _format_evidence_units(r.evidence_units),
-    }
-
-    if result["evidence_units"]:
-        result["evidence_status"] = "verified"
-        result["warnings"] = []
-    else:
-        result["evidence_status"] = "unverifiable"
-        result["warnings"] = ["missing_evidence_chain"]
-
-    return result
-
-
-def _format_evidence_units(evidence_units: List[Any]) -> List[Dict[str, Any]]:
-    items: List[Dict[str, Any]] = []
-    for ev in evidence_units:
-        items.append(
-            {
-                "unit_id": getattr(ev, "unit_id", None),
-                "unit_index": getattr(ev, "unit_index", None),
-                "unit_type": getattr(ev, "unit_type", None),
-                "text": getattr(ev, "text", None),
-                "anchor": getattr(ev, "anchor_json", None),
-                "start_char": getattr(ev, "start_char", None),
-                "end_char": getattr(ev, "end_char", None),
-            }
-        )
-    return items
+# Backward-compatible aliases used by tests and utility scripts.
+_format_result = format_result
+_format_evidence_units = format_evidence_units
 
 
 # =============================================================================
@@ -1698,13 +1369,6 @@ def highlight_pdf(
                 "success": False,
                 "error": result.error,
             }
-
-
-def validate_bool(value: bool, name: str) -> bool:
-    """Validate boolean parameter."""
-    if not isinstance(value, bool):
-        raise ValidationError(f"{name} must be a boolean")
-    return value
 
 
 # =============================================================================
