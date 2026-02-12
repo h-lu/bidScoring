@@ -28,11 +28,11 @@
 3. 为每个 unit 计算 `unit_hash`，用于后续引用校验。
 4. 检索层仅负责召回，最终引用必须落到 `unit_id`。
 5. 评分输出必须附 citations，且在落库前执行 `verify_citation`。
-6. 任一证据不可验证（`unverifiable`）时，禁止参与评分。
+6. 任一证据不可验证（`unverifiable`）时，不阻断评分，但必须输出告警并显式标注证据问题。
 
 核心门禁规则：
 
-- `unverifiable evidence must not affect score`（强制）。
+- `unverifiable evidence must be warned and explicitly marked`（强制）。
 
 ## 3. 数据流与 Schema 重整
 
@@ -53,6 +53,8 @@
 - 检索 API 禁止仅返回 `chunk_id`，必须返回 `unit_id` 证据链。
 - `chunks` 可随时重建，不影响既有引用可验证性。
 - 评分与渲染均以 `unit_id + anchor_json + quote span` 为准。
+- 对 `unverifiable` 证据：保留评分流程，但在结果中输出 `warnings[]` 与 `evidence_status` 标识。
+- 不引入人工复核通道；由系统自动标注并告警证据问题。
 
 ## 4. 模块拆分方案
 
@@ -62,6 +64,11 @@
 - `application/`：`PipelineService.run(request)`，编排 parse/normalize/persist/index。
 - `infrastructure/`：`mineru_adapter`、`minio_store`、`postgres_repository`、`index_builder`。
 - `interfaces/cli.py`：统一 CLI 入口（例如 `bid-pipeline ingest`）。
+
+扩展接口预留（本阶段不实现）：
+
+- 新增 `EvidenceLocator` 抽象接口，当前实现 `TextBBoxLocator`。
+- 预留 `ImageRegionLocator` 扩展点，用于后续“图像片段证据”定位与渲染。
 
 删除旧链路：
 
@@ -73,14 +80,14 @@
 
 - 单测：hash 与 anchor 生成的确定性、引用校验规则。
 - 集成：从 content_list 入库到 unit-level 引用的完整性。
-- E2E：从 PDF 到定位渲染可回放；`unverifiable` 证据不计分。
+- E2E：从 PDF 到定位渲染可回放；`unverifiable` 证据输出告警且标注状态。
 
 ## 5. 里程碑与原子提交计划
 
 ### M1: 建立新骨架与领域门禁
 
 - 新建 `pipeline/domain` 与 `pipeline/application`。
-- 落地 `CitationVerifier`，实现 `unverifiable` 拦截。
+- 落地 `CitationVerifier`，实现 `unverifiable` 告警标注（不拦截）。
 - 新增对应单测。
 
 建议提交：
@@ -113,13 +120,13 @@
 ### M4: 检索与引用链切换
 
 - 改造检索返回结构：强制返回 `unit_id` 证据链。
-- 评分链路改造为仅接收可验证 citations。
+- 评分链路改造为接收全部 citations，但对不可验证项输出告警与状态标记。
 - 更新 MCP 相关 tool 输出字段定义。
 
 建议提交：
 
 - `refactor(retrieval): 检索结果强制返回unit级证据链`
-- `refactor(scoring): 评分仅接受可验证citation`
+- `refactor(scoring): 评分输出不可验证证据告警与状态标记`
 
 ### M5: 清理旧链路与文档收敛
 
@@ -138,4 +145,3 @@
 - 数据事实主权在 `content_units`，不在 `chunks`。
 - 所有结论必须“可定位、可验证、可复算”。
 - 先本地验证再宣称完成。
-
