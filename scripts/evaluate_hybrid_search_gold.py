@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bid_scoring.config import load_settings
 from bid_scoring.hybrid_retrieval import HybridRetriever
+from bid_scoring.retrieval.evaluation_gate import check_metric_thresholds
 
 
 @dataclass
@@ -274,6 +275,26 @@ def _print_by_query_type(metrics_by_method: dict[str, list[QueryMetrics]]) -> No
             print(f"{qtype:<24} {' | '.join(parts)}")
 
 
+def _build_summary(metrics_by_method: dict[str, list[QueryMetrics]]) -> dict[str, dict]:
+    return {
+        method: {
+            "mrr": statistics.mean([x.mrr for x in rows]) if rows else 0.0,
+            "recall_at_5": statistics.mean([x.recall_at_5 for x in rows])
+            if rows
+            else 0.0,
+            "precision_at_3": statistics.mean([x.precision_at_3 for x in rows])
+            if rows
+            else 0.0,
+            "ndcg_at_5": statistics.mean([x.ndcg_at_5 for x in rows]) if rows else 0.0,
+            "ndcg_at_10": statistics.mean([x.ndcg_at_10 for x in rows])
+            if rows
+            else 0.0,
+            "latency_ms": statistics.mean([x.latency_ms for x in rows]) if rows else 0.0,
+        }
+        for method, rows in metrics_by_method.items()
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Evaluate hybrid search with golden qrels"
@@ -314,6 +335,16 @@ def main() -> int:
         "--verbose",
         action="store_true",
         help="print per-query details",
+    )
+    parser.add_argument(
+        "--thresholds-file",
+        type=Path,
+        help="optional JSON thresholds, e.g. {'hybrid': {'mrr': 0.6, 'recall_at_5': 0.8}}",
+    )
+    parser.add_argument(
+        "--fail-on-thresholds",
+        action="store_true",
+        help="exit with non-zero code when threshold violations exist",
     )
     args = parser.parse_args()
 
@@ -394,33 +425,38 @@ def main() -> int:
 
     _print_summary(metrics_by_method)
     _print_by_query_type(metrics_by_method)
+    summary = _build_summary(metrics_by_method)
+
+    threshold_violations = []
+    if args.thresholds_file:
+        thresholds = json.loads(args.thresholds_file.read_text(encoding="utf-8"))
+        threshold_violations = check_metric_thresholds(summary, thresholds)
+        if threshold_violations:
+            print("\nThreshold gate violations:")
+            for violation in threshold_violations:
+                print(
+                    "  - "
+                    f"{violation.method}.{violation.metric}: "
+                    f"actual={violation.actual:.4f}, minimum={violation.minimum:.4f}"
+                )
+        else:
+            print("\nThreshold gate passed.")
 
     if args.output:
         payload = {
             "version_id": args.version_id,
             "top_k": args.top_k,
             "relevance_threshold": args.relevance_threshold,
-            "summary": {
-                method: {
-                    "mrr": statistics.mean([x.mrr for x in rows]) if rows else 0.0,
-                    "recall_at_5": statistics.mean([x.recall_at_5 for x in rows])
-                    if rows
-                    else 0.0,
-                    "precision_at_3": statistics.mean([x.precision_at_3 for x in rows])
-                    if rows
-                    else 0.0,
-                    "ndcg_at_5": statistics.mean([x.ndcg_at_5 for x in rows])
-                    if rows
-                    else 0.0,
-                    "ndcg_at_10": statistics.mean([x.ndcg_at_10 for x in rows])
-                    if rows
-                    else 0.0,
-                    "latency_ms": statistics.mean([x.latency_ms for x in rows])
-                    if rows
-                    else 0.0,
+            "summary": summary,
+            "threshold_violations": [
+                {
+                    "method": v.method,
+                    "metric": v.metric,
+                    "actual": v.actual,
+                    "minimum": v.minimum,
                 }
-                for method, rows in metrics_by_method.items()
-            },
+                for v in threshold_violations
+            ],
             "details": {
                 method: [asdict(row) for row in rows]
                 for method, rows in metrics_by_method.items()
@@ -430,6 +466,9 @@ def main() -> int:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         print(f"\nSaved report to: {args.output}")
+
+    if threshold_violations and args.fail_on_thresholds:
+        return 2
 
     return 0
 
