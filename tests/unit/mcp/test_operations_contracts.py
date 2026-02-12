@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from mcp_servers.retrieval.operations_annotation import (
+    prepare_highlight_targets_for_query,
+)
 from mcp_servers.retrieval.operations_evidence import compare_across_versions
 from mcp_servers.retrieval.operations_search import batch_search, search_chunks
 
@@ -119,3 +122,73 @@ def test_compare_across_versions_can_include_per_version_diagnostics():
 
     assert result["diagnostics"]["version_count"] == 2
     assert result["diagnostics"]["per_version"]["v1"]["hybrid_hits"] == 1
+
+
+def test_prepare_highlight_targets_for_query_filters_non_factual_items():
+    def _fake_retrieve_fn(**_kwargs):
+        return {
+            "warnings": ["missing_evidence_chain"],
+            "results": [
+                {
+                    "chunk_id": "chunk-ok",
+                    "bbox": [1, 2, 3, 4],
+                    "evidence_status": "verified",
+                    "warnings": [],
+                },
+                {
+                    "chunk_id": "chunk-no-bbox",
+                    "bbox": None,
+                    "evidence_status": "verified",
+                    "warnings": [],
+                },
+                {
+                    "chunk_id": "chunk-unverified",
+                    "bbox": [1, 2, 3, 4],
+                    "evidence_status": "unverifiable",
+                    "warnings": ["missing_evidence_chain"],
+                },
+            ],
+        }
+
+    result = prepare_highlight_targets_for_query(
+        retrieve_fn=_fake_retrieve_fn,
+        version_id="33333333-3333-3333-3333-333333333333",
+        query="测试",
+        top_k=5,
+        mode="hybrid",
+    )
+
+    assert result["chunk_ids"] == ["chunk-ok"]
+    assert result["included_count"] == 1
+    assert result["excluded_count"] == 2
+    assert "missing_chunk_bbox" in result["warnings"]
+    assert "unverifiable_evidence_for_highlight" in result["warnings"]
+    assert "missing_evidence_chain" in result["warnings"]
+
+
+def test_prepare_highlight_targets_for_query_can_include_diagnostics():
+    def _fake_retrieve_fn(**_kwargs):
+        return {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "chunk-ok",
+                    "bbox": [1, 2, 3, 4],
+                    "evidence_status": "verified",
+                    "warnings": [],
+                }
+            ],
+            "diagnostics": {"result_count": 1},
+        }
+
+    result = prepare_highlight_targets_for_query(
+        retrieve_fn=_fake_retrieve_fn,
+        version_id="33333333-3333-3333-3333-333333333333",
+        query="测试",
+        top_k=5,
+        mode="hybrid",
+        include_diagnostics=True,
+    )
+
+    assert result["diagnostics"]["retrieval"]["result_count"] == 1
+    assert result["diagnostics"]["gate"]["included_count"] == 1

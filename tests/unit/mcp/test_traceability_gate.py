@@ -112,3 +112,54 @@ def test_traceability_chain_retrieve_to_highlight_filters_non_factual_items(monk
     assert captured["chunk_ids"] == ["chunk-ok"]
     assert highlight_resp["success"] is True
     assert "missing_chunk_bbox" in gate["warnings"]
+
+
+def test_prepare_highlight_targets_tool_uses_traceability_gate(monkeypatch):
+    retrieval_results = [
+        RetrievalResult(
+            chunk_id="chunk-ok",
+            text="text ok",
+            page_idx=1,
+            score=0.9,
+            source="hybrid",
+            bbox=[1, 2, 3, 4],
+            evidence_units=[
+                EvidenceUnit(
+                    unit_id="unit-1",
+                    unit_index=1,
+                    unit_type="text",
+                    text="text ok",
+                    anchor_json={"anchors": [{"page_idx": 1, "bbox": [1, 2, 3, 4]}]},
+                )
+            ],
+        ),
+        RetrievalResult(
+            chunk_id="chunk-bad",
+            text="text bad",
+            page_idx=2,
+            score=0.8,
+            source="hybrid",
+            bbox=None,
+            evidence_units=[],
+        ),
+    ]
+    monkeypatch.setattr(
+        srv,
+        "get_retriever",
+        lambda version_id, top_k: _FakeRetriever(retrieval_results),
+    )
+
+    response = srv.prepare_highlight_targets_impl(
+        version_id="33333333-3333-3333-3333-333333333333",
+        query="测试问题",
+        top_k=5,
+        mode="hybrid",
+        include_diagnostics=True,
+    )
+
+    assert response["chunk_ids"] == ["chunk-ok"]
+    assert response["included_count"] == 1
+    assert response["excluded_count"] == 1
+    assert "missing_chunk_bbox" in response["warnings"]
+    assert "missing_evidence_chain" in response["warnings"]
+    assert response["diagnostics"]["gate"]["included_count"] == 1
