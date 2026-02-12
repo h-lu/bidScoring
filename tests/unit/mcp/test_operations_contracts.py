@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mcp_servers.retrieval.operations_evidence import compare_across_versions
-from mcp_servers.retrieval.operations_search import search_chunks
+from mcp_servers.retrieval.operations_search import batch_search, search_chunks
 
 
 def test_search_chunks_applies_element_type_filter():
@@ -59,3 +59,63 @@ def test_compare_across_versions_ignores_none_scores_when_normalizing():
     assert row_none["score"] is None
     assert row_none["normalized_score"] is None
     assert row_scored["normalized_score"] == 1.0
+
+
+def test_search_chunks_can_include_diagnostics():
+    def _fake_retrieve_fn(**_kwargs):
+        return {
+            "results": [{"chunk_id": "c1", "page_idx": 1, "element_type": "text"}],
+            "diagnostics": {"result_count": 1},
+        }
+
+    result = search_chunks(
+        retrieve_fn=_fake_retrieve_fn,
+        version_id="33333333-3333-3333-3333-333333333333",
+        query="测试",
+        top_k=10,
+        mode="hybrid",
+        include_diagnostics=True,
+    )
+
+    assert result["diagnostics"]["source_result_count"] == 1
+    assert result["diagnostics"]["filtered_result_count"] == 1
+
+
+def test_batch_search_can_include_per_query_diagnostics():
+    def _fake_retrieve_fn(query: str, **_kwargs):
+        return {
+            "results": [{"chunk_id": f"c-{query}", "page_idx": 1, "score": 0.8}],
+            "diagnostics": {"result_count": 1, "vector_hits": 1},
+        }
+
+    result = batch_search(
+        retrieve_fn=_fake_retrieve_fn,
+        version_id="33333333-3333-3333-3333-333333333333",
+        queries=["q1", "q2"],
+        top_k_per_query=2,
+        mode="hybrid",
+        include_diagnostics=True,
+    )
+
+    assert result["diagnostics"]["query_count"] == 2
+    assert result["diagnostics"]["per_query"]["q1"]["result_count"] == 1
+
+
+def test_compare_across_versions_can_include_per_version_diagnostics():
+    def _fake_retrieve_fn(version_id: str, **_kwargs):
+        return {
+            "results": [{"chunk_id": f"c-{version_id}", "score": 0.8}],
+            "diagnostics": {"result_count": 1, "hybrid_hits": 1},
+        }
+
+    result = compare_across_versions(
+        retrieve_fn=_fake_retrieve_fn,
+        version_ids=["v1", "v2"],
+        query="售后",
+        top_k_per_version=3,
+        normalize_scores=True,
+        include_diagnostics=True,
+    )
+
+    assert result["diagnostics"]["version_count"] == 2
+    assert result["diagnostics"]["per_version"]["v1"]["hybrid_hits"] == 1
