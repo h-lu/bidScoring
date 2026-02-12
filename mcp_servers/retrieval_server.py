@@ -62,7 +62,11 @@ from mcp_servers.retrieval.operations_search import (
 )
 from mcp_servers.retrieval.operations_search import search_chunks as _search_chunks
 from mcp_servers.retrieval.validation import ValidationError
-from mcp_servers.retrieval.validation import validate_positive_int, validate_query, validate_version_id
+from mcp_servers.retrieval.validation import (
+    validate_positive_int,
+    validate_query,
+    validate_version_id,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -309,6 +313,7 @@ def retrieve(
     use_or_semantic: bool = True,
     include_text: bool = True,
     max_chars: int | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     return retrieve_impl(
         version_id=version_id,
@@ -319,6 +324,7 @@ def retrieve(
         use_or_semantic=use_or_semantic,
         include_text=include_text,
         max_chars=max_chars,
+        include_diagnostics=include_diagnostics,
     )
 
 
@@ -331,6 +337,7 @@ def retrieve_impl(
     use_or_semantic: bool = True,
     include_text: bool = True,
     max_chars: int | None = None,
+    include_diagnostics: bool = False,
 ) -> Dict[str, Any]:
     version_id = validate_version_id(version_id)
     query = validate_query(query)
@@ -383,13 +390,62 @@ def retrieve_impl(
                 seen.add(code)
                 warnings.append(code)
 
-    return {
+    response = {
         "version_id": version_id,
         "query": query,
         "mode": mode,
         "top_k": top_k,
         "warnings": warnings,
         "results": formatted_results,
+    }
+    if include_diagnostics:
+        response["diagnostics"] = _build_retrieval_diagnostics(
+            mode=mode,
+            query=query,
+            top_k=top_k,
+            retriever=retriever,
+            results=formatted_results,
+        )
+
+    return response
+
+
+def _build_retrieval_diagnostics(
+    *,
+    mode: str,
+    query: str,
+    top_k: int,
+    retriever: HybridRetriever,
+    results: list[Dict[str, Any]],
+) -> Dict[str, Any]:
+    warning_counts: Dict[str, int] = {}
+    vector_hits = 0
+    keyword_hits = 0
+    hybrid_hits = 0
+
+    for item in results:
+        has_vector = item.get("vector_score") is not None
+        has_keyword = item.get("keyword_score") is not None
+        if has_vector:
+            vector_hits += 1
+        if has_keyword:
+            keyword_hits += 1
+        if has_vector and has_keyword:
+            hybrid_hits += 1
+
+        for code in item.get("warnings", []):
+            warning_counts[code] = warning_counts.get(code, 0) + 1
+
+    return {
+        "mode": mode,
+        "query_length": len(query),
+        "top_k": top_k,
+        "result_count": len(results),
+        "vector_hits": vector_hits,
+        "keyword_hits": keyword_hits,
+        "hybrid_hits": hybrid_hits,
+        "rrf_k": getattr(getattr(retriever, "rrf", None), "k", None),
+        "warning_counts": warning_counts,
     }
 
 

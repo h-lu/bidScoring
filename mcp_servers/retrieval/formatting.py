@@ -40,8 +40,11 @@ def format_result(
     }
 
     if item["evidence_units"]:
-        item["evidence_status"] = "verified"
-        item["warnings"] = []
+        warnings = _collect_evidence_warnings(item["evidence_units"])
+        item["evidence_status"] = (
+            "verified_with_warnings" if warnings else "verified"
+        )
+        item["warnings"] = warnings
     else:
         item["evidence_status"] = "unverifiable"
         item["warnings"] = ["missing_evidence_chain"]
@@ -65,3 +68,33 @@ def format_evidence_units(evidence_units: List[Any]) -> List[Dict[str, Any]]:
             }
         )
     return items
+
+
+def _collect_evidence_warnings(evidence_units: List[Dict[str, Any]]) -> List[str]:
+    warnings: set[str] = set()
+
+    for unit in evidence_units:
+        anchor = unit.get("anchor")
+        if not isinstance(anchor, dict):
+            warnings.add("missing_anchor")
+            continue
+
+        anchors = anchor.get("anchors")
+        if not isinstance(anchors, list) or not anchors:
+            warnings.add("missing_anchor")
+            continue
+
+        for anchor_item in anchors:
+            if not isinstance(anchor_item, dict):
+                warnings.add("invalid_anchor_item")
+                continue
+            if anchor_item.get("page_idx") is None:
+                warnings.add("missing_anchor_page_idx")
+
+            bbox = anchor_item.get("bbox")
+            if bbox is None:
+                warnings.add("missing_anchor_bbox")
+            elif not isinstance(bbox, list) or len(bbox) != 4:
+                warnings.add("invalid_anchor_bbox")
+
+    return sorted(warnings)
