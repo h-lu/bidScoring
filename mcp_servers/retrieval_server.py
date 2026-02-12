@@ -29,7 +29,7 @@ from fastmcp import FastMCP
 from bid_scoring.config import load_settings
 from bid_scoring.retrieval import HybridRetriever, LRUCache
 from mcp_servers.retrieval.execution import _tool_metrics, tool_wrapper
-from mcp_servers.retrieval.formatting import format_evidence_units, format_result
+from mcp_servers.retrieval.formatting import format_result
 from mcp_servers.retrieval.validation import (
     ValidationError,
     validate_bool,
@@ -118,11 +118,6 @@ def _close_cached_retrievers() -> None:  # pragma: no cover
             retriever.close()
         except Exception as e:
             logger.warning(f"Error closing retriever: {e}")
-
-
-# Backward-compatible aliases used by tests and utility scripts.
-_format_result = format_result
-_format_evidence_units = format_evidence_units
 
 
 # =============================================================================
@@ -1481,7 +1476,7 @@ def retrieve_impl(
         raise ValidationError(f"Unknown mode: {mode}")
 
     formatted_results = [
-        _format_result(r, include_text=include_text, max_chars=max_chars) for r in results
+        format_result(r, include_text=include_text, max_chars=max_chars) for r in results
     ]
 
     warnings: list[str] = []

@@ -26,8 +26,7 @@ def test_execution_module_returns_tool_result_on_error():
     assert result.error == "explode failed: boom"
 
 
-def test_formatting_module_compatible_with_legacy_alias():
-    from mcp_servers import retrieval_server as srv
+def test_formatting_module_emits_warning_for_missing_evidence():
     from mcp_servers.retrieval.formatting import format_result
 
     result = RetrievalResult(
@@ -39,6 +38,5 @@ def test_formatting_module_compatible_with_legacy_alias():
         evidence_units=[],
     )
 
-    assert srv._format_result is format_result
-    formatted = srv._format_result(result, include_text=True, max_chars=None)
+    formatted = format_result(result, include_text=True, max_chars=None)
     assert formatted["warnings"] == ["missing_evidence_chain"]

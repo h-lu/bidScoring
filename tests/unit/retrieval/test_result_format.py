@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bid_scoring.retrieval.types import EvidenceUnit, RetrievalResult
-from mcp_servers.retrieval_server import _format_result
+from mcp_servers.retrieval.formatting import format_result
 
 
 def test_format_result_includes_unit_evidence_chain():
@@ -24,7 +24,7 @@ def test_format_result_includes_unit_evidence_chain():
         ],
     )
 
-    formatted = _format_result(result, include_text=True, max_chars=None)
+    formatted = format_result(result, include_text=True, max_chars=None)
 
     assert formatted["evidence_status"] == "verified"
     assert formatted["warnings"] == []
@@ -42,9 +42,8 @@ def test_format_result_marks_warning_when_evidence_chain_missing():
         evidence_units=[],
     )
 
-    formatted = _format_result(result, include_text=True, max_chars=None)
+    formatted = format_result(result, include_text=True, max_chars=None)
 
     assert formatted["evidence_status"] == "unverifiable"
     assert formatted["warnings"] == ["missing_evidence_chain"]
     assert formatted["evidence_units"] == []
-
