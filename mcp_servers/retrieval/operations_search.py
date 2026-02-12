@@ -64,6 +64,10 @@ def search_chunks(
             if r["page_idx"] is not None and start_page <= r["page_idx"] <= end_page
         ]
 
+    if element_types:
+        allowed = set(element_types)
+        results = [r for r in results if r.get("element_type") in allowed]
+
     # Limit to top_k after filtering
     results = results[:top_k]
 

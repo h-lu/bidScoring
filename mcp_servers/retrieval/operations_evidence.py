@@ -315,7 +315,13 @@ def compare_across_versions(
         )
 
         all_results[version_id] = result["results"]
-        all_scores.extend([r["score"] for r in result["results"]])
+        all_scores.extend(
+            [
+                score
+                for score in (r.get("score") for r in result["results"])
+                if isinstance(score, (int, float))
+            ]
+        )
 
     # Normalize scores if requested
     if normalize_scores and all_scores:
@@ -325,8 +331,11 @@ def compare_across_versions(
 
         for version_id, results in all_results.items():
             for r in results:
-                if score_range > 0:
-                    r["normalized_score"] = (r["score"] - min_score) / score_range
+                score = r.get("score")
+                if not isinstance(score, (int, float)):
+                    r["normalized_score"] = None
+                elif score_range > 0:
+                    r["normalized_score"] = (score - min_score) / score_range
                 else:
                     r["normalized_score"] = 1.0
 
