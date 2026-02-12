@@ -47,3 +47,27 @@ def test_format_result_marks_warning_when_evidence_chain_missing():
     assert formatted["evidence_status"] == "unverifiable"
     assert formatted["warnings"] == ["missing_evidence_chain"]
     assert formatted["evidence_units"] == []
+
+
+def test_format_result_marks_warning_when_anchor_missing_bbox():
+    result = RetrievalResult(
+        chunk_id="chunk-3",
+        text="partial anchor",
+        page_idx=5,
+        score=0.6,
+        source="hybrid",
+        evidence_units=[
+            EvidenceUnit(
+                unit_id="unit-3",
+                unit_index=3,
+                unit_type="text",
+                text="quoted",
+                anchor_json={"anchors": [{"page_idx": 5}]},
+            )
+        ],
+    )
+
+    formatted = format_result(result, include_text=True, max_chars=None)
+
+    assert formatted["evidence_status"] == "verified_with_warnings"
+    assert "missing_anchor_bbox" in formatted["warnings"]
