@@ -165,7 +165,7 @@ for r in results:
 
 入口文件：
 
-- `/Users/wangxq/Documents/投标分析_kimi/mcp_servers/retrieval_server.py`
+- `mcp_servers/retrieval_server.py`
 
 ### 6.1 stdio（推荐，用于本地集成到 MCP Client）
 
@@ -193,10 +193,34 @@ MCP tool 名称：`retrieve`
 - `use_or_semantic`: 仅对 keyword 路径有效（默认 true）
 - `include_text`: 是否返回 chunk 文本（默认 true）
 - `max_chars`: 返回文本截断长度（可选）
+- `include_diagnostics`: 是否返回检索诊断信息（默认 false）
 
 返回：
 
-- `results`: 列表，每项包含 `chunk_id/page_idx/source/score/vector_score/keyword_score/rerank_score/text`
+- `warnings`: 聚合告警码（如 `missing_evidence_chain`）
+- `results`: 列表，每项包含：
+  - 基础字段：`chunk_id/page_idx/source/score/vector_score/keyword_score/rerank_score/text`
+  - 定位字段：`bbox/coord_system`
+  - 证据字段：`evidence_status/evidence_units/warnings`
+- `diagnostics`（可选）：`result_count/vector_hits/keyword_hits/hybrid_hits/warning_counts`
+
+### 6.4 Tool: prepare_highlight_targets
+
+MCP tool 名称：`prepare_highlight_targets`
+
+用途：对查询结果执行“可高亮门禁”，只输出可定位且证据可验证的 `chunk_ids`，并保留告警。
+
+参数：
+
+- `version_id/query/top_k/mode/keywords/use_or_semantic`：与 `retrieve` 对齐
+- `include_diagnostics`: 是否返回 `retrieval + gate` 诊断信息
+
+返回：
+
+- `chunk_ids`: 可用于 `highlight_pdf` 的安全候选集合
+- `included_count/excluded_count`: 门禁通过/过滤数量
+- `warnings`: 聚合告警码（包含检索告警与门禁告警）
+- `diagnostics`（可选）：`retrieval` 与 `gate` 统计
 
 ## 7. 常见问题排查
 

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict, Literal
 
 from bid_scoring.config import load_settings
 from mcp_servers.retrieval.validation import (
     ValidationError,
     validate_bool,
+    validate_positive_int,
     validate_query,
     validate_string_list,
     validate_version_id,
@@ -150,3 +151,62 @@ def prepare_highlight_targets_from_results(
         "included_count": len(chunk_ids),
         "excluded_count": excluded,
     }
+
+
+def prepare_highlight_targets_for_query(
+    retrieve_fn: Callable[..., Dict[str, Any]],
+    version_id: str,
+    query: str,
+    top_k: int = 10,
+    mode: Literal["hybrid", "vector", "keyword"] = "hybrid",
+    keywords: list[str] | None = None,
+    use_or_semantic: bool = True,
+    include_diagnostics: bool = False,
+) -> Dict[str, Any]:
+    """Retrieve by query and return factual highlight targets with warnings.
+
+    This operation is warning-only:
+    - no hard reject for unverifiable items
+    - unsafe candidates are filtered out from highlight targets
+    """
+    version_id = validate_version_id(version_id)
+    query = validate_query(query)
+    top_k = validate_positive_int(top_k, "top_k", max_value=100)
+
+    retrieved = retrieve_fn(
+        version_id=version_id,
+        query=query,
+        top_k=top_k,
+        mode=mode,
+        keywords=keywords,
+        use_or_semantic=use_or_semantic,
+        include_text=False,
+        include_diagnostics=include_diagnostics,
+    )
+
+    gate = prepare_highlight_targets_from_results(retrieved.get("results", []))
+    merged_warning_codes = sorted(
+        set(retrieved.get("warnings", [])) | set(gate.get("warnings", []))
+    )
+
+    response: Dict[str, Any] = {
+        "version_id": version_id,
+        "query": query,
+        "mode": mode,
+        "top_k": top_k,
+        "chunk_ids": gate["chunk_ids"],
+        "warnings": merged_warning_codes,
+        "included_count": gate["included_count"],
+        "excluded_count": gate["excluded_count"],
+    }
+    if include_diagnostics:
+        response["diagnostics"] = {
+            "retrieval": retrieved.get("diagnostics"),
+            "gate": {
+                "included_count": gate["included_count"],
+                "excluded_count": gate["excluded_count"],
+                "warning_count": len(merged_warning_codes),
+            },
+        }
+
+    return response

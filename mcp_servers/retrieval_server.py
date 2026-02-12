@@ -15,6 +15,9 @@ from mcp_servers.retrieval.execution import _tool_metrics, tool_wrapper
 from mcp_servers.retrieval.formatting import format_result
 from mcp_servers.retrieval.operations_analysis import analyze_bids_comprehensive as _analyze
 from mcp_servers.retrieval.operations_annotation import highlight_pdf as _highlight_pdf
+from mcp_servers.retrieval.operations_annotation import (
+    prepare_highlight_targets_for_query as _prepare_highlight_targets_for_query,
+)
 from mcp_servers.retrieval.operations_discovery import (
     get_document_outline as _get_document_outline,
 )
@@ -305,6 +308,49 @@ def highlight_pdf(
         topic=topic,
         color=color,
         increment=increment,
+    )
+
+
+@mcp.tool
+@tool_wrapper("prepare_highlight_targets")
+def prepare_highlight_targets(
+    version_id: str,
+    query: str,
+    top_k: int = 10,
+    mode: Literal["hybrid", "keyword", "vector"] = "hybrid",
+    keywords: List[str] | None = None,
+    use_or_semantic: bool = True,
+    include_diagnostics: bool = False,
+) -> Dict[str, Any]:
+    return prepare_highlight_targets_impl(
+        version_id=version_id,
+        query=query,
+        top_k=top_k,
+        mode=mode,
+        keywords=keywords,
+        use_or_semantic=use_or_semantic,
+        include_diagnostics=include_diagnostics,
+    )
+
+
+def prepare_highlight_targets_impl(
+    version_id: str,
+    query: str,
+    top_k: int = 10,
+    mode: Literal["hybrid", "keyword", "vector"] = "hybrid",
+    keywords: List[str] | None = None,
+    use_or_semantic: bool = True,
+    include_diagnostics: bool = False,
+) -> Dict[str, Any]:
+    return _prepare_highlight_targets_for_query(
+        retrieve_fn=retrieve_impl,
+        version_id=version_id,
+        query=query,
+        top_k=top_k,
+        mode=mode,
+        keywords=keywords,
+        use_or_semantic=use_or_semantic,
+        include_diagnostics=include_diagnostics,
     )
 
 
