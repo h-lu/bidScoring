@@ -87,10 +87,21 @@ psql "$DATABASE_URL" -f migrations/002_add_fulltext_search.sql
 
 - `bid_scoring/ingest.py::ingest_content_list(...)`
 
-如已有 MineRU 的解析结果，可通过脚本或自行调用入库逻辑。仓库也提供示例脚本：
+如已有 MineRU 的解析结果，可通过统一 CLI 或自行调用入库逻辑：
 
 ```bash
-uv run python scripts/ingest_mineru.py --help
+uv run bid-pipeline ingest-content-list --help
+```
+
+示例：
+
+```bash
+uv run bid-pipeline ingest-content-list \
+  --content-list data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+  --project-id <PROJECT_UUID> \
+  --document-id <DOCUMENT_UUID> \
+  --version-id <VERSION_UUID> \
+  --document-title "示例投标文件"
 ```
 
 ### 4.2 生成向量（vector/hybrid 必需）
