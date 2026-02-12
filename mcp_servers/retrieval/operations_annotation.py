@@ -102,3 +102,51 @@ def highlight_pdf(
                 "success": False,
                 "error": result.error,
             }
+
+
+def prepare_highlight_targets_from_results(
+    results: list[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build safe highlight targets from retrieval results.
+
+    Policy:
+    - include items only when `chunk_id` exists, `bbox` exists, and evidence is factual
+      (`verified` or `verified_with_warnings`)
+    - do not reject execution, return warnings for excluded items
+    """
+    chunk_ids: list[str] = []
+    warnings: set[str] = set()
+    seen: set[str] = set()
+    excluded = 0
+
+    for item in results:
+        chunk_id = item.get("chunk_id")
+        if not chunk_id:
+            warnings.add("missing_chunk_id")
+            excluded += 1
+            continue
+
+        if item.get("bbox") is None:
+            warnings.add("missing_chunk_bbox")
+            excluded += 1
+            continue
+
+        evidence_status = item.get("evidence_status")
+        if evidence_status not in {"verified", "verified_with_warnings"}:
+            warnings.add("unverifiable_evidence_for_highlight")
+            excluded += 1
+            continue
+
+        for code in item.get("warnings", []):
+            warnings.add(code)
+
+        if chunk_id not in seen:
+            seen.add(chunk_id)
+            chunk_ids.append(chunk_id)
+
+    return {
+        "chunk_ids": chunk_ids,
+        "warnings": sorted(warnings),
+        "included_count": len(chunk_ids),
+        "excluded_count": excluded,
+    }
