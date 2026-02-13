@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-- 重构分支：`codex/evidence-first-m1`
+- 重构状态：evidence-first 主链路已并入 `main`
 - 主链路：`PDF/内容 -> 入库 -> 检索 -> 证据 -> 高亮`
 - 核心验证：`ruff`、`pytest`、`pipeline CLI`、`retrieval threshold gate` 已通过
 
