@@ -14,6 +14,7 @@ from mcp_servers.retrieval.validation import (
     validate_version_id,
 )
 
+
 def search_chunks(
     retrieve_fn: Callable[..., Dict[str, Any]],
     version_id: str,
@@ -94,6 +95,7 @@ def search_chunks(
         }
 
     return response
+
 
 def search_by_heading(
     version_id: str,
@@ -185,6 +187,7 @@ def search_by_heading(
                 "sections": sections,
             }
 
+
 def filter_and_sort_results(
     results: list[Dict[str, Any]],
     filters: Dict[str, Any] | None = None,
@@ -261,6 +264,7 @@ def filter_and_sort_results(
         filtered.sort(key=lambda x: x.get("keyword_score") or 0, reverse=reverse)
 
     return filtered
+
 
 def batch_search(
     retrieve_fn: Callable[..., Dict[str, Any]],

@@ -44,7 +44,9 @@ def test_prepare_highlight_targets_filters_unverifiable_and_missing_bbox():
     assert "unverifiable_evidence_for_highlight" in gate["warnings"]
 
 
-def test_traceability_chain_retrieve_to_highlight_filters_non_factual_items(monkeypatch):
+def test_traceability_chain_retrieve_to_highlight_filters_non_factual_items(
+    monkeypatch,
+):
     retrieval_results = [
         RetrievalResult(
             chunk_id="chunk-ok",

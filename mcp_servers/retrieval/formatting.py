@@ -41,9 +41,7 @@ def format_result(
 
     if item["evidence_units"]:
         warnings = _collect_evidence_warnings(item["evidence_units"])
-        item["evidence_status"] = (
-            "verified_with_warnings" if warnings else "verified"
-        )
+        item["evidence_status"] = "verified_with_warnings" if warnings else "verified"
         item["warnings"] = warnings
     else:
         item["evidence_status"] = "unverifiable"

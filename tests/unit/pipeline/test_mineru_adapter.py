@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bid_scoring.pipeline.infrastructure.mineru_adapter import load_content_list_from_output
+from bid_scoring.pipeline.infrastructure.mineru_adapter import (
+    load_content_list_from_output,
+)
 
 
 def test_load_content_list_from_output_reads_json_list(tmp_path: Path):
@@ -19,4 +21,3 @@ def test_load_content_list_from_output_reads_json_list(tmp_path: Path):
 def test_load_content_list_from_output_returns_empty_when_missing(tmp_path: Path):
     loaded = load_content_list_from_output(tmp_path)
     assert loaded == []
-

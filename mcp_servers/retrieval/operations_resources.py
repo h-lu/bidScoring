@@ -6,7 +6,12 @@ import json
 from typing import Any
 
 from bid_scoring.config import load_settings
-from mcp_servers.retrieval.validation import validate_chunk_id, validate_unit_id, validate_version_id
+from mcp_servers.retrieval.validation import (
+    validate_chunk_id,
+    validate_unit_id,
+    validate_version_id,
+)
+
 
 def get_unit_evidence_resource(unit_id: str) -> str:
     """Get precise evidence content by unit ID.
@@ -72,6 +77,7 @@ def get_unit_evidence_resource(unit_id: str) -> str:
             }
 
             return json.dumps(result, ensure_ascii=False, indent=2)
+
 
 def get_chunk_evidence_resource(chunk_id: str) -> str:
     """Get chunk content with surrounding context.
@@ -174,6 +180,7 @@ def get_chunk_evidence_resource(chunk_id: str) -> str:
 
             return json.dumps(result, ensure_ascii=False, indent=2)
 
+
 def get_outline_resource(version_id: str) -> str:
     """Get document structure outline (table of contents).
 
@@ -275,6 +282,7 @@ def get_outline_resource(version_id: str) -> str:
                 indent=2,
             )
 
+
 def get_config_limits(retriever_cache_size: int, query_cache_size: int) -> str:
     """Get query configuration limits.
 
@@ -301,6 +309,7 @@ def get_config_limits(retriever_cache_size: int, query_cache_size: int) -> str:
         ensure_ascii=False,
         indent=2,
     )
+
 
 def get_health_status(
     cached_retrievers: int,

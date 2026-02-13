@@ -17,4 +17,3 @@ def test_image_region_locator_reserved_for_future_extension():
     locator = ImageRegionLocator()
     with pytest.raises(NotImplementedError):
         locator.locate({"anchors": []})
-

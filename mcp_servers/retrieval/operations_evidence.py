@@ -16,6 +16,7 @@ from mcp_servers.retrieval.validation import (
     validate_version_id,
 )
 
+
 def get_chunk_with_context(
     chunk_id: str,
     context_depth: Literal["chunk", "paragraph", "section", "document"] = "paragraph",
@@ -163,6 +164,7 @@ def get_chunk_with_context(
 
             return result
 
+
 def get_unit_evidence(
     unit_id: str,
     verify_hash: bool = True,
@@ -271,6 +273,7 @@ def get_unit_evidence(
 
             return result
 
+
 def compare_across_versions(
     retrieve_fn: Callable[..., Dict[str, Any]],
     version_ids: list[str],
@@ -358,6 +361,7 @@ def compare_across_versions(
             "score_sample_size": len(all_scores),
         }
     return response
+
 
 def extract_key_value(
     version_id: str,

@@ -11,4 +11,3 @@ def test_index_builder_delegates_to_embedding_service():
     result = builder.build_embeddings(version_id="ver-1", conn=object())
     assert result["version_id"] == "ver-1"
     assert result["succeeded"] == 3
-

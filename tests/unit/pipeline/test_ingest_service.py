@@ -34,4 +34,3 @@ def test_ingest_content_list_records_artifact_and_returns_summary(fixed_ids):
     assert summary.chunks_imported == 7
     assert len(repo.persist_calls) == 1
     assert len(repo.artifact_calls) == 1
-

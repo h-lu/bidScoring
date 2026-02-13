@@ -56,4 +56,3 @@ def _as_opt_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
-

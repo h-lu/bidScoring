@@ -19,8 +19,9 @@ class MinIOObjectStore:
         prefix: str,
         callback: Callable[[int, int], None] | None = None,
     ) -> list[dict[str, Any]]:
-        return self.storage.upload_directory(local_dir=local_dir, prefix=prefix, callback=callback)
+        return self.storage.upload_directory(
+            local_dir=local_dir, prefix=prefix, callback=callback
+        )
 
     def upload_file(self, *, local_path: Path, object_key: str) -> dict[str, Any]:
         return self.storage.upload_file(local_path=local_path, object_key=object_key)
-

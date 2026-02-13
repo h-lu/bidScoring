@@ -25,4 +25,3 @@ def test_minio_store_upload_file_delegates(tmp_path: Path):
     store = MinIOObjectStore(storage=_Storage())
     result = store.upload_file(local_path=file_path, object_key="k")
     assert result["object_key"] == "k"
-

@@ -14,4 +14,3 @@ def load_content_list_from_output(output_dir: Path) -> list[dict]:
     if not isinstance(data, list):
         raise ValueError("content_list.json must be a JSON list")
     return data
-

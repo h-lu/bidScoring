@@ -266,7 +266,9 @@ class HybridRetriever:
     def _analyze_query_type(self, query: str) -> str:
         technical_pattern = r"\b[A-Z]{2,}\b|\b\d+[A-Za-z]+\b"
         technical_matches = len(re.findall(technical_pattern, query))
-        has_chinese_tech_terms = any(term in query for term in self._field_keywords.keys())
+        has_chinese_tech_terms = any(
+            term in query for term in self._field_keywords.keys()
+        )
         if technical_matches >= 2 or has_chinese_tech_terms:
             return "technical"
         if len(query) > 50:

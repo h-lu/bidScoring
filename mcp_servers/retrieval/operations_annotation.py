@@ -14,6 +14,7 @@ from mcp_servers.retrieval.validation import (
     validate_version_id,
 )
 
+
 def highlight_pdf(
     version_id: str,
     chunk_ids: list[str],

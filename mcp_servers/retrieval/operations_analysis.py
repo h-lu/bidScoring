@@ -7,6 +7,7 @@ from typing import Any, Dict
 from bid_scoring.config import load_settings
 from mcp_servers.retrieval.validation import validate_string_list
 
+
 def analyze_bids_comprehensive(
     version_ids: list[str],
     bidder_names: dict[str, str] | None = None,

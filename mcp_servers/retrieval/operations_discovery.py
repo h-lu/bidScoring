@@ -7,6 +7,7 @@ from typing import Any, Dict
 from bid_scoring.config import load_settings
 from mcp_servers.retrieval.validation import validate_positive_int, validate_version_id
 
+
 def list_available_versions(
     project_id: str | None = None,
     include_stats: bool = True,
@@ -96,6 +97,7 @@ def list_available_versions(
         "count": len(versions),
         "versions": versions,
     }
+
 
 def get_document_outline(
     version_id: str,
@@ -192,6 +194,7 @@ def get_document_outline(
                 "source": "chunks",
                 "outline": outline,
             }
+
 
 def get_page_metadata(
     version_id: str,

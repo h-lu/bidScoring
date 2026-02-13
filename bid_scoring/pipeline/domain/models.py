@@ -22,4 +22,3 @@ class CitationAssessment:
     citation_id: str | None = None
     unit_id: str | None = None
     warnings: list[EvidenceWarning] = field(default_factory=list)
-

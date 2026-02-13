@@ -49,5 +49,6 @@ def test_record_source_artifact_executes_upsert_and_commits():
 
 def test_hash_bytes_is_deterministic():
     value = b"hello"
-    assert PostgresPipelineRepository.hash_bytes(value) == PostgresPipelineRepository.hash_bytes(value)
-
+    assert PostgresPipelineRepository.hash_bytes(
+        value
+    ) == PostgresPipelineRepository.hash_bytes(value)

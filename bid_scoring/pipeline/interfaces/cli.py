@@ -9,14 +9,20 @@ import psycopg
 
 from bid_scoring.config import load_settings
 from bid_scoring.pipeline.application.service import PipelineService
-from bid_scoring.pipeline.infrastructure.postgres_repository import PostgresPipelineRepository
+from bid_scoring.pipeline.infrastructure.postgres_repository import (
+    PostgresPipelineRepository,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="bid-pipeline", description="Evidence-first pipeline CLI")
+    parser = argparse.ArgumentParser(
+        prog="bid-pipeline", description="Evidence-first pipeline CLI"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    ingest = sub.add_parser("ingest-content-list", help="Ingest MinerU content_list.json")
+    ingest = sub.add_parser(
+        "ingest-content-list", help="Ingest MinerU content_list.json"
+    )
     ingest.add_argument("--content-list", required=True)
     ingest.add_argument("--project-id", required=True)
     ingest.add_argument("--document-id", required=True)
@@ -27,7 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None, service: PipelineService | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None, service: PipelineService | None = None
+) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -63,7 +71,9 @@ def main(argv: Sequence[str] | None = None, service: PipelineService | None = No
         print(
             json.dumps(
                 {
-                    "status": summary["status"] if isinstance(summary, dict) else summary.status,
+                    "status": summary["status"]
+                    if isinstance(summary, dict)
+                    else summary.status,
                     "chunks_imported": summary["chunks_imported"]
                     if isinstance(summary, dict)
                     else summary.chunks_imported,
@@ -79,4 +89,3 @@ def main(argv: Sequence[str] | None = None, service: PipelineService | None = No
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-

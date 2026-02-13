@@ -42,7 +42,9 @@ def test_retrieve_impl_reports_unverifiable_warning_when_evidence_missing(monkey
             ],
         ),
     ]
-    monkeypatch.setattr(srv, "get_retriever", lambda version_id, top_k: _FakeRetriever(results))
+    monkeypatch.setattr(
+        srv, "get_retriever", lambda version_id, top_k: _FakeRetriever(results)
+    )
 
     response = srv.retrieve_impl(
         version_id="33333333-3333-3333-3333-333333333333",
@@ -80,7 +82,9 @@ def test_retrieve_impl_can_include_diagnostics(monkeypatch):
             evidence_units=[],
         ),
     ]
-    monkeypatch.setattr(srv, "get_retriever", lambda version_id, top_k: _FakeRetriever(results))
+    monkeypatch.setattr(
+        srv, "get_retriever", lambda version_id, top_k: _FakeRetriever(results)
+    )
 
     response = srv.retrieve_impl(
         version_id="33333333-3333-3333-3333-333333333333",

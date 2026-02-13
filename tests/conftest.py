@@ -12,4 +12,3 @@ def fixed_ids() -> dict[str, str]:
         "document_id": str(uuid.UUID("22222222-2222-2222-2222-222222222222")),
         "version_id": str(uuid.UUID("33333333-3333-3333-3333-333333333333")),
     }
-

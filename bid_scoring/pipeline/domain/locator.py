@@ -27,4 +27,3 @@ class ImageRegionLocator:
 
     def locate(self, anchor_json: dict[str, Any]) -> dict[str, Any]:  # pragma: no cover
         raise NotImplementedError("Image region evidence is not implemented yet")
-

@@ -19,4 +19,3 @@ def test_analyze_dimension_marks_missing_bbox_as_warning(monkeypatch):
     )
 
     assert result.evidence_warnings == ["missing_bbox"]
-

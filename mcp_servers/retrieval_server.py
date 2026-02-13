@@ -13,7 +13,9 @@ from bid_scoring.config import load_settings
 from bid_scoring.retrieval import HybridRetriever, LRUCache
 from mcp_servers.retrieval.execution import _tool_metrics, tool_wrapper
 from mcp_servers.retrieval.formatting import format_result
-from mcp_servers.retrieval.operations_analysis import analyze_bids_comprehensive as _analyze
+from mcp_servers.retrieval.operations_analysis import (
+    analyze_bids_comprehensive as _analyze,
+)
 from mcp_servers.retrieval.operations_annotation import highlight_pdf as _highlight_pdf
 from mcp_servers.retrieval.operations_annotation import (
     prepare_highlight_targets_for_query as _prepare_highlight_targets_for_query,

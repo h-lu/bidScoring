@@ -18,7 +18,9 @@ class _FakeService:
 def test_cli_ingest_content_list_invokes_pipeline_service(tmp_path: Path, fixed_ids):
     content_path = tmp_path / "content_list.json"
     content_path.write_text(
-        json.dumps([{"type": "text", "text": "hello", "page_idx": 0, "bbox": [0, 0, 1, 1]}]),
+        json.dumps(
+            [{"type": "text", "text": "hello", "page_idx": 0, "bbox": [0, 0, 1, 1]}]
+        ),
         encoding="utf-8",
     )
 
@@ -47,4 +49,3 @@ def test_cli_ingest_content_list_invokes_pipeline_service(tmp_path: Path, fixed_
     assert call["document_id"] == fixed_ids["document_id"]
     assert call["version_id"] == fixed_ids["version_id"]
     assert len(call["content_list"]) == 1
-

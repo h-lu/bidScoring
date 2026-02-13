@@ -13,4 +13,3 @@ class IndexBuilder:
 
     def build_embeddings(self, *, version_id: str, conn: Any) -> dict[str, Any]:
         return self.embedder.process_version(version_id=version_id, conn=conn)
-
