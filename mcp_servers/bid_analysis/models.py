@@ -41,14 +41,18 @@ def load_analysis_dimensions(
     raw = _load_rules_file(selected_path)
     dimensions_payload = raw.get("dimensions")
     if not isinstance(dimensions_payload, dict):
-        logger.warning("Invalid scoring rules schema at %s, use defaults", selected_path)
+        logger.warning(
+            "Invalid scoring rules schema at %s, use defaults", selected_path
+        )
         dimensions_payload = _default_dimensions_payload()
 
     dimensions = _parse_dimensions(dimensions_payload)
     if dimensions:
         return dimensions
 
-    logger.warning("No valid scoring dimensions found at %s, use defaults", selected_path)
+    logger.warning(
+        "No valid scoring dimensions found at %s, use defaults", selected_path
+    )
     return _parse_dimensions(_default_dimensions_payload())
 
 
@@ -109,7 +113,9 @@ def _parse_dimensions(payload: dict[str, Any]) -> dict[str, AnalysisDimension]:
             extract_patterns = extract_patterns_raw
 
         risk_thresholds_raw = cfg.get("risk_thresholds")
-        risk_thresholds = risk_thresholds_raw if isinstance(risk_thresholds_raw, dict) else None
+        risk_thresholds = (
+            risk_thresholds_raw if isinstance(risk_thresholds_raw, dict) else None
+        )
 
         dimensions[name] = AnalysisDimension(
             name=name,

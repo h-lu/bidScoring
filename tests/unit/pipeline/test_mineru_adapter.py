@@ -188,7 +188,9 @@ def test_upload_file_requests_retries_once_then_succeeds(monkeypatch, tmp_path: 
             raise OSError(32, "Broken pipe")
         return _Resp()
 
-    monkeypatch.setattr("bid_scoring.pipeline.infrastructure.mineru_adapter.requests.put", _fake_put)
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.infrastructure.mineru_adapter.requests.put", _fake_put
+    )
 
     _upload_file_requests("https://upload.example.com/one", file_path, timeout=1)
     assert state["calls"] == 2

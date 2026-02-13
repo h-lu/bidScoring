@@ -130,7 +130,9 @@ class BidAnalyzer:
 
         extracted_values = {}
         if dimension.extract_patterns:
-            extracted_values = self._extract_values(score_chunks, dimension.extract_patterns)
+            extracted_values = self._extract_values(
+                score_chunks, dimension.extract_patterns
+            )
 
         score = self._calculate_dimension_score(
             dimension,
@@ -172,7 +174,9 @@ class BidAnalyzer:
     def _collect_evidence_warnings(self, chunks: list[dict[str, Any]]) -> list[str]:
         return self._retriever.collect_evidence_warnings(chunks)
 
-    def _search_chunks(self, version_id: str, keywords: list[str]) -> list[dict[str, Any]]:
+    def _search_chunks(
+        self, version_id: str, keywords: list[str]
+    ) -> list[dict[str, Any]]:
         return self._retriever.search_chunks(version_id, keywords)
 
     def _extract_values(

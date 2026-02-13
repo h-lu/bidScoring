@@ -199,7 +199,9 @@ def parse_pdf_with_mineru_api(
     if not pdf_path.exists():
         raise FileNotFoundError(pdf_path)
 
-    resolved_api_url = api_url or os.getenv("MINERU_API_URL", "https://mineru.net/api/v4")
+    resolved_api_url = api_url or os.getenv(
+        "MINERU_API_URL", "https://mineru.net/api/v4"
+    )
     resolved_api_key = api_key or os.getenv("MINERU_API_KEY")
     if not resolved_api_key:
         raise RuntimeError("MINERU_API_KEY is required for api parser mode")

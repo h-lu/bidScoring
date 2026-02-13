@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from mcp_servers.annotation_insights import AnnotationInsight
-from mcp_servers.bid_analysis.models import ANALYSIS_DIMENSIONS, AnalysisDimension, DimensionResult
+from mcp_servers.bid_analysis.models import (
+    ANALYSIS_DIMENSIONS,
+    AnalysisDimension,
+    DimensionResult,
+)
 
 
 class DimensionScorer:
@@ -31,7 +35,9 @@ class DimensionScorer:
             thresholds = dimension.risk_thresholds
 
             if dimension.name == "warranty":
-                max_years = max((v["max"] for v in extracted_values.values()), default=0)
+                max_years = max(
+                    (v["max"] for v in extracted_values.values()), default=0
+                )
                 if max_years >= thresholds["excellent"][0]:
                     score += 20
                 elif max_years >= thresholds["good"][0]:
@@ -40,7 +46,9 @@ class DimensionScorer:
                     score -= 20
 
             elif dimension.name == "delivery":
-                min_hours = min((v["min"] for v in extracted_values.values()), default=999)
+                min_hours = min(
+                    (v["min"] for v in extracted_values.values()), default=999
+                )
                 if min_hours <= thresholds["excellent"][1]:
                     score += 20
                 elif min_hours <= thresholds["good"][1]:

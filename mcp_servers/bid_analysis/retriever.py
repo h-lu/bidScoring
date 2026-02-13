@@ -12,7 +12,9 @@ class ChunkRetriever:
         self._conn = conn
         self._limit_per_dimension = int(limit_per_dimension)
 
-    def search_chunks(self, version_id: str, keywords: list[str]) -> list[dict[str, Any]]:
+    def search_chunks(
+        self, version_id: str, keywords: list[str]
+    ) -> list[dict[str, Any]]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             conditions = " OR ".join(["text_raw ILIKE %s"] * len(keywords))
             params = [f"%{kw}%" for kw in keywords]
@@ -56,7 +58,9 @@ class McpChunkRetriever:
         self._mode = mode
         self._last_retrieval_warnings: list[str] = []
 
-    def search_chunks(self, version_id: str, keywords: list[str]) -> list[dict[str, Any]]:
+    def search_chunks(
+        self, version_id: str, keywords: list[str]
+    ) -> list[dict[str, Any]]:
         retrieve_fn = self._retrieve_fn or _default_retrieve_fn
         query = " ".join(dict.fromkeys(keywords))
 
@@ -99,7 +103,10 @@ class McpChunkRetriever:
 
             if chunk.get("bbox") is None:
                 warnings.add("missing_bbox")
-            if chunk.get("evidence_status") not in {"verified", "verified_with_warnings"}:
+            if chunk.get("evidence_status") not in {
+                "verified",
+                "verified_with_warnings",
+            }:
                 warnings.add("unverifiable_evidence_for_scoring")
 
         return sorted(warnings)

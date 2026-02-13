@@ -98,9 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(
-    argv: Sequence[str] | None = None, service: Any | None = None
-) -> int:
+def main(argv: Sequence[str] | None = None, service: Any | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -195,7 +193,9 @@ def _run_e2e(args: argparse.Namespace, service: Any | None = None) -> int:
         )
         runtime_service = E2EPipelineService(
             content_source=AutoContentSource(),
-            pipeline_service=PipelineService(repository=PostgresPipelineRepository(conn)),
+            pipeline_service=PipelineService(
+                repository=PostgresPipelineRepository(conn)
+            ),
             index_builder=IndexBuilder(),
             scoring_provider=scoring_provider,
         )
@@ -203,11 +203,14 @@ def _run_e2e(args: argparse.Namespace, service: Any | None = None) -> int:
         _emit_payload(result.as_dict(), output_path=args.output)
         return 0
 
+
 def _emit_payload(payload: dict[str, Any], output_path: str | None = None) -> None:
     rendered = json.dumps(payload, ensure_ascii=False)
     if output_path:
         Path(output_path).write_text(rendered, encoding="utf-8")
-        print(json.dumps({"status": "written", "output": output_path}, ensure_ascii=False))
+        print(
+            json.dumps({"status": "written", "output": output_path}, ensure_ascii=False)
+        )
         return
     print(rendered)
 

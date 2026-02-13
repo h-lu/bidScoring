@@ -79,7 +79,9 @@ def register_mcp_routes(
         project_id: str | None = None,
         include_stats: bool = True,
     ) -> Dict[str, Any]:
-        return _list_available_versions(project_id=project_id, include_stats=include_stats)
+        return _list_available_versions(
+            project_id=project_id, include_stats=include_stats
+        )
 
     @mcp.tool
     @tool_wrapper("get_document_outline")
@@ -141,7 +143,9 @@ def register_mcp_routes(
     def filter_and_sort_results(
         results: list[Dict[str, Any]],
         filters: Dict[str, Any] | None = None,
-        sort_by: Literal["score", "page_idx", "vector_score", "keyword_score"] = "score",
+        sort_by: Literal[
+            "score", "page_idx", "vector_score", "keyword_score"
+        ] = "score",
         sort_order: Literal["desc", "asc"] = "desc",
         deduplicate: bool = True,
     ) -> list[Dict[str, Any]]:
@@ -177,7 +181,9 @@ def register_mcp_routes(
     @tool_wrapper("get_chunk_with_context")
     def get_chunk_with_context(
         chunk_id: str,
-        context_depth: Literal["chunk", "paragraph", "section", "document"] = "paragraph",
+        context_depth: Literal[
+            "chunk", "paragraph", "section", "document"
+        ] = "paragraph",
         include_adjacent_pages: bool = False,
     ) -> Dict[str, Any]:
         return _get_chunk_with_context(

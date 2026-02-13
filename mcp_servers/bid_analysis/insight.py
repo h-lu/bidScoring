@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from mcp_servers.annotation_insights import AnnotationInsight, analyze_chunk_for_insights
+from mcp_servers.annotation_insights import (
+    AnnotationInsight,
+    analyze_chunk_for_insights,
+)
 
 
 class InsightExtractor:
@@ -13,7 +16,9 @@ class InsightExtractor:
         self,
         chunks: list[dict[str, Any]],
         dimension_name: str,
-    ) -> tuple[list[AnnotationInsight], list[AnnotationInsight], list[AnnotationInsight]]:
+    ) -> tuple[
+        list[AnnotationInsight], list[AnnotationInsight], list[AnnotationInsight]
+    ]:
         risks: list[AnnotationInsight] = []
         benefits: list[AnnotationInsight] = []
         info: list[AnnotationInsight] = []

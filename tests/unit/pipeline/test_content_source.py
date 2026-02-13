@@ -50,7 +50,9 @@ def test_pdf_mineru_adapter_adds_empty_warning_when_no_content(tmp_path: Path):
     output_dir = tmp_path / "mineru-output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    adapter = PdfMinerUAdapter(parse_pdf_fn=lambda _pdf_path, *, parser_mode=None: output_dir)
+    adapter = PdfMinerUAdapter(
+        parse_pdf_fn=lambda _pdf_path, *, parser_mode=None: output_dir
+    )
     loaded = adapter.load(
         E2ERunRequest(
             project_id="p1",

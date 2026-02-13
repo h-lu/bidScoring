@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from bid_scoring.pipeline.application.scoring_provider import ScoringProvider, ScoringRequest
+from bid_scoring.pipeline.application.scoring_provider import (
+    ScoringProvider,
+    ScoringRequest,
+)
 
 
 @dataclass
@@ -175,6 +178,7 @@ def _normalize_ingest_summary(summary: Any) -> dict[str, Any]:
         "source_uri": getattr(summary, "source_uri", None),
         "warnings": list(getattr(summary, "warnings", [])),
     }
+
 
 def _merge_unique_warnings(
     existing: list[str], additions: list[str] | None = None

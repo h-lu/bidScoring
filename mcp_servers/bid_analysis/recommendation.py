@@ -13,9 +13,13 @@ class RecommendationGenerator:
         for dim_name, result in dimension_results.items():
             if result.risk_level == "high":
                 if dim_name == "warranty":
-                    recommendations.append("[质保] 质保期偏短，建议确认是否可延长或增加服务承诺")
+                    recommendations.append(
+                        "[质保] 质保期偏短，建议确认是否可延长或增加服务承诺"
+                    )
                 elif dim_name == "delivery":
-                    recommendations.append("[交付] 响应时间较慢，建议确认紧急情况处理流程")
+                    recommendations.append(
+                        "[交付] 响应时间较慢，建议确认紧急情况处理流程"
+                    )
                 elif dim_name == "training":
                     recommendations.append("[培训] 培训时间不足，建议增加实操培训天数")
                 elif dim_name == "financial":
