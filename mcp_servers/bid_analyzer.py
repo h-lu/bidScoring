@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
 from psycopg.rows import dict_row
@@ -18,137 +16,24 @@ from mcp_servers.annotation_insights import (
     AnnotationInsight,
     analyze_chunk_for_insights,
 )
+from mcp_servers.bid_analysis.comparison import compare_versions
+from mcp_servers.bid_analysis.models import (
+    ANALYSIS_DIMENSIONS,
+    AnalysisDimension,
+    BidAnalysisReport,
+    DimensionResult,
+)
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# Analysis Dimensions Configuration
-# =============================================================================
-
-
-@dataclass
-class AnalysisDimension:
-    """Configuration for a single analysis dimension."""
-
-    name: str  # e.g., "warranty", "delivery", "training"
-    display_name: str  # e.g., "质保售后", "交付响应"
-    weight: float  # 0.0-1.0, for scoring
-    keywords: list[str]
-    extract_patterns: list[str] | None = None
-    risk_thresholds: dict[str, Any] | None = None
-
-
-# Standard analysis dimensions based on industry best practices
-ANALYSIS_DIMENSIONS = {
-    "warranty": AnalysisDimension(
-        name="warranty",
-        display_name="质保售后",
-        weight=0.25,
-        keywords=["质保", "保修", "免费维修", "终身服务", "售后服务"],
-        extract_patterns=[r"(\d+)\s*年", r"(\d+)\s*个月"],
-        risk_thresholds={
-            "excellent": [5, 999],  # 5+ years
-            "good": [3, 5],  # 3-5 years
-            "medium": [2, 3],  # 2-3 years
-            "poor": [0, 2],  # <2 years
-        },
-    ),
-    "delivery": AnalysisDimension(
-        name="delivery",
-        display_name="交付响应",
-        weight=0.25,
-        keywords=["交货", "交付", "响应时间", "小时内", "到场", "上门"],
-        extract_patterns=[r"(\d+)\s*小时", r"(\d+)\s*天"],
-        risk_thresholds={
-            "excellent": [0, 2],  # <2 hours
-            "good": [2, 8],  # 2-8 hours
-            "medium": [8, 24],  # 8-24 hours
-            "poor": [24, 999],  # >24 hours
-        },
-    ),
-    "training": AnalysisDimension(
-        name="training",
-        display_name="培训支持",
-        weight=0.20,
-        keywords=["培训", "技术指导", "操作培训", "维护培训"],
-        extract_patterns=[r"(\d+)\s*[天日]", r"(\d+)\s*人"],
-        risk_thresholds={
-            "excellent": [5, 999],  # 5+ days
-            "good": [3, 5],  # 3-5 days
-            "medium": [1, 3],  # 1-3 days
-            "poor": [0, 1],  # <1 day
-        },
-    ),
-    "financial": AnalysisDimension(
-        name="financial",
-        display_name="商务条款",
-        weight=0.20,
-        keywords=["付款", "预付", "尾款", "保证金", "违约金", "报价"],
-        extract_patterns=[r"(\d+)%", r"(\d+)\s*万元"],
-        risk_thresholds={
-            "high_prepayment": [50, 999],  # >50% prepayment
-            "medium_prepayment": [30, 50],  # 30-50% prepayment
-            "low_prepayment": [0, 30],  # <30% prepayment
-        },
-    ),
-    "technical": AnalysisDimension(
-        name="technical",
-        display_name="技术方案",
-        weight=0.10,
-        keywords=["技术参数", "规格", "性能指标", "技术方案", "功能"],
-    ),
-    "compliance": AnalysisDimension(
-        name="compliance",
-        display_name="合规承诺",
-        weight=0.10,
-        keywords=["承诺", "保证", "必须", "应当", "符合", "满足"],
-    ),
-}
-
-
-# =============================================================================
-# Analysis Results
-# =============================================================================
-
-
-@dataclass
-class DimensionResult:
-    """Analysis result for a single dimension."""
-
-    dimension: str
-    display_name: str
-    chunks_found: int
-    risks: list[AnnotationInsight] = field(default_factory=list)
-    benefits: list[AnnotationInsight] = field(default_factory=list)
-    info: list[AnnotationInsight] = field(default_factory=list)
-    extracted_values: dict[str, Any] = field(default_factory=dict)
-    score: float = 0.0  # 0-100
-    risk_level: str = "medium"  # "low", "medium", "high"
-    summary: str = ""
-
-
-@dataclass
-class BidAnalysisReport:
-    """Complete bid analysis report."""
-
-    version_id: str
-    bidder_name: str
-    project_name: str
-    dimensions: dict[str, DimensionResult]
-
-    # Computed metrics
-    overall_score: float  # 0-100
-    total_risks: int
-    total_benefits: int
-    risk_level: str  # "low", "medium", "high"
-
-    # Recommendations
-    recommendations: list[str] = field(default_factory=list)
-
-    # Metadata
-    analyzed_at: datetime = field(default_factory=datetime.now)
-    chunks_analyzed: int = 0
+__all__ = [
+    "ANALYSIS_DIMENSIONS",
+    "AnalysisDimension",
+    "DimensionResult",
+    "BidAnalysisReport",
+    "BidAnalyzer",
+    "compare_versions",
+]
 
 
 # =============================================================================
@@ -203,6 +88,8 @@ class BidAnalyzer:
         dimension_results = {}
         total_risks = 0
         total_benefits = 0
+        evidence_warnings: list[str] = []
+        warning_seen: set[str] = set()
 
         for dim_name in dimensions:
             dim_config = ANALYSIS_DIMENSIONS.get(dim_name)
@@ -215,6 +102,11 @@ class BidAnalyzer:
 
             total_risks += len(result.risks)
             total_benefits += len(result.benefits)
+            for warn in result.evidence_warnings:
+                if warn in warning_seen:
+                    continue
+                warning_seen.add(warn)
+                evidence_warnings.append(warn)
 
         # Calculate overall score (weighted average)
         overall_score = self._calculate_overall_score(dimension_results)
@@ -238,6 +130,7 @@ class BidAnalyzer:
             total_benefits=total_benefits,
             risk_level=risk_level,
             recommendations=recommendations,
+            evidence_warnings=evidence_warnings,
             chunks_analyzed=chunks_analyzed,
         )
 
@@ -257,6 +150,7 @@ class BidAnalyzer:
         """
         # Search for chunks matching this dimension
         chunks = self._search_chunks(version_id, dimension.keywords)
+        evidence_warnings = self._collect_evidence_warnings(chunks)
 
         # Analyze each chunk
         risks = []
@@ -314,7 +208,19 @@ class BidAnalyzer:
             score=score,
             risk_level=risk_level,
             summary=summary,
+            evidence_warnings=evidence_warnings,
         )
+
+    @staticmethod
+    def _collect_evidence_warnings(chunks: list[dict[str, Any]]) -> list[str]:
+        warnings: list[str] = []
+        for chunk in chunks:
+            bbox = chunk.get("bbox")
+            if not bbox:
+                warnings.append("missing_bbox")
+        if warnings:
+            return sorted(set(warnings))
+        return []
 
     def _search_chunks(
         self,
@@ -537,90 +443,3 @@ class BidAnalyzer:
             recommendations.append("投标文档整体较为完整，建议按常规流程评审")
 
         return recommendations
-
-
-# =============================================================================
-# Multi-Version Comparison
-# =============================================================================
-
-
-def compare_versions(
-    conn,
-    version_ids: list[str],
-    bidder_names: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Compare multiple bid versions side-by-side.
-
-    Args:
-        conn: Database connection
-        version_ids: List of version IDs to compare
-        bidder_names: Optional mapping of version_id to bidder name
-
-    Returns:
-        Comparison results with scores and rankings
-    """
-    analyzer = BidAnalyzer(conn)
-    reports = []
-
-    for vid in version_ids:
-        bidder_name = (bidder_names or {}).get(vid, f"Bidder {vid[:8]}")
-        report = analyzer.analyze_version(vid, bidder_name=bidder_name)
-        reports.append(report)
-
-    # Sort by overall score
-    reports.sort(key=lambda r: r.overall_score, reverse=True)
-
-    # Generate comparison table
-    comparison = {
-        "rankings": [
-            {
-                "rank": i + 1,
-                "version_id": r.version_id,
-                "bidder_name": r.bidder_name,
-                "overall_score": r.overall_score,
-                "risk_level": r.risk_level,
-                "total_risks": r.total_risks,
-                "total_benefits": r.total_benefits,
-            }
-            for i, r in enumerate(reports)
-        ],
-        "dimension_comparison": {},
-        "recommendations": [],
-    }
-
-    # Dimension-wise comparison
-    for dim_name in ANALYSIS_DIMENSIONS:
-        dim_data = []
-        for r in reports:
-            if dim_name in r.dimensions:
-                d = r.dimensions[dim_name]
-                dim_data.append(
-                    {
-                        "bidder": r.bidder_name,
-                        "score": d.score,
-                        "risk_level": d.risk_level,
-                        "chunks_found": d.chunks_found,
-                    }
-                )
-
-        comparison["dimension_comparison"][dim_name] = sorted(
-            dim_data, key=lambda x: x["score"], reverse=True
-        )
-
-    # Generate comparison recommendations
-    winner = reports[0] if reports else None
-    if winner:
-        comparison["recommendations"].append(
-            f"推荐中标：{winner.bidder_name}（综合评分：{winner.overall_score:.1f}）"
-        )
-
-    # Check for close scores (within 5 points)
-    if len(reports) >= 2:
-        top_score = reports[0].overall_score
-        second_score = reports[1].overall_score
-        if top_score - second_score < 5:
-            comparison["recommendations"].append(
-                f"注意：前两名得分接近（差距 {top_score - second_score:.1f}），建议详细对比"
-            )
-
-    return comparison

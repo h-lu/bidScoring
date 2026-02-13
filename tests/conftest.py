@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import uuid
+
+import pytest
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+@pytest.fixture
+def fixed_ids() -> dict[str, str]:
+    return {
+        "project_id": str(uuid.UUID("11111111-1111-1111-1111-111111111111")),
+        "document_id": str(uuid.UUID("22222222-2222-2222-2222-222222222222")),
+        "version_id": str(uuid.UUID("33333333-3333-3333-3333-333333333333")),
+    }

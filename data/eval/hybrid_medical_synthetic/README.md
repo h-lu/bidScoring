@@ -22,3 +22,13 @@
 ## 评估建议
 1. 将 A/B/C content_list 分别入库为不同 version_id。
 2. 使用 scripts/evaluate_hybrid_search_multiversion.py 做跨版本基线。
+3. 使用 scripts/evaluate_hybrid_search_gold.py + `retrieval_baseline.thresholds.json` 做门禁：
+
+```bash
+uv run python scripts/evaluate_hybrid_search_gold.py \
+  --version-id <VERSION_ID> \
+  --queries-file data/eval/hybrid_medical_synthetic/queries.json \
+  --qrels-file data/eval/hybrid_medical_synthetic/qrels.source_id.jsonl \
+  --thresholds-file data/eval/hybrid_medical_synthetic/retrieval_baseline.thresholds.json \
+  --fail-on-thresholds
+```

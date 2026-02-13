@@ -56,6 +56,22 @@ BID_SCORING_RETRIEVER_CACHE_SIZE="32"
 BID_SCORING_QUERY_CACHE_SIZE="1024"
 ```
 
+## Code Architecture (Refactored)
+
+`mcp_servers/retrieval_server.py` is now a thin MCP entrypoint (tool/resource registration + shared retriever cache).
+
+Core logic is split into focused modules:
+
+- `mcp_servers/retrieval/execution.py`: tool wrapper, metrics, error contract
+- `mcp_servers/retrieval/validation.py`: input validation contract
+- `mcp_servers/retrieval/formatting.py`: retrieval result/evidence formatting
+- `mcp_servers/retrieval/operations_discovery.py`: version/outline/page metadata
+- `mcp_servers/retrieval/operations_search.py`: search/filter/batch operations
+- `mcp_servers/retrieval/operations_evidence.py`: context/unit evidence/compare/extract
+- `mcp_servers/retrieval/operations_annotation.py`: PDF highlight operations
+- `mcp_servers/retrieval/operations_resources.py`: MCP resources (`evidence://`, `outline://`, `status://`)
+- `mcp_servers/retrieval/operations_analysis.py`: high-level comprehensive analysis workflow
+
 ## Tools Overview
 
 This MCP server provides **12 tools** organized in 6 layers for bid analysis workflows:

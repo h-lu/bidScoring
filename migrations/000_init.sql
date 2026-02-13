@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS document_versions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     status TEXT
 );
+CREATE TABLE IF NOT EXISTS source_artifacts (
+    artifact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    version_id UUID NOT NULL REFERENCES document_versions(version_id) ON DELETE CASCADE,
+    source_uri TEXT NOT NULL,
+    file_sha256 TEXT,
+    parser_version TEXT,
+    page_count INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (version_id, source_uri)
+);
+CREATE INDEX IF NOT EXISTS idx_source_artifacts_version_id
+    ON source_artifacts(version_id);
 -- ============================================
 -- Normalized Layer (v0.2)
 -- ============================================
@@ -146,12 +158,14 @@ CREATE TABLE IF NOT EXISTS citations (
     verified BOOLEAN,
     match_type TEXT,
     -- v0.2 evidence fields (unit-level, traceable & verifiable)
-    unit_id UUID REFERENCES content_units(unit_id),
+    unit_id UUID NOT NULL REFERENCES content_units(unit_id),
     quote_text TEXT,
     quote_start_char INTEGER,
     quote_end_char INTEGER,
     anchor_json JSONB,
-    evidence_hash TEXT
+    evidence_hash TEXT,
+    evidence_status TEXT NOT NULL DEFAULT 'verified',
+    warning_codes TEXT[] NOT NULL DEFAULT '{}'
 );
 -- ============================================
 -- Contextual Chunks (from 005_cpc_contextual_chunks.sql)
