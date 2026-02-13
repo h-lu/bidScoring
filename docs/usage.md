@@ -104,7 +104,53 @@ uv run bid-pipeline ingest-content-list \
   --document-title "示例投标文件"
 ```
 
-### 4.2 生成向量（vector/hybrid 必需）
+### 4.2 端到端 CLI（入库 + 向量化 + 评分）
+
+端到端命令：
+
+```bash
+uv run bid-pipeline run-e2e --help
+```
+
+测试模式（绕过 MinerU，直接喂 `content_list`）：
+
+```bash
+uv run bid-pipeline run-e2e \
+  --context-list data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+  --project-id <PROJECT_UUID> \
+  --document-id <DOCUMENT_UUID> \
+  --version-id <VERSION_UUID> \
+  --document-title "示例投标文件" \
+  --bidder-name "投标方A" \
+  --project-name "示例项目" \
+  --scoring-backend analyzer
+```
+
+说明：
+
+- `--context-list` 与 `--content-list` 是同一参数别名。
+- `run-e2e` 默认会执行向量化；可用 `--skip-embeddings` 跳过。
+- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，默认 `analyzer`。
+- `agent-mcp` 已接入检索 MCP，评分仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
+- `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
+- `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
+- `--mineru-parser` 支持 `auto|cli|api`（默认 `auto`）。
+
+评分规则配置：
+
+- 默认文件：`config/scoring_rules.yaml`
+- 自定义路径：设置环境变量 `BID_SCORING_RULES_PATH=/path/to/scoring_rules.yaml`
+- `hybrid` 权重：`BID_SCORING_HYBRID_PRIMARY_WEIGHT=0.7`（可被 CLI 参数覆盖）
+- MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
+- MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`
+- MinerU 输出目录：`MINERU_OUTPUT_ROOT=.mineru-output`
+- MinerU CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS=1800`
+- MinerU API：`MINERU_API_URL`、`MINERU_API_KEY`
+- MinerU API 请求/轮询：`MINERU_API_REQUEST_TIMEOUT_SECONDS`、`MINERU_API_POLL_TIMEOUT_SECONDS`、`MINERU_API_POLL_INTERVAL_SECONDS`
+- MinerU API 上传重试：`MINERU_API_UPLOAD_MAX_RETRIES=3`
+
+### 4.3 生成向量（vector/hybrid 必需）
 
 向量检索需要 `chunks.embedding` 有值。推荐用全量向量化脚本：
 

@@ -134,6 +134,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "tenacity" },
     { name = "tiktoken" },
 ]
@@ -156,6 +157,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.23.0" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "tenacity" },
     { name = "tiktoken" },
 ]

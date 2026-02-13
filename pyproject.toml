@@ -17,6 +17,7 @@ dependencies = [
     "pymupdf>=1.23.0",
     "python-dotenv",
     "pyyaml",
+    "requests",
     "tenacity",
     "tiktoken",
 ]

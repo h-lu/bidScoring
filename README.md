@@ -19,7 +19,9 @@
    - `bid_scoring/pipeline/application`
    - `bid_scoring/pipeline/infrastructure`
    - `bid_scoring/pipeline/interfaces`
-2. 统一入口 CLI：`bid-pipeline ingest-content-list`
+2. 统一入口 CLI：
+   - `bid-pipeline ingest-content-list`
+   - `bid-pipeline run-e2e`
 3. MCP 检索服务完成模块化拆分，并强化证据字段输出：
    - 检索结果包含 `evidence_status/evidence_units/warnings`
    - 增加检索诊断透传 `include_diagnostics`
@@ -32,7 +34,12 @@
 6. 清理旧链路：
    - 删除 `mineru/process_pdfs.py`
    - 删除 `mineru/coordinator.py`
+   - 删除 `mineru/convert_pdf.py`
    - 删除 `scripts/ingest_mineru.py`
+   - 删除 `scripts/evaluate_hybrid_search.py`
+   - 删除 `scripts/eval_e2e_full_pipeline.py`
+   - 删除 `scripts/mcp_demo.py`
+   - 删除 `docs/plans/2026-02-13-e2e-cli-fullflow.md`
 
 ## 快速开始
 
@@ -64,13 +71,47 @@ uv run python scripts/apply_migrations.py
 uv run bid-pipeline ingest-content-list --help
 ```
 
-### 5) 生成向量
+### 5) 端到端跑通（测试模式，绕过 MinerU）
+
+```bash
+uv run bid-pipeline run-e2e \
+  --context-list data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+  --project-id <PROJECT_ID> \
+  --document-id <DOCUMENT_ID> \
+  --version-id <VERSION_ID> \
+  --document-title "示例投标文件" \
+  --bidder-name "投标方A" \
+  --project-name "示例项目"
+```
+
+说明：
+
+- `--context-list` 与 `--content-list` 等价，都会绕过 MinerU。
+- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，当前默认 `analyzer`。
+- `agent-mcp` 已接入检索 MCP，评分仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
+- `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
+- `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
+- `--mineru-parser` 支持 `auto|cli|api`（默认 `auto`）。
+
+评分规则文件：
+
+- 默认读取 `config/scoring_rules.yaml`。
+- 可通过 `BID_SCORING_RULES_PATH` 指向自定义规则文件。
+- `hybrid` 权重也支持环境变量 `BID_SCORING_HYBRID_PRIMARY_WEIGHT`（默认 `0.7`）。
+- MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
+- MinerU 通用输出根目录：`MINERU_OUTPUT_ROOT`，CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS`（默认 `1800`）。
+- MinerU API 模式使用：`MINERU_API_URL`、`MINERU_API_KEY`。
+- MinerU API 超时/轮询：`MINERU_API_REQUEST_TIMEOUT_SECONDS`、`MINERU_API_POLL_TIMEOUT_SECONDS`、`MINERU_API_POLL_INTERVAL_SECONDS`。
+- MinerU API 上传重试：`MINERU_API_UPLOAD_MAX_RETRIES`（默认 `3`）。
+
+### 6) 生成向量（独立执行）
 
 ```bash
 uv run python scripts/build_all_embeddings.py --version-id <VERSION_ID>
 ```
 
-### 6) 启动 MCP 检索服务
+### 7) 启动 MCP 检索服务
 
 ```bash
 uv run fastmcp run mcp_servers/retrieval_server.py -t stdio
