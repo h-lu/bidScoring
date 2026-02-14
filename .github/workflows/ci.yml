@@ -61,6 +61,15 @@ jobs:
         ruff check bid_scoring/ tests/
         ruff format --check bid_scoring/ tests/
 
+    - name: Scoring backend regression gate
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
+        BID_SCORING_AGENT_MCP_DISABLE: "1"
+      run: |
+        python scripts/evaluate_scoring_backends.py \
+          --fail-on-thresholds \
+          --summary-out /tmp/scoring_ci_summary.json
+
     - name: Run tests
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
