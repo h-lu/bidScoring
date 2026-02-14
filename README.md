@@ -91,6 +91,7 @@ uv run bid-pipeline run-e2e \
 - `agent-mcp` 使用 LLM + 检索 MCP 进行评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
 - `agent-mcp` 调用失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
+- 评分结果新增 `evidence_citations`，按维度输出 `chunk_id/page_idx/bbox`，便于审计与高亮追溯。
 - `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
 - `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
 - `--mineru-parser` 支持 `auto|cli|api`（默认 `auto`）。
