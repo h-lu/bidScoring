@@ -135,6 +135,9 @@ uv run bid-pipeline run-e2e \
 - `agent-mcp` 执行失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
 - 评分输出包含 `evidence_citations`，按维度提供 `chunk_id/page_idx/bbox`，用于事实追溯与 PDF 高亮。
+- `run-e2e` 输出包含：
+  - `traceability`：证据可追溯统计（覆盖率、可高亮 `chunk_ids`、告警码）
+  - `observability.timings_ms`：`load/ingest/embeddings/scoring/total` 阶段耗时（毫秒）
 - `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
 - `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
 - `--mineru-parser` 支持 `auto|cli|api`（默认 `auto`）。

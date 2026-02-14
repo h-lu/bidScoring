@@ -209,6 +209,7 @@ class DimensionResult:
     risk_level: str = "medium"
     summary: str = ""
     evidence_warnings: list[str] = field(default_factory=list)
+    evidence_citations: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
