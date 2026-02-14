@@ -109,6 +109,15 @@ def test_hybrid_scoring_provider_blends_results():
             chunks_analyzed=8,
             recommendations=["agent-r1"],
             evidence_warnings=["missing_anchor_bbox"],
+            evidence_citations={
+                "warranty": [
+                    {
+                        "chunk_id": "agent-chunk-1",
+                        "page_idx": 1,
+                        "bbox": [1, 2, 3, 4],
+                    }
+                ]
+            },
             dimensions={
                 "warranty": {
                     "score": 90.0,
@@ -116,6 +125,13 @@ def test_hybrid_scoring_provider_blends_results():
                     "chunks_found": 6,
                     "summary": "agent",
                     "evidence_warnings": ["missing_anchor_bbox"],
+                    "evidence_citations": [
+                        {
+                            "chunk_id": "agent-chunk-1",
+                            "page_idx": 1,
+                            "bbox": [1, 2, 3, 4],
+                        }
+                    ],
                 }
             },
             warnings=[],
@@ -131,6 +147,15 @@ def test_hybrid_scoring_provider_blends_results():
             chunks_analyzed=10,
             recommendations=["baseline-r1"],
             evidence_warnings=["missing_bbox"],
+            evidence_citations={
+                "warranty": [
+                    {
+                        "chunk_id": "baseline-chunk-1",
+                        "page_idx": 2,
+                        "bbox": [2, 3, 4, 5],
+                    }
+                ]
+            },
             dimensions={
                 "warranty": {
                     "score": 60.0,
@@ -138,6 +163,13 @@ def test_hybrid_scoring_provider_blends_results():
                     "chunks_found": 10,
                     "summary": "baseline",
                     "evidence_warnings": ["missing_bbox"],
+                    "evidence_citations": [
+                        {
+                            "chunk_id": "baseline-chunk-1",
+                            "page_idx": 2,
+                            "bbox": [2, 3, 4, 5],
+                        }
+                    ],
                 }
             },
             warnings=["scoring_backend_unknown"],
@@ -171,6 +203,8 @@ def test_hybrid_scoring_provider_blends_results():
     assert "missing_anchor_bbox" in result.evidence_warnings
     assert "missing_bbox" in result.evidence_warnings
     assert "scoring_backend_unknown" in result.warnings
+    assert len(result.evidence_citations["warranty"]) == 2
+    assert len(result.dimensions["warranty"]["evidence_citations"]) == 2
 
 
 def test_agent_mcp_scoring_provider_prefers_executor_result():
@@ -343,6 +377,9 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
     assert result.chunks_analyzed == 2
     assert result.dimensions["warranty"]["chunks_found"] == 1
     assert result.dimensions["delivery"]["chunks_found"] == 1
+    assert len(result.evidence_citations["warranty"]) == 1
+    assert result.evidence_citations["warranty"][0]["chunk_id"] == "c-ok"
+    assert len(result.dimensions["warranty"]["evidence_citations"]) == 1
     assert "missing_evidence_chain" in result.evidence_warnings
     assert "missing_bbox" in result.evidence_warnings
     assert "unverifiable_evidence_for_scoring" in result.evidence_warnings
