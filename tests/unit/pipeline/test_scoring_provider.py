@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from bid_scoring.pipeline.application.scoring_provider import (
     AgentMcpScoringProvider,
     HybridScoringProvider,
@@ -404,3 +406,30 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
     assert "missing_evidence_chain" in result.evidence_warnings
     assert "missing_bbox" in result.evidence_warnings
     assert "unverifiable_evidence_for_scoring" in result.evidence_warnings
+
+
+def test_openai_mcp_agent_executor_can_be_disabled_by_env(monkeypatch):
+    monkeypatch.setenv("BID_SCORING_AGENT_MCP_DISABLE", "1")
+
+    class _Client:
+        pass
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=lambda **kwargs: {}, client=_Client(), model="test-model"
+    )
+
+    try:
+        executor.score(
+            ScoringRequest(
+                version_id="33333333-3333-3333-3333-333333333333",
+                bidder_name="A公司",
+                project_name="示例项目",
+                dimensions=["warranty"],
+            )
+        )
+        raise AssertionError("expected RuntimeError when agent is disabled")
+    except RuntimeError as exc:
+        assert "agent_mcp_disabled" in str(exc)
+
+    # Ensure test does not leak env mutation if monkeypatch behavior changes.
+    assert os.getenv("BID_SCORING_AGENT_MCP_DISABLE") == "1"

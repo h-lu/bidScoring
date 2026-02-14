@@ -134,6 +134,7 @@ def test_cli_run_e2e_supports_content_list_alias(tmp_path: Path, fixed_ids):
     assert code == 0
     assert len(service.run_calls) == 1
     assert service.run_calls[0].content_list_path == content_path
+    assert service.run_calls[0].scoring_backend == "hybrid"
 
 
 def test_cli_run_e2e_accepts_scoring_backend_option(tmp_path: Path, fixed_ids):

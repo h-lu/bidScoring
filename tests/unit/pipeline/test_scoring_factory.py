@@ -223,3 +223,28 @@ def test_scoring_factory_hybrid_reads_weight_from_env(monkeypatch):
         )
     )
     assert result.overall_score == 73.6
+
+
+def test_scoring_factory_uses_analyzer_fallback_when_agent_disabled(monkeypatch):
+    captured_backends: list[str] = []
+
+    def _fake_build_bid_analyzer(conn, backend):
+        _ = conn
+        captured_backends.append(backend)
+        return _Analyzer()
+
+    monkeypatch.setenv("BID_SCORING_AGENT_MCP_DISABLE", "1")
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.build_bid_analyzer",
+        _fake_build_bid_analyzer,
+    )
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.OpenAIMcpAgentExecutor",
+        _AgentExecutor,
+    )
+
+    _ = build_scoring_provider("agent-mcp", conn=object())
+    _ = build_scoring_provider("hybrid", conn=object())
+
+    assert "agent-mcp" not in captured_backends
+    assert captured_backends.count("analyzer") >= 2
