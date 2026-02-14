@@ -191,6 +191,27 @@ uv run python scripts/evaluate_scoring_backends.py \
 - 默认使用 `data/eval/scoring_compare/content_list.minimal.json`。
 - 默认启用 `BID_SCORING_AGENT_MCP_DISABLE=1` 的稳定模式（agent-mcp 走降级链路），用于 CI 可复现门禁。
 
+### 4.5 运行结果归档与对比
+
+建议把每次真实评分输出保存到 `data/eval/scoring_compare/runs/`，例如：
+
+- `data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A.json`
+
+比较两次输出（基线 vs 候选）：
+
+```bash
+uv run python scripts/compare_scoring_runs.py \
+  --baseline data/eval/scoring_compare/runs/<baseline>.json \
+  --candidate data/eval/scoring_compare/runs/<candidate>.json \
+  --output data/eval/scoring_compare/runs/<compare-report>.json
+```
+
+对比报告包含：
+
+- 核心指标差值：`overall_score`、`coverage_ratio`、`citation_count_total`、`chunks_analyzed`
+- 分维度得分差值：`delta.dimension_scores`
+- 告警变化：`warnings_added`、`warnings_removed`
+
 ### 4.3 生成向量（vector/hybrid 必需）
 
 向量检索需要 `chunks.embedding` 有值。推荐用全量向量化脚本：

@@ -152,6 +152,15 @@ uv run python scripts/evaluate_scoring_backends.py \
   --summary-out data/eval/scoring_compare/summary.json
 ```
 
+两次真实评分结果对比（baseline vs candidate）：
+
+```bash
+uv run python scripts/compare_scoring_runs.py \
+  --baseline data/eval/scoring_compare/runs/<baseline>.json \
+  --candidate data/eval/scoring_compare/runs/<candidate>.json \
+  --output data/eval/scoring_compare/runs/<compare-report>.json
+```
+
 ## 目录说明
 
 - `bid_scoring/pipeline/`: 新主链路（ingest 与 evidence-first 领域规则）
