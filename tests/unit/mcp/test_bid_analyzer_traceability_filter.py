@@ -92,3 +92,6 @@ def test_bid_analyzer_filters_unverifiable_chunks_for_scoring():
     assert insight.received_chunk_ids == ["c-verifiable"]
     assert result.chunks_found == 1
     assert result.evidence_warnings == ["missing_evidence_chain"]
+    assert result.evidence_citations == [
+        {"chunk_id": "c-verifiable", "page_idx": 2, "bbox": [1, 2, 3, 4]}
+    ]

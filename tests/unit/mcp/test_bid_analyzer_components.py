@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from decimal import Decimal
+from uuid import UUID
+
 from mcp_servers.annotation_insights import AnnotationInsight
 from mcp_servers.bid_analyzer import BidAnalyzer
 
@@ -86,3 +89,48 @@ def test_bid_analyzer_supports_component_injection():
     assert report.risk_level == "medium"
     assert report.recommendations == ["custom-recommendation"]
     assert report.dimensions["warranty"].score == 77.0
+    assert report.dimensions["warranty"].evidence_citations == [
+        {"chunk_id": "c1", "page_idx": 0, "bbox": [0, 0, 1, 1]}
+    ]
+
+
+def test_bid_analyzer_normalizes_citation_payload_for_json():
+    class _UuidRetriever:
+        def search_chunks(self, version_id: str, keywords: list[str]):
+            _ = (version_id, keywords)
+            return [
+                {
+                    "chunk_id": UUID("11111111-1111-1111-1111-111111111111"),
+                    "page_idx": Decimal("2"),
+                    "text_raw": "交付时间 3 个月",
+                    "bbox": [Decimal("1.0"), Decimal("2.0"), 3, 4],
+                    "element_type": "text",
+                }
+            ]
+
+        @staticmethod
+        def collect_evidence_warnings(chunks):
+            _ = chunks
+            return []
+
+    analyzer = BidAnalyzer(
+        conn=object(),
+        retriever=_UuidRetriever(),
+        insight_extractor=_Insight(),
+        dimension_scorer=_Scorer(),
+        recommendation_generator=_Recommender(),
+    )
+
+    report = analyzer.analyze_version(
+        version_id="33333333-3333-3333-3333-333333333333",
+        bidder_name="A公司",
+        dimensions=["delivery"],
+    )
+    citations = report.dimensions["delivery"].evidence_citations
+    assert citations == [
+        {
+            "chunk_id": "11111111-1111-1111-1111-111111111111",
+            "page_idx": 2,
+            "bbox": [1.0, 2.0, 3, 4],
+        }
+    ]

@@ -168,6 +168,7 @@ class BidAnalyzer:
             risk_level=risk_level,
             summary=summary,
             evidence_warnings=evidence_warnings,
+            evidence_citations=_build_dimension_evidence_citations(score_chunks),
         )
 
     # Compatibility delegates (preserve previous extension/patch points)
@@ -232,3 +233,66 @@ class BidAnalyzer:
         dimension_results: dict[str, DimensionResult],
     ) -> list[str]:
         return self._recommendation_generator.generate(dimension_results)
+
+
+def _build_dimension_evidence_citations(
+    score_chunks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    citations: list[dict[str, Any]] = []
+    seen: set[tuple[Any, Any, Any]] = set()
+    for chunk in score_chunks:
+        if not isinstance(chunk, dict):
+            continue
+        chunk_id = _normalize_chunk_id(chunk.get("chunk_id"))
+        page_idx = _normalize_page_idx(chunk.get("page_idx"))
+        bbox = _normalize_bbox(chunk.get("bbox"))
+        token = (
+            chunk_id,
+            page_idx,
+            tuple(bbox) if isinstance(bbox, list) else bbox,
+        )
+        if token in seen:
+            continue
+        seen.add(token)
+        citations.append(
+            {
+                "chunk_id": chunk_id,
+                "page_idx": page_idx,
+                "bbox": bbox,
+            }
+        )
+    return citations
+
+
+def _normalize_chunk_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _normalize_page_idx(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_bbox(value: Any) -> list[float | int] | None:
+    if not isinstance(value, list):
+        return None
+    normalized: list[float | int] = []
+    for item in value:
+        if isinstance(item, bool):
+            return None
+        if isinstance(item, (int, float)):
+            normalized.append(item)
+            continue
+        try:
+            normalized.append(float(item))
+        except (TypeError, ValueError):
+            return None
+    return normalized

@@ -19,6 +19,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - MCP traceability gate to prepare safe highlight targets:
   - `prepare_highlight_targets`
 - New unit test baseline under `tests/unit/**`.
+- E2E traceability summary contract in CLI output:
+  - `traceability.status`
+  - `traceability.citation_coverage_ratio`
+  - `traceability.highlight_ready_chunk_ids`
+- E2E observability timings in CLI output:
+  - `observability.timings_ms.load|ingest|embeddings|scoring|total`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:

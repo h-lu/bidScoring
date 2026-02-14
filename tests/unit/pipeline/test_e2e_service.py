@@ -58,6 +58,20 @@ class _ScoringProvider:
             chunks_analyzed=6,
             recommendations=["ok"],
             evidence_warnings=["missing_bbox"],
+            evidence_citations={
+                "warranty": [
+                    {
+                        "chunk_id": "chunk-1",
+                        "page_idx": 0,
+                        "bbox": [0, 0, 10, 10],
+                    },
+                    {
+                        "chunk_id": "chunk-2",
+                        "page_idx": 1,
+                        "bbox": None,
+                    },
+                ]
+            },
             dimensions={},
         )
 
@@ -89,7 +103,15 @@ def test_e2e_service_runs_all_stages_in_order(tmp_path: Path, fixed_ids):
     assert result.ingest["chunks_imported"] == 1
     assert result.embeddings["succeeded"] == 1
     assert result.scoring["overall_score"] == 88.0
-    assert result.warnings == ["mineru_bypassed", "missing_bbox"]
+    assert "mineru_bypassed" in result.warnings
+    assert "missing_bbox" in result.warnings
+    assert "citation_missing_bbox" in result.warnings
+    assert "partial_untraceable_citations" in result.warnings
+    assert result.traceability["status"] == "verified_with_warnings"
+    assert result.traceability["citation_count_total"] == 2
+    assert result.traceability["citation_count_traceable"] == 1
+    assert result.traceability["highlight_ready_chunk_ids"] == ["chunk-1"]
+    assert result.observability["timings_ms"]["total"] >= 0
 
 
 def test_e2e_service_can_skip_embeddings(tmp_path: Path, fixed_ids):
@@ -107,3 +129,5 @@ def test_e2e_service_can_skip_embeddings(tmp_path: Path, fixed_ids):
 
     assert events == ["load", "ingest", "score"]
     assert result.embeddings["status"] == "skipped"
+    assert "traceability" in result.as_dict()
+    assert "observability" in result.as_dict()

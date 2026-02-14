@@ -22,6 +22,11 @@ class _FakeService:
             "warnings": ["mineru_bypassed"],
             "ingest": {"chunks_imported": 1},
             "scoring": {"overall_score": 75.0, "risk_level": "low"},
+            "traceability": {
+                "status": "verified",
+                "highlight_ready_chunk_ids": ["chunk-1"],
+            },
+            "observability": {"timings_ms": {"total": 12}},
         }
 
 
@@ -102,6 +107,8 @@ def test_cli_run_e2e_supports_context_list(tmp_path: Path, fixed_ids, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "completed"
     assert output["warnings"] == ["mineru_bypassed"]
+    assert output["traceability"]["status"] == "verified"
+    assert output["observability"]["timings_ms"]["total"] == 12
 
 
 def test_cli_run_e2e_supports_content_list_alias(tmp_path: Path, fixed_ids):

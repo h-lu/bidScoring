@@ -32,7 +32,26 @@ class _Analyzer:
                 "chunks_analyzed": 18,
                 "recommendations": ["r1"],
                 "evidence_warnings": ["missing_bbox"],
-                "dimensions": {},
+                "dimensions": {
+                    "warranty": type(
+                        "Dimension",
+                        (),
+                        {
+                            "score": 81.0,
+                            "risk_level": "low",
+                            "chunks_found": 2,
+                            "summary": "summary",
+                            "evidence_warnings": [],
+                            "evidence_citations": [
+                                {
+                                    "chunk_id": "c1",
+                                    "page_idx": 1,
+                                    "bbox": [1, 2, 3, 4],
+                                }
+                            ],
+                        },
+                    )()
+                },
             },
         )()
 
@@ -53,6 +72,8 @@ def test_bid_analyzer_scoring_provider_outputs_standard_payload():
     assert payload["overall_score"] == 82.5
     assert payload["risk_level"] == "medium"
     assert payload["evidence_warnings"] == ["missing_bbox"]
+    assert payload["evidence_citations"]["warranty"][0]["chunk_id"] == "c1"
+    assert payload["dimensions"]["warranty"]["evidence_citations"][0]["page_idx"] == 1
 
 
 def test_warning_fallback_provider_appends_warning_codes():

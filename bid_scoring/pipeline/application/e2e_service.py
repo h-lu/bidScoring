@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Protocol
 
 from bid_scoring.pipeline.application.scoring_provider import (
     ScoringProvider,
     ScoringRequest,
 )
+from bid_scoring.pipeline.application.traceability import build_traceability_summary
 
 
 @dataclass
@@ -54,6 +56,8 @@ class E2ERunResult:
     ingest: dict[str, Any] = field(default_factory=dict)
     embeddings: dict[str, Any] = field(default_factory=dict)
     scoring: dict[str, Any] = field(default_factory=dict)
+    traceability: dict[str, Any] = field(default_factory=dict)
+    observability: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +69,8 @@ class E2ERunResult:
             "ingest": dict(self.ingest),
             "embeddings": dict(self.embeddings),
             "scoring": dict(self.scoring),
+            "traceability": dict(self.traceability),
+            "observability": dict(self.observability),
         }
 
 
@@ -107,9 +113,15 @@ class E2EPipelineService:
         self._scoring_provider = scoring_provider
 
     def run(self, request: E2ERunRequest, conn: Any | None = None) -> E2ERunResult:
+        total_started = perf_counter()
+        timings_ms: dict[str, int] = {}
+
+        stage_started = perf_counter()
         loaded = self._content_source.load(request)
+        timings_ms["load"] = _elapsed_ms(stage_started)
         warnings = _merge_unique_warnings([], loaded.warnings)
 
+        stage_started = perf_counter()
         ingest_summary = self._pipeline_service.ingest_content_list(
             project_id=request.project_id,
             document_id=request.document_id,
@@ -119,8 +131,10 @@ class E2EPipelineService:
             source_uri=request.source_uri or loaded.source_uri,
             parser_version=request.parser_version or loaded.parser_version,
         )
+        timings_ms["ingest"] = _elapsed_ms(stage_started)
         ingest_result = _normalize_ingest_summary(ingest_summary)
 
+        stage_started = perf_counter()
         embeddings_result = {"status": "skipped"}
         if request.build_embeddings:
             if self._index_builder is None:
@@ -140,7 +154,9 @@ class E2EPipelineService:
                     version_id=request.version_id,
                     conn=conn,
                 )
+        timings_ms["embeddings"] = _elapsed_ms(stage_started)
 
+        stage_started = perf_counter()
         scoring = self._scoring_provider.score(
             ScoringRequest(
                 version_id=request.version_id,
@@ -149,9 +165,17 @@ class E2EPipelineService:
                 dimensions=request.dimensions,
             )
         )
+        timings_ms["scoring"] = _elapsed_ms(stage_started)
         scoring_result = scoring.as_dict()
+        traceability = build_traceability_summary(scoring_result)
         warnings = _merge_unique_warnings(warnings, scoring.evidence_warnings)
         warnings = _merge_unique_warnings(warnings, scoring.warnings)
+        warnings = _merge_unique_warnings(
+            warnings,
+            [w for w in traceability.get("warnings", []) if isinstance(w, str)],
+        )
+
+        timings_ms["total"] = _elapsed_ms(total_started)
 
         return E2ERunResult(
             status="completed",
@@ -162,6 +186,12 @@ class E2EPipelineService:
             ingest=ingest_result,
             embeddings=embeddings_result,
             scoring=scoring_result,
+            traceability=traceability,
+            observability={
+                "timings_ms": timings_ms,
+                "scoring_backend": request.scoring_backend,
+                "embeddings_enabled": request.build_embeddings,
+            },
         )
 
 
@@ -191,3 +221,7 @@ def _merge_unique_warnings(
         seen.add(warning)
         merged.append(warning)
     return merged
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return max(0, int((perf_counter() - started_at) * 1000))
