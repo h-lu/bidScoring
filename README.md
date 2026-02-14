@@ -88,7 +88,8 @@ uv run bid-pipeline run-e2e \
 
 - `--context-list` 与 `--content-list` 等价，都会绕过 MinerU。
 - `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，当前默认 `analyzer`。
-- `agent-mcp` 已接入检索 MCP，评分仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `agent-mcp` 使用 LLM + 检索 MCP 进行评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `agent-mcp` 调用失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
 - `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
 - `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
@@ -99,6 +100,8 @@ uv run bid-pipeline run-e2e \
 - 默认读取 `config/scoring_rules.yaml`。
 - 可通过 `BID_SCORING_RULES_PATH` 指向自定义规则文件。
 - `hybrid` 权重也支持环境变量 `BID_SCORING_HYBRID_PRIMARY_WEIGHT`（默认 `0.7`）。
+- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL`（默认 `gpt-4o-mini`）。
+- `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K`、`BID_SCORING_AGENT_MCP_MODE`、`BID_SCORING_AGENT_MCP_MAX_CHARS`。
 - MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
 - MinerU 通用输出根目录：`MINERU_OUTPUT_ROOT`，CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS`（默认 `1800`）。
 - MinerU API 模式使用：`MINERU_API_URL`、`MINERU_API_KEY`。

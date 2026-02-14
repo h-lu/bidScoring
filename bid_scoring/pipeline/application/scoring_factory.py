@@ -10,6 +10,7 @@ from .scoring_provider import (
     AgentMcpScoringProvider,
     BidAnalyzerScoringProvider,
     HybridScoringProvider,
+    OpenAIMcpAgentExecutor,
     ScoringProvider,
     WarningFallbackScoringProvider,
 )
@@ -32,14 +33,18 @@ def build_scoring_provider(
     if backend == "agent-mcp":
         analyzer = build_bid_analyzer(conn, backend="agent-mcp")
         baseline = BidAnalyzerScoringProvider(analyzer=analyzer)
-        return AgentMcpScoringProvider(fallback=baseline)
+        return AgentMcpScoringProvider(
+            executor=OpenAIMcpAgentExecutor(),
+            fallback=baseline,
+        )
     if backend == "hybrid":
         baseline_analyzer = build_bid_analyzer(conn, backend="analyzer")
         mcp_analyzer = build_bid_analyzer(conn, backend="agent-mcp")
         resolved_weight = _resolve_hybrid_weight(hybrid_primary_weight)
         return HybridScoringProvider(
             primary=AgentMcpScoringProvider(
-                fallback=BidAnalyzerScoringProvider(analyzer=mcp_analyzer)
+                executor=OpenAIMcpAgentExecutor(),
+                fallback=BidAnalyzerScoringProvider(analyzer=mcp_analyzer),
             ),
             secondary=BidAnalyzerScoringProvider(analyzer=baseline_analyzer),
             primary_weight=resolved_weight,
