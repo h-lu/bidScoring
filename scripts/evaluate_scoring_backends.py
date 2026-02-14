@@ -17,7 +17,6 @@ from bid_scoring.pipeline.application import (
 )
 from bid_scoring.pipeline.application.service import PipelineService
 from bid_scoring.pipeline.infrastructure.content_source import AutoContentSource
-from bid_scoring.pipeline.infrastructure.index_builder import IndexBuilder
 from bid_scoring.pipeline.infrastructure.postgres_repository import (
     PostgresPipelineRepository,
 )
@@ -150,7 +149,7 @@ def _run_single_backend(
             pipeline_service=PipelineService(
                 repository=PostgresPipelineRepository(conn)
             ),
-            index_builder=IndexBuilder(),
+            index_builder=None,
             scoring_provider=build_scoring_provider(
                 backend=backend,
                 conn=conn,
