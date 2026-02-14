@@ -289,7 +289,9 @@ def _build_summary(metrics_by_method: dict[str, list[QueryMetrics]]) -> dict[str
             "ndcg_at_10": statistics.mean([x.ndcg_at_10 for x in rows])
             if rows
             else 0.0,
-            "latency_ms": statistics.mean([x.latency_ms for x in rows]) if rows else 0.0,
+            "latency_ms": statistics.mean([x.latency_ms for x in rows])
+            if rows
+            else 0.0,
         }
         for method, rows in metrics_by_method.items()
     }

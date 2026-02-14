@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `scripts/evaluate_scoring_backends.py`
   - `data/eval/scoring_compare/content_list.minimal.json`
   - `data/eval/scoring_compare/thresholds.json`
+- Simplified production CLI entrypoint:
+  - `bid-pipeline run-prod`
+  - fixed inputs: `--context-json` or `--pdf-path`
+  - fixed defaults: `hybrid` backend + `cn_medical_v1/strict_traceability`
+- Scoring run comparison tool:
+  - `scripts/compare_scoring_runs.py`
+  - compares baseline/candidate outputs and reports metric deltas + warning diffs
+- First archived real run output:
+  - `data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A.json`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:
