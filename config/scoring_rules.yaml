@@ -1,0 +1,93 @@
+dimensions:
+  warranty:
+    display_name: 质保售后
+    weight: 0.25
+    keywords:
+      - 质保
+      - 保修
+      - 免费维修
+      - 终身服务
+      - 售后服务
+    extract_patterns:
+      - '(\\d+)\\s*年'
+      - '(\\d+)\\s*个月'
+    risk_thresholds:
+      excellent: [5, 999]
+      good: [3, 5]
+      medium: [2, 3]
+      poor: [0, 2]
+
+  delivery:
+    display_name: 交付响应
+    weight: 0.25
+    keywords:
+      - 交货
+      - 交付
+      - 响应时间
+      - 小时内
+      - 到场
+      - 上门
+    extract_patterns:
+      - '(\\d+)\\s*小时'
+      - '(\\d+)\\s*天'
+    risk_thresholds:
+      excellent: [0, 2]
+      good: [2, 8]
+      medium: [8, 24]
+      poor: [24, 999]
+
+  training:
+    display_name: 培训支持
+    weight: 0.20
+    keywords:
+      - 培训
+      - 技术指导
+      - 操作培训
+      - 维护培训
+    extract_patterns:
+      - '(\\d+)\\s*[天日]'
+      - '(\\d+)\\s*人'
+    risk_thresholds:
+      excellent: [5, 999]
+      good: [3, 5]
+      medium: [1, 3]
+      poor: [0, 1]
+
+  financial:
+    display_name: 商务条款
+    weight: 0.20
+    keywords:
+      - 付款
+      - 预付
+      - 尾款
+      - 保证金
+      - 违约金
+      - 报价
+    extract_patterns:
+      - '(\\d+)%'
+      - '(\\d+)\\s*万元'
+    risk_thresholds:
+      high_prepayment: [50, 999]
+      medium_prepayment: [30, 50]
+      low_prepayment: [0, 30]
+
+  technical:
+    display_name: 技术方案
+    weight: 0.10
+    keywords:
+      - 技术参数
+      - 规格
+      - 性能指标
+      - 技术方案
+      - 功能
+
+  compliance:
+    display_name: 合规承诺
+    weight: 0.10
+    keywords:
+      - 承诺
+      - 保证
+      - 必须
+      - 应当
+      - 符合
+      - 满足
