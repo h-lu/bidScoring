@@ -1,0 +1,71 @@
+{
+  "baseline_path": "data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A.json",
+  "candidate_path": "data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A-candidate2.json",
+  "baseline": {
+    "status": "completed",
+    "scoring_backend": "hybrid",
+    "overall_score": 84.24,
+    "risk_level": "low",
+    "total_risks": 40,
+    "total_benefits": 88,
+    "chunks_analyzed": 239,
+    "traceability_status": "verified",
+    "citation_count_total": 253,
+    "citation_count_traceable": 253,
+    "coverage_ratio": 1.0,
+    "warnings": [
+      "mineru_bypassed"
+    ],
+    "evidence_warning_codes": [],
+    "dimension_scores": {
+      "financial": 82.5,
+      "compliance": 76.9,
+      "training": 86.0,
+      "technical": 80.7,
+      "delivery": 89.5,
+      "warranty": 79.8
+    }
+  },
+  "candidate": {
+    "status": "completed",
+    "scoring_backend": "hybrid",
+    "overall_score": 87.74,
+    "risk_level": "low",
+    "total_risks": 41,
+    "total_benefits": 87,
+    "chunks_analyzed": 239,
+    "traceability_status": "verified",
+    "citation_count_total": 253,
+    "citation_count_traceable": 253,
+    "coverage_ratio": 1.0,
+    "warnings": [
+      "mineru_bypassed"
+    ],
+    "evidence_warning_codes": [],
+    "dimension_scores": {
+      "warranty": 83.3,
+      "training": 89.5,
+      "delivery": 93.0,
+      "financial": 86.0,
+      "compliance": 83.9,
+      "technical": 80.7
+    }
+  },
+  "delta": {
+    "overall_score": 3.5,
+    "coverage_ratio": 0.0,
+    "citation_count_total": 0,
+    "citation_count_traceable": 0,
+    "chunks_analyzed": 0,
+    "dimension_scores": {
+      "compliance": 7.0,
+      "delivery": 3.5,
+      "financial": 3.5,
+      "technical": 0.0,
+      "training": 3.5,
+      "warranty": 3.5
+    }
+  },
+  "warnings_added": [],
+  "warnings_removed": []
+}
