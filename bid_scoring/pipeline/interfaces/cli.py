@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--scoring-backend",
         choices=["analyzer", "agent-mcp", "hybrid"],
-        default="analyzer",
+        default="hybrid",
     )
     run.add_argument(
         "--hybrid-primary-weight",

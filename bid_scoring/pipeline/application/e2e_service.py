@@ -30,7 +30,7 @@ class E2ERunRequest:
     pdf_path: Path | None = None
     mineru_parser: str | None = None
     build_embeddings: bool = True
-    scoring_backend: str = "analyzer"
+    scoring_backend: str = "hybrid"
     hybrid_primary_weight: float | None = None
 
 
