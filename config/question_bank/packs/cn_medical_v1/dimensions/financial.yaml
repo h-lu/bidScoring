@@ -1,0 +1,43 @@
+dimension: financial
+questions:
+  - id: FINANCIAL_001
+    dimension: financial
+    question: 付款节点与比例如何约定？
+    intent: 评估付款条款是否平衡
+    keywords: [预付款, 验收, 尾款, 百分比]
+    expected_answer_type: text
+    scoring_rule:
+      kind: rubric
+      high: 付款节点清晰且尾款比例保留到验收后
+      medium: 节点存在但比例偏前置
+      low: 条款模糊或明显不利
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: FINANCIAL_002
+    dimension: financial
+    question: 是否存在较高预付款风险？
+    intent: 提示预付款比例过高带来的履约风险
+    keywords: [预付款, 付款比例, 风险]
+    expected_answer_type: number
+    scoring_rule:
+      kind: threshold_max
+      unit: percent
+      excellent_lte: 30
+      good_lte: 40
+      medium_lte: 50
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active

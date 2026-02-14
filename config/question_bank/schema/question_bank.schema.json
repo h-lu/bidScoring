@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bid-scoring.local/schemas/question_bank.schema.json",
+  "title": "Bid Scoring Question Bank Dimension File",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["dimension", "questions"],
+  "properties": {
+    "dimension": {
+      "type": "string",
+      "minLength": 1
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/question"
+      }
+    }
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "dimension",
+        "question",
+        "intent",
+        "keywords",
+        "expected_answer_type",
+        "scoring_rule",
+        "evidence_requirements",
+        "warning_policy",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "dimension": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "intent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keywords": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expected_answer_type": {
+          "type": "string",
+          "enum": ["number", "duration", "boolean", "enum", "text"]
+        },
+        "scoring_rule": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "evidence_requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min_citations",
+            "require_page_idx",
+            "require_bbox",
+            "require_verified_status"
+          ],
+          "properties": {
+            "min_citations": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "require_page_idx": {
+              "type": "boolean"
+            },
+            "require_bbox": {
+              "type": "boolean"
+            },
+            "require_verified_status": {
+              "type": "boolean"
+            }
+          }
+        },
+        "warning_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["on_missing_evidence", "on_partial_untraceable"],
+          "properties": {
+            "on_missing_evidence": {
+              "type": "string",
+              "enum": ["warn"]
+            },
+            "on_partial_untraceable": {
+              "type": "string",
+              "enum": ["warn"]
+            }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "deprecated"]
+        }
+      }
+    }
+  }
+}

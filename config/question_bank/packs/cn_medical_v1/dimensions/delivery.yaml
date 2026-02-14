@@ -1,0 +1,43 @@
+dimension: delivery
+questions:
+  - id: DELIVERY_001
+    dimension: delivery
+    question: 交货期承诺是多久？
+    intent: 提取交付周期并判断时效风险
+    keywords: [交货期, 交付, 天, 月]
+    expected_answer_type: duration
+    scoring_rule:
+      kind: threshold_max
+      unit: day
+      excellent_lte: 30
+      good_lte: 60
+      medium_lte: 90
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: DELIVERY_002
+    dimension: delivery
+    question: 验收完成条件如何定义？
+    intent: 确认交付闭环是否有明确验收标准
+    keywords: [验收, 安装调试, 验收合格, 签署]
+    expected_answer_type: text
+    scoring_rule:
+      kind: rubric
+      high: 同时包含安装调试完成与双方签署验收
+      medium: 仅出现验收描述但条件不完整
+      low: 未明确验收标准
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active

@@ -5,6 +5,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
 
+from .question_context import (
+    QuestionContext,
+    QuestionContextResolver,
+    ResolvedQuestionContext,
+)
 from bid_scoring.pipeline.application.scoring_provider import (
     ScoringProvider,
     ScoringRequest,
@@ -32,6 +37,9 @@ class E2ERunRequest:
     build_embeddings: bool = True
     scoring_backend: str = "hybrid"
     hybrid_primary_weight: float | None = None
+    question_context: QuestionContext | None = None
+    question_pack: str | None = None
+    question_overlay: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,15 +114,18 @@ class E2EPipelineService:
         pipeline_service: IngestApplicationService,
         scoring_provider: ScoringProvider,
         index_builder: EmbeddingBuilder | None = None,
+        question_context_resolver: QuestionContextResolver | None = None,
     ) -> None:
         self._content_source = content_source
         self._pipeline_service = pipeline_service
         self._index_builder = index_builder
         self._scoring_provider = scoring_provider
+        self._question_context_resolver = question_context_resolver
 
     def run(self, request: E2ERunRequest, conn: Any | None = None) -> E2ERunResult:
         total_started = perf_counter()
         timings_ms: dict[str, int] = {}
+        resolved_question = self._resolve_question_context(request)
 
         stage_started = perf_counter()
         loaded = self._content_source.load(request)
@@ -162,7 +173,8 @@ class E2EPipelineService:
                 version_id=request.version_id,
                 bidder_name=request.bidder_name,
                 project_name=request.project_name,
-                dimensions=request.dimensions,
+                dimensions=resolved_question.dimensions,
+                question_context=resolved_question.question_context,
             )
         )
         timings_ms["scoring"] = _elapsed_ms(stage_started)
@@ -177,6 +189,18 @@ class E2EPipelineService:
 
         timings_ms["total"] = _elapsed_ms(total_started)
 
+        observability: dict[str, Any] = {
+            "timings_ms": timings_ms,
+            "scoring_backend": request.scoring_backend,
+            "embeddings_enabled": request.build_embeddings,
+        }
+        if resolved_question.question_context is not None:
+            observability["question_bank"] = {
+                "pack_id": resolved_question.question_context.pack_id,
+                "overlay": resolved_question.question_context.overlay,
+                "question_count": resolved_question.question_context.question_count,
+            }
+
         return E2ERunResult(
             status="completed",
             project_id=request.project_id,
@@ -187,11 +211,30 @@ class E2EPipelineService:
             embeddings=embeddings_result,
             scoring=scoring_result,
             traceability=traceability,
-            observability={
-                "timings_ms": timings_ms,
-                "scoring_backend": request.scoring_backend,
-                "embeddings_enabled": request.build_embeddings,
-            },
+            observability=observability,
+        )
+
+    def _resolve_question_context(self, request: E2ERunRequest) -> ResolvedQuestionContext:
+        if request.question_context is not None:
+            resolved_dimensions = (
+                list(request.dimensions)
+                if request.dimensions is not None
+                else list(request.question_context.dimensions)
+            )
+            return ResolvedQuestionContext(
+                dimensions=resolved_dimensions,
+                question_context=request.question_context,
+            )
+        if not request.question_pack:
+            return ResolvedQuestionContext(
+                dimensions=request.dimensions,
+                question_context=None,
+            )
+        resolver = self._question_context_resolver or QuestionContextResolver()
+        return resolver.resolve(
+            question_pack=request.question_pack,
+            question_overlay=request.question_overlay,
+            requested_dimensions=request.dimensions,
         )
 
 

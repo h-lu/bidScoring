@@ -134,3 +134,37 @@ def test_bid_analyzer_normalizes_citation_payload_for_json():
             "bbox": [1.0, 2.0, 3, 4],
         }
     ]
+
+
+def test_bid_analyzer_accepts_question_keyword_overrides():
+    class _CaptureRetriever:
+        def __init__(self):
+            self.calls: list[list[str]] = []
+
+        def search_chunks(self, version_id: str, keywords: list[str]):
+            _ = version_id
+            self.calls.append(list(keywords))
+            return []
+
+        @staticmethod
+        def collect_evidence_warnings(chunks):
+            _ = chunks
+            return []
+
+    retriever = _CaptureRetriever()
+    analyzer = BidAnalyzer(
+        conn=object(),
+        retriever=retriever,
+        insight_extractor=_Insight(),
+        dimension_scorer=_Scorer(),
+        recommendation_generator=_Recommender(),
+    )
+
+    _ = analyzer.analyze_version(
+        version_id="33333333-3333-3333-3333-333333333333",
+        bidder_name="A公司",
+        dimensions=["warranty"],
+        question_dimension_keywords={"warranty": ["售后承诺", "保修时长"]},
+    )
+
+    assert retriever.calls == [["售后承诺", "保修时长"]]

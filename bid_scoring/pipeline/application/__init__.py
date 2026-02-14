@@ -6,6 +6,11 @@ from .e2e_service import (
     E2ERunResult,
     LoadedContent,
 )
+from .question_context import (
+    QuestionContext,
+    QuestionContextResolver,
+    ResolvedQuestionContext,
+)
 from .scoring_factory import build_scoring_provider
 from .scoring_provider import (
     AgentMcpScoringProvider,
@@ -29,6 +34,9 @@ __all__ = [
     "E2ERunRequest",
     "E2ERunResult",
     "LoadedContent",
+    "QuestionContext",
+    "QuestionContextResolver",
+    "ResolvedQuestionContext",
     "build_scoring_provider",
     "AgentMcpScoringProvider",
     "BidAnalyzerScoringProvider",

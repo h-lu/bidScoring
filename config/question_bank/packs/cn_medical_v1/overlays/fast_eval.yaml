@@ -1,0 +1,6 @@
+name: fast_eval
+policy:
+  max_questions_per_dimension: 1
+  require_verified_status: false
+  min_citations_override: 1
+  warning_mode: relaxed

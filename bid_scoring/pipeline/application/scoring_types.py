@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .question_context import QuestionContext
+
 
 @dataclass(frozen=True)
 class ScoringRequest:
@@ -12,6 +14,7 @@ class ScoringRequest:
     bidder_name: str
     project_name: str
     dimensions: list[str] | None = None
+    question_context: QuestionContext | None = None
 
 
 @dataclass(frozen=True)

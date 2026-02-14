@@ -11,6 +11,7 @@ from bid_scoring.pipeline.application.scoring_provider import (
     ScoringRequest,
     WarningFallbackScoringProvider,
 )
+from bid_scoring.pipeline.application.question_context import QuestionContext
 
 
 class _Analyzer:
@@ -21,8 +22,15 @@ class _Analyzer:
         bidder_name: str,
         project_name: str,
         dimensions: list[str] | None,
+        question_dimension_keywords: dict[str, list[str]] | None = None,
     ):
-        _ = (version_id, bidder_name, project_name, dimensions)
+        _ = (
+            version_id,
+            bidder_name,
+            project_name,
+            dimensions,
+            question_dimension_keywords,
+        )
         return type(
             "Report",
             (),
@@ -76,6 +84,49 @@ def test_bid_analyzer_scoring_provider_outputs_standard_payload():
     assert payload["evidence_warnings"] == ["missing_bbox"]
     assert payload["evidence_citations"]["warranty"][0]["chunk_id"] == "c1"
     assert payload["dimensions"]["warranty"]["evidence_citations"][0]["page_idx"] == 1
+
+
+def test_bid_analyzer_scoring_provider_forwards_question_keyword_overrides():
+    captured: dict[str, object] = {}
+
+    class _CaptureAnalyzer(_Analyzer):
+        def analyze_version(
+            self,
+            *,
+            version_id: str,
+            bidder_name: str,
+            project_name: str,
+            dimensions: list[str] | None,
+            question_dimension_keywords: dict[str, list[str]] | None = None,
+        ):
+            captured["dimensions"] = dimensions
+            captured["question_dimension_keywords"] = question_dimension_keywords
+            return super().analyze_version(
+                version_id=version_id,
+                bidder_name=bidder_name,
+                project_name=project_name,
+                dimensions=dimensions,
+                question_dimension_keywords=question_dimension_keywords,
+            )
+
+    provider = BidAnalyzerScoringProvider(analyzer=_CaptureAnalyzer())
+    _ = provider.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+            dimensions=["warranty"],
+            question_context=QuestionContext(
+                pack_id="cn_medical_v1",
+                overlay="strict_traceability",
+                question_count=12,
+                dimensions=["warranty"],
+                keywords_by_dimension={"warranty": ["质保", "保修"]},
+            ),
+        )
+    )
+    assert captured["dimensions"] == ["warranty"]
+    assert captured["question_dimension_keywords"] == {"warranty": ["质保", "保修"]}
 
 
 def test_warning_fallback_provider_appends_warning_codes():
@@ -344,8 +395,12 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
         def __init__(self):
             self.chat = _Chat()
 
+    captured_keywords: dict[str, list[str]] = {}
+
     def _fake_retrieve(**kwargs):
-        if kwargs["keywords"][0] == "质保":
+        keywords = list(kwargs["keywords"])
+        if "质保" in keywords:
+            captured_keywords["warranty"] = keywords
             return {
                 "warnings": ["missing_evidence_chain"],
                 "results": [
@@ -367,6 +422,7 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
                     },
                 ],
             }
+        captured_keywords["delivery"] = keywords
         return {
             "warnings": [],
             "results": [
@@ -393,6 +449,16 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
             bidder_name="A公司",
             project_name="示例项目",
             dimensions=["warranty", "delivery"],
+            question_context=QuestionContext(
+                pack_id="cn_medical_v1",
+                overlay="strict_traceability",
+                question_count=12,
+                dimensions=["warranty", "delivery"],
+                keywords_by_dimension={
+                    "warranty": ["质保", "保修", "售后承诺"],
+                    "delivery": ["交付", "响应", "到场"],
+                },
+            ),
         )
     )
 
@@ -403,6 +469,8 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
     assert len(result.evidence_citations["warranty"]) == 1
     assert result.evidence_citations["warranty"][0]["chunk_id"] == "c-ok"
     assert len(result.dimensions["warranty"]["evidence_citations"]) == 1
+    assert captured_keywords["warranty"] == ["质保", "保修", "售后承诺"]
+    assert captured_keywords["delivery"] == ["交付", "响应", "到场"]
     assert "missing_evidence_chain" in result.evidence_warnings
     assert "missing_bbox" in result.evidence_warnings
     assert "unverifiable_evidence_for_scoring" in result.evidence_warnings

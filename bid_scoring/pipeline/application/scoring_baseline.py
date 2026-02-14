@@ -18,6 +18,11 @@ class BidAnalyzerScoringProvider:
             bidder_name=request.bidder_name,
             project_name=request.project_name,
             dimensions=request.dimensions,
+            question_dimension_keywords=(
+                request.question_context.keywords_by_dimension
+                if request.question_context is not None
+                else None
+            ),
         )
         return report_to_scoring_result(report)
 

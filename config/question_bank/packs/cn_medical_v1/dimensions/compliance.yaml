@@ -1,0 +1,40 @@
+dimension: compliance
+questions:
+  - id: COMPLIANCE_001
+    dimension: compliance
+    question: 是否存在反商业贿赂与廉洁条款？
+    intent: 评估供应商合规承诺完整性
+    keywords: [廉洁, 商业贿赂, 回扣, 合规]
+    expected_answer_type: boolean
+    scoring_rule:
+      kind: boolean
+      true_score: 95
+      false_score: 30
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: COMPLIANCE_002
+    dimension: compliance
+    question: 医疗器械注册/备案属性是否声明清楚？
+    intent: 避免资质表述不清导致的合规风险
+    keywords: [医疗器械, 注册证, 备案号, 合规]
+    expected_answer_type: enum
+    scoring_rule:
+      kind: enum_match
+      full_mark: [明确声明管理属性, 明确注册或备案信息]
+      partial_mark: [仅声明管理属性]
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active

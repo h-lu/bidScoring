@@ -1,0 +1,15 @@
+pack_id: cn_medical_v1
+version: 1.0.0
+description: 医疗设备投标评审问题包（事实优先、证据可追溯）
+compatible_scoring_rules_version: 1.0.0
+default_overlay: strict_traceability.yaml
+dimension_files:
+  - warranty.yaml
+  - delivery.yaml
+  - training.yaml
+  - financial.yaml
+  - technical.yaml
+  - compliance.yaml
+overlays:
+  - strict_traceability.yaml
+  - fast_eval.yaml
