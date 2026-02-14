@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "compare_scoring_runs.py"
+_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[2] / "scripts" / "compare_scoring_runs.py"
+)
 _SPEC = importlib.util.spec_from_file_location("compare_scoring_runs", _SCRIPT_PATH)
 assert _SPEC and _SPEC.loader
 _MODULE = importlib.util.module_from_spec(_SPEC)

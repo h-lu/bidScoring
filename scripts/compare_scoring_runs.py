@@ -135,7 +135,9 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _round_delta(candidate: Any, baseline: Any) -> float | None:
-    if not isinstance(candidate, (int, float)) or not isinstance(baseline, (int, float)):
+    if not isinstance(candidate, (int, float)) or not isinstance(
+        baseline, (int, float)
+    ):
         return None
     return round(float(candidate) - float(baseline), 4)
 
