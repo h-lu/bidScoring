@@ -87,7 +87,7 @@ uv run bid-pipeline run-e2e \
 说明：
 
 - `--context-list` 与 `--content-list` 等价，都会绕过 MinerU。
-- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，当前默认 `analyzer`。
+- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，当前默认 `hybrid`。
 - `agent-mcp` 使用 LLM + 检索 MCP 进行评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
 - `agent-mcp` 调用失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
@@ -141,6 +141,14 @@ uv run python scripts/evaluate_hybrid_search_gold.py \
   --qrels-file data/eval/hybrid_medical_synthetic/qrels.source_id.A.jsonl \
   --thresholds-file data/eval/hybrid_medical_synthetic/retrieval_baseline.thresholds.json \
   --fail-on-thresholds
+```
+
+评分后端回归门禁（analyzer/agent-mcp/hybrid）：
+
+```bash
+uv run python scripts/evaluate_scoring_backends.py \
+  --fail-on-thresholds \
+  --summary-out data/eval/scoring_compare/summary.json
 ```
 
 ## 目录说明

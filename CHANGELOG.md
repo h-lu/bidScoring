@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `traceability.highlight_ready_chunk_ids`
 - E2E observability timings in CLI output:
   - `observability.timings_ms.load|ingest|embeddings|scoring|total`
+- Scoring backend regression gate script:
+  - `scripts/evaluate_scoring_backends.py`
+  - `data/eval/scoring_compare/content_list.minimal.json`
+  - `data/eval/scoring_compare/thresholds.json`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:
@@ -38,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - keyword fulltext path strategy (with fallback)
 - Database schema evolved for evidence-first flow (`migrations/000_init.sql`).
 - Documentation updated in `docs/usage.md` and MCP docs.
+- `run-e2e` default scoring backend changed to `hybrid`.
+- CI workflow now runs scoring backend regression gate.
 
 ### Removed
 - Legacy MinerU coordinator chain:

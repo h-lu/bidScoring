@@ -122,15 +122,14 @@ uv run bid-pipeline run-e2e \
   --version-id <VERSION_UUID> \
   --document-title "示例投标文件" \
   --bidder-name "投标方A" \
-  --project-name "示例项目" \
-  --scoring-backend analyzer
+  --project-name "示例项目"
 ```
 
 说明：
 
 - `--context-list` 与 `--content-list` 是同一参数别名。
 - `run-e2e` 默认会执行向量化；可用 `--skip-embeddings` 跳过。
-- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，默认 `analyzer`。
+- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，默认 `hybrid`。
 - `agent-mcp` 使用 LLM + 检索 MCP 评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
 - `agent-mcp` 执行失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
@@ -156,6 +155,19 @@ uv run bid-pipeline run-e2e \
 - MinerU API：`MINERU_API_URL`、`MINERU_API_KEY`
 - MinerU API 请求/轮询：`MINERU_API_REQUEST_TIMEOUT_SECONDS`、`MINERU_API_POLL_TIMEOUT_SECONDS`、`MINERU_API_POLL_INTERVAL_SECONDS`
 - MinerU API 上传重试：`MINERU_API_UPLOAD_MAX_RETRIES=3`
+
+### 4.4 评分后端回归门禁（CI同款）
+
+```bash
+uv run python scripts/evaluate_scoring_backends.py \
+  --fail-on-thresholds \
+  --summary-out data/eval/scoring_compare/summary.json
+```
+
+说明：
+
+- 默认使用 `data/eval/scoring_compare/content_list.minimal.json`。
+- 默认启用 `BID_SCORING_AGENT_MCP_DISABLE=1` 的稳定模式（agent-mcp 走降级链路），用于 CI 可复现门禁。
 
 ### 4.3 生成向量（vector/hybrid 必需）
 
