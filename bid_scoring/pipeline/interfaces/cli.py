@@ -118,6 +118,48 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Question overlay strategy (default: {DEFAULT_PROD_QUESTION_OVERLAY})",
     )
     run.add_argument("--output")
+
+    run_prod = sub.add_parser(
+        "run-prod",
+        help="Run production scoring with a simplified interface",
+        parents=[common],
+    )
+    prod_source_group = run_prod.add_mutually_exclusive_group(required=True)
+    prod_source_group.add_argument(
+        "--context-json",
+        dest="content_list",
+        help="Input pre-parsed context/content JSON directly",
+    )
+    prod_source_group.add_argument(
+        "--pdf-path",
+        help="Parse PDF directly through MinerU and continue production scoring",
+    )
+    run_prod.add_argument("--bidder-name", default="Unknown")
+    run_prod.add_argument("--project-name", default="Unknown Project")
+    run_prod.add_argument(
+        "--mineru-parser",
+        choices=["auto", "cli", "api"],
+        default="auto",
+        help="Parser backend for --pdf-path (default: auto)",
+    )
+    run_prod.add_argument(
+        "--question-pack",
+        default=DEFAULT_PROD_QUESTION_PACK,
+        help=f"Question pack (default: {DEFAULT_PROD_QUESTION_PACK})",
+    )
+    run_prod.add_argument(
+        "--question-overlay",
+        default=DEFAULT_PROD_QUESTION_OVERLAY,
+        help=f"Question overlay strategy (default: {DEFAULT_PROD_QUESTION_OVERLAY})",
+    )
+    run_prod.add_argument("--output")
+    run_prod.set_defaults(
+        dimensions=None,
+        mineru_output_dir=None,
+        scoring_backend="hybrid",
+        hybrid_primary_weight=None,
+        skip_embeddings=False,
+    )
     return parser
 
 
@@ -131,7 +173,7 @@ def main(
 
     if args.command == "ingest-content-list":
         return _run_ingest(args, service=service)
-    if args.command == "run-e2e":
+    if args.command in {"run-e2e", "run-prod"}:
         return _run_e2e(
             args,
             service=service,

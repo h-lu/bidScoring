@@ -71,11 +71,11 @@ uv run python scripts/apply_migrations.py
 uv run bid-pipeline ingest-content-list --help
 ```
 
-### 5) 端到端跑通（测试模式，绕过 MinerU）
+### 5) 端到端跑通（生产简化入口）
 
 ```bash
-uv run bid-pipeline run-e2e \
-  --context-list data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+uv run bid-pipeline run-prod \
+  --context-json data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
   --project-id <PROJECT_ID> \
   --document-id <DOCUMENT_ID> \
   --version-id <VERSION_ID> \
@@ -86,8 +86,9 @@ uv run bid-pipeline run-e2e \
 
 说明：
 
-- `--context-list` 与 `--content-list` 等价，都会绕过 MinerU。
-- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，当前默认 `hybrid`。
+- 生产主入口建议使用 `run-prod`，只保留两类输入：`--context-json` 或 `--pdf-path`。
+- `run-prod` 默认评分后端为 `hybrid`，默认问题集为 `cn_medical_v1 + strict_traceability`。
+- 若需高级调参（例如切换后端、改 hybrid 权重），使用 `run-e2e`。
 - `agent-mcp` 使用 LLM + 检索 MCP 进行评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
 - `agent-mcp` 调用失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。

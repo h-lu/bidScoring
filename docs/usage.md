@@ -109,13 +109,13 @@ uv run bid-pipeline ingest-content-list \
 端到端命令：
 
 ```bash
-uv run bid-pipeline run-e2e --help
+uv run bid-pipeline run-prod --help
 ```
 
 生产推荐（PDF 直连）：
 
 ```bash
-uv run bid-pipeline run-e2e \
+uv run bid-pipeline run-prod \
   --pdf-path /path/to/bid.pdf \
   --project-id <PROJECT_UUID> \
   --document-id <DOCUMENT_UUID> \
@@ -128,7 +128,7 @@ uv run bid-pipeline run-e2e \
 预解析输入模式（`context_json` / `content_list`）：
 
 ```bash
-uv run bid-pipeline run-e2e \
+uv run bid-pipeline run-prod \
   --context-json /path/to/context_list.json \
   --project-id <PROJECT_UUID> \
   --document-id <DOCUMENT_UUID> \
@@ -140,7 +140,7 @@ uv run bid-pipeline run-e2e \
 
 说明（生产默认）：
 
-- 输入入口只建议两种：`--pdf-path` 或 `--context-json`（`--context-list/--content-list` 同义）。
+- 生产主入口为 `run-prod`，输入入口固定为两种：`--pdf-path` 或 `--context-json`。
 - 默认评分后端是 `hybrid`。
 - 默认问题集是 `cn_medical_v1`，默认策略是 `strict_traceability`。
 - `analyzer / agent-mcp / hybrid` 会统一使用问题集解析出的维度与关键词；不显式传 `--dimensions` 时使用问题集全部维度。
@@ -157,6 +157,7 @@ uv run bid-pipeline run-e2e \
 
 开发高级参数（保留扩展，不建议生产常用）：
 
+- `run-e2e`（高级入口）：支持 `--context-list/--context-json/--content-list/--pdf-path`
 - `--scoring-backend`、`--hybrid-primary-weight`
 - `--skip-embeddings`
 - `--question-pack`、`--question-overlay`
