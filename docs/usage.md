@@ -168,7 +168,7 @@ uv run bid-pipeline run-prod \
 - 默认文件：`config/scoring_rules.yaml`
 - 自定义路径：设置环境变量 `BID_SCORING_RULES_PATH=/path/to/scoring_rules.yaml`
 - `hybrid` 权重：`BID_SCORING_HYBRID_PRIMARY_WEIGHT=0.7`（可被 CLI 参数覆盖）
-- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL=gpt-4o-mini`
+- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL=gpt-5-mini`
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K=8`、`BID_SCORING_AGENT_MCP_MODE=hybrid`、`BID_SCORING_AGENT_MCP_MAX_CHARS=320`
 - MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
 - MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`

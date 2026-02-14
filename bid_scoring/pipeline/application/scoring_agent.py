@@ -77,7 +77,9 @@ class OpenAIMcpAgentExecutor:
     ) -> None:
         self._retrieve_fn = retrieve_fn or _default_retrieve_fn
         self._client = client
-        self._model = model or os.getenv("BID_SCORING_AGENT_MCP_MODEL", "gpt-4o-mini")
+        self._model = model or os.getenv(
+            "BID_SCORING_AGENT_MCP_MODEL", "gpt-5-mini"
+        )
         resolved_top_k = top_k
         if resolved_top_k is None:
             resolved_top_k = _read_int_env("BID_SCORING_AGENT_MCP_TOP_K", 8)
@@ -201,11 +203,14 @@ class OpenAIMcpAgentExecutor:
                 {
                     "role": "system",
                     "content": (
-                        "你是评标专家。必须仅基于给定证据评分；"
-                        "禁止杜撰。输出严格 JSON："
+                        "你是评标专家。必须仅基于给定证据评分，禁止使用外部知识和杜撰。"
+                        "若证据不足，请明确说明“证据不足”。"
+                        "输出严格 JSON："
                         "{overall_score,risk_level,total_risks,total_benefits,"
                         "recommendations,dimensions}。"
-                        "dimensions 是对象，key 为维度名，value 含 score/risk_level/summary。"
+                        "dimensions 是对象，key 为维度名，"
+                        "value 含 score/risk_level/summary。"
+                        "risk_level 仅允许 low/medium/high。"
                     ),
                 },
                 {
@@ -344,6 +349,23 @@ def _normalize_agent_result(
             for item in evidence_payload.get(dim_key, [])
         ]
         evidence_citations[dim_key] = citations
+        if not citations:
+            warnings = merge_unique_warnings(
+                warnings,
+                [f"agent_mcp_dimension_no_verifiable_evidence:{dim_key}"],
+            )
+            normalized_dimensions[dim_key] = {
+                "score": 50.0,
+                "risk_level": "medium",
+                "chunks_found": 0,
+                "summary": "证据不足，按中性评分处理",
+                "evidence_warnings": merge_unique_warnings(
+                    list(dimension_warning_map.get(dim_key, [])),
+                    ["agent_mcp_dimension_no_verifiable_evidence"],
+                ),
+                "evidence_citations": citations,
+            }
+            continue
         normalized_dimensions[dim_key] = {
             "score": _safe_float(dim_payload.get("score"), default=50.0),
             "risk_level": _safe_risk_level(dim_payload.get("risk_level")),

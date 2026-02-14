@@ -53,6 +53,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Documentation updated in `docs/usage.md` and MCP docs.
 - `run-e2e` default scoring backend changed to `hybrid`.
 - CI workflow now runs scoring backend regression gate.
+- `agent-mcp` 默认模型调整为 `gpt-5-mini`（可通过 `BID_SCORING_AGENT_MCP_MODEL` 覆盖）。
+- `agent-mcp` 提示词约束增强（仅基于证据、证据不足需明确说明）。
+- `agent-mcp` 在维度无可验证证据时改为中性评分并追加告警（warning-first）。
 
 ### Removed
 - Legacy MinerU coordinator chain:

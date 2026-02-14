@@ -105,7 +105,7 @@ uv run bid-pipeline run-prod \
 - 默认读取 `config/scoring_rules.yaml`。
 - 可通过 `BID_SCORING_RULES_PATH` 指向自定义规则文件。
 - `hybrid` 权重也支持环境变量 `BID_SCORING_HYBRID_PRIMARY_WEIGHT`（默认 `0.7`）。
-- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL`（默认 `gpt-4o-mini`）。
+- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL`（默认 `gpt-5-mini`）。
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K`、`BID_SCORING_AGENT_MCP_MODE`、`BID_SCORING_AGENT_MCP_MAX_CHARS`。
 - MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
 - MinerU 通用输出根目录：`MINERU_OUTPUT_ROOT`，CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS`（默认 `1800`）。
