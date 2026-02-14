@@ -18,7 +18,9 @@ def test_question_bank_pack_layout_and_manifest_contract():
     root = _repo_root()
     pack_dir = root / "config" / "question_bank" / "packs" / "cn_medical_v1"
 
-    assert (root / "config" / "question_bank" / "schema" / "question_bank.schema.json").exists()
+    assert (
+        root / "config" / "question_bank" / "schema" / "question_bank.schema.json"
+    ).exists()
     assert pack_dir.exists()
 
     manifest_path = pack_dir / "manifest.yaml"
@@ -84,8 +86,13 @@ def test_question_bank_contains_12_active_questions_with_traceability_requiremen
             all_ids.add(qid)
 
             assert question.get("dimension") == dimension
-            assert isinstance(question.get("question"), str) and question["question"].strip()
-            assert isinstance(question.get("intent"), str) and question["intent"].strip()
+            assert (
+                isinstance(question.get("question"), str)
+                and question["question"].strip()
+            )
+            assert (
+                isinstance(question.get("intent"), str) and question["intent"].strip()
+            )
 
             keywords = question.get("keywords")
             assert isinstance(keywords, list) and keywords

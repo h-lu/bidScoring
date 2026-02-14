@@ -12,7 +12,9 @@ def _repo_root() -> Path:
 
 
 def test_repository_load_pack_with_overlay():
-    repository = QuestionBankRepository(base_dir=_repo_root() / "config" / "question_bank")
+    repository = QuestionBankRepository(
+        base_dir=_repo_root() / "config" / "question_bank"
+    )
 
     pack = repository.load_pack("cn_medical_v1", overlay_name="strict_traceability")
 
@@ -33,7 +35,9 @@ def test_repository_load_pack_with_overlay():
 
 
 def test_repository_rejects_unknown_overlay():
-    repository = QuestionBankRepository(base_dir=_repo_root() / "config" / "question_bank")
+    repository = QuestionBankRepository(
+        base_dir=_repo_root() / "config" / "question_bank"
+    )
 
     with pytest.raises(ValueError, match="overlay"):
         repository.load_pack("cn_medical_v1", overlay_name="missing_overlay")

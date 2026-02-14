@@ -214,7 +214,9 @@ class E2EPipelineService:
             observability=observability,
         )
 
-    def _resolve_question_context(self, request: E2ERunRequest) -> ResolvedQuestionContext:
+    def _resolve_question_context(
+        self, request: E2ERunRequest
+    ) -> ResolvedQuestionContext:
         if request.question_context is not None:
             resolved_dimensions = (
                 list(request.dimensions)

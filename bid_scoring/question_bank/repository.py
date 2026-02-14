@@ -32,14 +32,20 @@ class QuestionBankRepository:
         manifest = self._load_yaml(manifest_path)
         errors = self._validator.validate_manifest(manifest)
 
-        dimension_files = list(manifest.get("dimension_files", [])) if isinstance(manifest, dict) else []
+        dimension_files = (
+            list(manifest.get("dimension_files", []))
+            if isinstance(manifest, dict)
+            else []
+        )
         scoring_dimensions = self._load_scoring_dimensions()
         questions: list[QuestionDefinition] = []
         question_ids: list[str] = []
 
         for filename in dimension_files:
             if not isinstance(filename, str):
-                errors.append(f"manifest.dimension_files entry must be string: {filename!r}")
+                errors.append(
+                    f"manifest.dimension_files entry must be string: {filename!r}"
+                )
                 continue
             dimension_name = Path(filename).stem
             path = pack_dir / "dimensions" / filename
@@ -88,7 +94,9 @@ class QuestionBankRepository:
             questions=questions,
         )
 
-    def _resolve_overlay_name(self, *, manifest: Any, requested: str | None) -> str | None:
+    def _resolve_overlay_name(
+        self, *, manifest: Any, requested: str | None
+    ) -> str | None:
         if not isinstance(manifest, dict):
             return None
         overlays = manifest.get("overlays")
@@ -153,7 +161,9 @@ def _to_question_definition(payload: dict[str, Any]) -> QuestionDefinition:
         dimension=str(payload.get("dimension", "")),
         question=str(payload.get("question", "")),
         intent=str(payload.get("intent", "")),
-        keywords=[str(item) for item in payload.get("keywords", []) if isinstance(item, str)],
+        keywords=[
+            str(item) for item in payload.get("keywords", []) if isinstance(item, str)
+        ],
         expected_answer_type=str(payload.get("expected_answer_type", "")),
         scoring_rule=dict(payload.get("scoring_rule", {}))
         if isinstance(payload.get("scoring_rule"), dict)

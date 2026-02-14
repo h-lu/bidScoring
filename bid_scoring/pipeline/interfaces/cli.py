@@ -95,7 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--bidder-name", default="Unknown")
     run.add_argument("--project-name", default="Unknown Project")
     run.add_argument("--dimensions", nargs="+")
-    run.add_argument("--scoring-backend", choices=["analyzer", "agent-mcp", "hybrid"], default="hybrid", help=argparse.SUPPRESS)
+    run.add_argument(
+        "--scoring-backend",
+        choices=["analyzer", "agent-mcp", "hybrid"],
+        default="hybrid",
+        help=argparse.SUPPRESS,
+    )
     run.add_argument(
         "--hybrid-primary-weight",
         type=_hybrid_weight_arg,

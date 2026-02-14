@@ -36,11 +36,20 @@ class QuestionBankValidator:
         if not isinstance(payload, dict):
             return ["manifest must be an object"]
 
-        if not isinstance(payload.get("pack_id"), str) or not payload["pack_id"].strip():
+        if (
+            not isinstance(payload.get("pack_id"), str)
+            or not payload["pack_id"].strip()
+        ):
             errors.append("manifest.pack_id is required")
-        if not isinstance(payload.get("version"), str) or not payload["version"].strip():
+        if (
+            not isinstance(payload.get("version"), str)
+            or not payload["version"].strip()
+        ):
             errors.append("manifest.version is required")
-        if not isinstance(payload.get("dimension_files"), list) or not payload["dimension_files"]:
+        if (
+            not isinstance(payload.get("dimension_files"), list)
+            or not payload["dimension_files"]
+        ):
             errors.append("manifest.dimension_files must be non-empty list")
         if not isinstance(payload.get("overlays"), list):
             errors.append("manifest.overlays must be list")
@@ -92,7 +101,9 @@ class QuestionBankValidator:
                     f"{sorted(self._ALLOWED_ANSWER_TYPES)}"
                 )
             if item.get("status") not in self._ALLOWED_STATUS:
-                errors.append(f"{prefix}.status must be one of {sorted(self._ALLOWED_STATUS)}")
+                errors.append(
+                    f"{prefix}.status must be one of {sorted(self._ALLOWED_STATUS)}"
+                )
 
             keywords = item.get("keywords")
             if not isinstance(keywords, list) or not keywords:
@@ -103,18 +114,26 @@ class QuestionBankValidator:
                 errors.append(f"{prefix}.evidence_requirements must be object")
             else:
                 if int(evidence.get("min_citations", 0)) < 1:
-                    errors.append(f"{prefix}.evidence_requirements.min_citations must be >= 1")
+                    errors.append(
+                        f"{prefix}.evidence_requirements.min_citations must be >= 1"
+                    )
                 if evidence.get("require_page_idx") is not True:
-                    errors.append(f"{prefix}.evidence_requirements.require_page_idx must be true")
+                    errors.append(
+                        f"{prefix}.evidence_requirements.require_page_idx must be true"
+                    )
                 if evidence.get("require_bbox") is not True:
-                    errors.append(f"{prefix}.evidence_requirements.require_bbox must be true")
+                    errors.append(
+                        f"{prefix}.evidence_requirements.require_bbox must be true"
+                    )
 
             warning_policy = item.get("warning_policy")
             if not isinstance(warning_policy, dict):
                 errors.append(f"{prefix}.warning_policy must be object")
             else:
                 if warning_policy.get("on_missing_evidence") != "warn":
-                    errors.append(f"{prefix}.warning_policy.on_missing_evidence must be 'warn'")
+                    errors.append(
+                        f"{prefix}.warning_policy.on_missing_evidence must be 'warn'"
+                    )
                 if warning_policy.get("on_partial_untraceable") != "warn":
                     errors.append(
                         f"{prefix}.warning_policy.on_partial_untraceable must be 'warn'"
@@ -150,4 +169,3 @@ class QuestionBankValidator:
         if not isinstance(parsed, dict):
             raise QuestionBankValidationError("schema root must be object")
         return parsed
-

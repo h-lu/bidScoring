@@ -314,10 +314,15 @@ def test_cli_run_e2e_accepts_question_pack_options(tmp_path: Path, fixed_ids):
         "compliance",
     ]
     assert "warranty" in service.run_calls[0].question_context.keywords_by_dimension
-    assert "质保" in service.run_calls[0].question_context.keywords_by_dimension["warranty"]
+    assert (
+        "质保"
+        in service.run_calls[0].question_context.keywords_by_dimension["warranty"]
+    )
 
 
-def test_cli_run_e2e_question_pack_respects_dimensions_subset(tmp_path: Path, fixed_ids):
+def test_cli_run_e2e_question_pack_respects_dimensions_subset(
+    tmp_path: Path, fixed_ids
+):
     content_path = tmp_path / "content_list.json"
     content_path.write_text(json.dumps([{"type": "text", "text": "hello"}]), "utf-8")
 
@@ -354,7 +359,9 @@ def test_cli_run_e2e_question_pack_respects_dimensions_subset(tmp_path: Path, fi
     }
 
 
-def test_cli_run_e2e_supports_injected_question_context_resolver(tmp_path: Path, fixed_ids):
+def test_cli_run_e2e_supports_injected_question_context_resolver(
+    tmp_path: Path, fixed_ids
+):
     content_path = tmp_path / "content_list.json"
     content_path.write_text(json.dumps([{"type": "text", "text": "hello"}]), "utf-8")
 
