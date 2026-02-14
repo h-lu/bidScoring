@@ -441,6 +441,7 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
         retrieve_fn=_fake_retrieve,
         client=_Client(),
         model="test-model",
+        execution_mode="bulk",
     )
 
     result = executor.score(
@@ -573,6 +574,7 @@ def test_openai_mcp_agent_executor_default_model_is_gpt5_mini(monkeypatch):
     )
 
     assert captured_create_kwargs["model"] == "gpt-5-mini"
+    assert captured_create_kwargs["tools"][0]["function"]["name"] == "retrieve_dimension_evidence"
 
 
 def test_openai_mcp_agent_executor_applies_neutral_score_when_no_verifiable_evidence():
@@ -630,6 +632,7 @@ def test_openai_mcp_agent_executor_applies_neutral_score_when_no_verifiable_evid
         },
         client=_Client(),
         model="test-model",
+        execution_mode="bulk",
     )
 
     result = executor.score(

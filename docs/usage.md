@@ -145,6 +145,7 @@ uv run bid-pipeline run-prod \
 - 默认问题集是 `cn_medical_v1`，默认策略是 `strict_traceability`。
 - `analyzer / agent-mcp / hybrid` 会统一使用问题集解析出的维度与关键词；不显式传 `--dimensions` 时使用问题集全部维度。
 - `agent-mcp` 使用 LLM + 检索 MCP 评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `agent-mcp` 默认执行模式是 `tool-calling`：模型先调用检索工具逐步探索证据，再输出评分 JSON。
 - `agent-mcp` 执行失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
 - 评分输出包含 `evidence_citations`，按维度提供 `chunk_id/page_idx/bbox`，用于事实追溯与 PDF 高亮。
@@ -170,6 +171,8 @@ uv run bid-pipeline run-prod \
 - `hybrid` 权重：`BID_SCORING_HYBRID_PRIMARY_WEIGHT=0.7`（可被 CLI 参数覆盖）
 - `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL=gpt-5-mini`
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K=8`、`BID_SCORING_AGENT_MCP_MODE=hybrid`、`BID_SCORING_AGENT_MCP_MAX_CHARS=320`
+- `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）
+- `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS=8`
 - MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
 - MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`
 - MinerU 输出目录：`MINERU_OUTPUT_ROOT=.mineru-output`

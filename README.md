@@ -90,6 +90,7 @@ uv run bid-pipeline run-prod \
 - `run-prod` 默认评分后端为 `hybrid`，默认问题集为 `cn_medical_v1 + strict_traceability`。
 - 若需高级调参（例如切换后端、改 hybrid 权重），使用 `run-e2e`。
 - `agent-mcp` 使用 LLM + 检索 MCP 进行评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `agent-mcp` 默认执行模式为 `tool-calling`：模型先调用检索工具逐步探索，再输出评分 JSON。
 - `agent-mcp` 调用失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
 - 评分结果新增 `evidence_citations`，按维度输出 `chunk_id/page_idx/bbox`，便于审计与高亮追溯。
@@ -107,6 +108,8 @@ uv run bid-pipeline run-prod \
 - `hybrid` 权重也支持环境变量 `BID_SCORING_HYBRID_PRIMARY_WEIGHT`（默认 `0.7`）。
 - `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL`（默认 `gpt-5-mini`）。
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K`、`BID_SCORING_AGENT_MCP_MODE`、`BID_SCORING_AGENT_MCP_MAX_CHARS`。
+- `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）。
+- `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS`（默认 `8`）。
 - MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
 - MinerU 通用输出根目录：`MINERU_OUTPUT_ROOT`，CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS`（默认 `1800`）。
 - MinerU API 模式使用：`MINERU_API_URL`、`MINERU_API_KEY`。
