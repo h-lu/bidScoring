@@ -1,0 +1,44 @@
+dimension: warranty
+questions:
+  - id: WARRANTY_001
+    dimension: warranty
+    question: 免费质保期承诺多久？
+    intent: 提取质保主承诺并判断是否达到高分门槛
+    keywords: [质保, 保修, 免费维修, 年, 月]
+    expected_answer_type: duration
+    scoring_rule:
+      kind: threshold_min
+      unit: year
+      excellent_gte: 5
+      good_gte: 3
+      medium_gte: 2
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: WARRANTY_002
+    dimension: warranty
+    question: 售后响应和到场时效分别是多少？
+    intent: 判断 SLA 是否满足评标要求
+    keywords: [售后, 响应, 到场, 小时]
+    expected_answer_type: duration
+    scoring_rule:
+      kind: threshold_max
+      unit: hour
+      excellent_lte: 2
+      good_lte: 8
+      medium_lte: 24
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active

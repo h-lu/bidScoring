@@ -91,7 +91,14 @@ class OpenAIMcpAgentExecutor:
     def score(self, request: ScoringRequest) -> ScoringResult:
         if _is_agent_mcp_disabled():
             raise RuntimeError("agent_mcp_disabled")
-        dimensions = _resolve_dimensions(request.dimensions)
+        dimensions = _resolve_dimensions(
+            request.dimensions,
+            keyword_overrides=(
+                request.question_context.keywords_by_dimension
+                if request.question_context is not None
+                else None
+            ),
+        )
         if not dimensions:
             raise RuntimeError("No valid scoring dimensions")
 
@@ -221,16 +228,32 @@ class OpenAIMcpAgentExecutor:
 
 def _resolve_dimensions(
     selected: list[str] | None,
+    *,
+    keyword_overrides: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
-    from mcp_servers.bid_analysis.models import ANALYSIS_DIMENSIONS
+    from mcp_servers.bid_analysis.models import ANALYSIS_DIMENSIONS, AnalysisDimension
 
     if selected is None:
-        return dict(ANALYSIS_DIMENSIONS)
+        selected_names = list(ANALYSIS_DIMENSIONS.keys())
+    else:
+        selected_names = list(selected)
+
     resolved: dict[str, Any] = {}
-    for name in selected:
+    for name in selected_names:
         dim = ANALYSIS_DIMENSIONS.get(name)
         if dim is None:
             continue
+        if keyword_overrides and name in keyword_overrides:
+            keywords = _sanitize_keywords(keyword_overrides.get(name, []))
+            if keywords:
+                dim = AnalysisDimension(
+                    name=dim.name,
+                    display_name=dim.display_name,
+                    weight=dim.weight,
+                    keywords=keywords,
+                    extract_patterns=dim.extract_patterns,
+                    risk_thresholds=dim.risk_thresholds,
+                )
         resolved[name] = dim
     return resolved
 
@@ -387,3 +410,19 @@ def _read_int_env(name: str, default: int) -> int:
     if parsed <= 0:
         return default
     return parsed
+
+
+def _sanitize_keywords(values: list[str]) -> list[str]:
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        normalized = item.strip()
+        if not normalized:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduplicated.append(normalized)
+    return deduplicated

@@ -67,6 +67,7 @@ class BidAnalyzer:
         bidder_name: str = "Unknown",
         project_name: str = "Unknown Project",
         dimensions: list[str] | None = None,
+        question_dimension_keywords: dict[str, list[str]] | None = None,
     ) -> BidAnalysisReport:
         """Analyze a bid document across specified dimensions."""
         if dimensions is None:
@@ -84,7 +85,15 @@ class BidAnalyzer:
                 logger.warning("Unknown dimension: %s", dim_name)
                 continue
 
-            result = self._analyze_dimension(version_id, dim_config)
+            result = self._analyze_dimension(
+                version_id,
+                _override_dimension_keywords(
+                    dim_config,
+                    question_dimension_keywords.get(dim_name)
+                    if isinstance(question_dimension_keywords, dict)
+                    else None,
+                ),
+            )
             dimension_results[dim_name] = result
 
             total_risks += len(result.risks)
@@ -262,6 +271,33 @@ def _build_dimension_evidence_citations(
             }
         )
     return citations
+
+
+def _override_dimension_keywords(
+    dimension: AnalysisDimension,
+    override_keywords: list[str] | None,
+) -> AnalysisDimension:
+    if not override_keywords:
+        return dimension
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+    for keyword in override_keywords:
+        if not isinstance(keyword, str) or not keyword.strip():
+            continue
+        if keyword in seen:
+            continue
+        seen.add(keyword)
+        deduplicated.append(keyword)
+    if not deduplicated:
+        return dimension
+    return AnalysisDimension(
+        name=dimension.name,
+        display_name=dimension.display_name,
+        weight=dimension.weight,
+        keywords=deduplicated,
+        extract_patterns=dimension.extract_patterns,
+        risk_thresholds=dimension.risk_thresholds,
+    )
 
 
 def _normalize_chunk_id(value: Any) -> str | None:

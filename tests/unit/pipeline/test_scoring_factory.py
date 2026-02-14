@@ -15,8 +15,15 @@ class _Analyzer:
         bidder_name: str,
         project_name: str,
         dimensions: list[str] | None = None,
+        question_dimension_keywords: dict[str, list[str]] | None = None,
     ):
-        _ = (version_id, bidder_name, project_name, dimensions)
+        _ = (
+            version_id,
+            bidder_name,
+            project_name,
+            dimensions,
+            question_dimension_keywords,
+        )
         return type(
             "Report",
             (),
@@ -130,8 +137,15 @@ def test_scoring_factory_hybrid_applies_custom_weight(monkeypatch):
             bidder_name: str,
             project_name: str,
             dimensions: list[str] | None = None,
+            question_dimension_keywords: dict[str, list[str]] | None = None,
         ):
-            _ = (version_id, bidder_name, project_name, dimensions)
+            _ = (
+                version_id,
+                bidder_name,
+                project_name,
+                dimensions,
+                question_dimension_keywords,
+            )
             return type(
                 "Report",
                 (),
@@ -186,8 +200,15 @@ def test_scoring_factory_hybrid_reads_weight_from_env(monkeypatch):
             bidder_name: str,
             project_name: str,
             dimensions: list[str] | None = None,
+            question_dimension_keywords: dict[str, list[str]] | None = None,
         ):
-            _ = (version_id, bidder_name, project_name, dimensions)
+            _ = (
+                version_id,
+                bidder_name,
+                project_name,
+                dimensions,
+                question_dimension_keywords,
+            )
             return type(
                 "Report",
                 (),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Protocol, Sequence
 
 import psycopg
 
@@ -11,6 +11,7 @@ from bid_scoring.config import load_settings
 from bid_scoring.pipeline.application import (
     E2EPipelineService,
     E2ERunRequest,
+    QuestionContextResolver,
     build_scoring_provider,
 )
 from bid_scoring.pipeline.application.service import PipelineService
@@ -19,6 +20,19 @@ from bid_scoring.pipeline.infrastructure.index_builder import IndexBuilder
 from bid_scoring.pipeline.infrastructure.postgres_repository import (
     PostgresPipelineRepository,
 )
+
+DEFAULT_PROD_QUESTION_PACK = "cn_medical_v1"
+DEFAULT_PROD_QUESTION_OVERLAY = "strict_traceability"
+
+
+class QuestionContextResolverLike(Protocol):
+    def resolve(
+        self,
+        *,
+        question_pack: str | None,
+        question_overlay: str | None,
+        requested_dimensions: list[str] | None,
+    ) -> Any: ...
 
 
 def _hybrid_weight_arg(value: str) -> float:
@@ -62,14 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
     source_group = run.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
         "--context-list",
+        "--context-json",
         "--content-list",
         dest="content_list",
-        help="Bypass MinerU and ingest content list JSON directly",
+        help="Input pre-parsed context/content JSON directly",
     )
-    source_group.add_argument(
-        "--mineru-output-dir",
-        help="Path to MinerU output directory containing content_list.json",
-    )
+    source_group.add_argument("--mineru-output-dir", help=argparse.SUPPRESS)
     source_group.add_argument(
         "--pdf-path",
         help="Parse PDF directly through MinerU and continue e2e pipeline",
@@ -87,25 +99,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--scoring-backend",
         choices=["analyzer", "agent-mcp", "hybrid"],
         default="hybrid",
+        help=argparse.SUPPRESS,
     )
     run.add_argument(
         "--hybrid-primary-weight",
         type=_hybrid_weight_arg,
-        help="Primary weight for hybrid scoring backend, range [0, 1]",
+        help=argparse.SUPPRESS,
     )
-    run.add_argument("--skip-embeddings", action="store_true")
+    run.add_argument("--skip-embeddings", action="store_true", help=argparse.SUPPRESS)
+    run.add_argument(
+        "--question-pack",
+        default=DEFAULT_PROD_QUESTION_PACK,
+        help=f"Question pack (default: {DEFAULT_PROD_QUESTION_PACK})",
+    )
+    run.add_argument(
+        "--question-overlay",
+        default=DEFAULT_PROD_QUESTION_OVERLAY,
+        help=f"Question overlay strategy (default: {DEFAULT_PROD_QUESTION_OVERLAY})",
+    )
     run.add_argument("--output")
     return parser
 
 
-def main(argv: Sequence[str] | None = None, service: Any | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    service: Any | None = None,
+    question_context_resolver: QuestionContextResolverLike | None = None,
+) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.command == "ingest-content-list":
         return _run_ingest(args, service=service)
     if args.command == "run-e2e":
-        return _run_e2e(args, service=service)
+        return _run_e2e(
+            args,
+            service=service,
+            question_context_resolver=question_context_resolver,
+        )
 
     parser.error(f"Unsupported command: {args.command}")
     return 2
@@ -156,7 +187,18 @@ def _run_ingest(args: argparse.Namespace, service: Any | None = None) -> int:
     return 0
 
 
-def _run_e2e(args: argparse.Namespace, service: Any | None = None) -> int:
+def _run_e2e(
+    args: argparse.Namespace,
+    service: Any | None = None,
+    question_context_resolver: QuestionContextResolverLike | None = None,
+) -> int:
+    resolver = question_context_resolver or QuestionContextResolver()
+    resolved = resolver.resolve(
+        question_pack=args.question_pack,
+        question_overlay=args.question_overlay,
+        requested_dimensions=list(args.dimensions) if args.dimensions else None,
+    )
+
     request = E2ERunRequest(
         project_id=args.project_id,
         document_id=args.document_id,
@@ -166,7 +208,7 @@ def _run_e2e(args: argparse.Namespace, service: Any | None = None) -> int:
         parser_version=args.parser_version,
         bidder_name=args.bidder_name,
         project_name=args.project_name,
-        dimensions=args.dimensions,
+        dimensions=resolved.dimensions,
         content_list_path=Path(args.content_list) if args.content_list else None,
         mineru_output_dir=Path(args.mineru_output_dir)
         if args.mineru_output_dir
@@ -176,6 +218,9 @@ def _run_e2e(args: argparse.Namespace, service: Any | None = None) -> int:
         build_embeddings=not args.skip_embeddings,
         scoring_backend=args.scoring_backend,
         hybrid_primary_weight=args.hybrid_primary_weight,
+        question_context=resolved.question_context,
+        question_pack=args.question_pack,
+        question_overlay=args.question_overlay,
     )
 
     if service is not None:

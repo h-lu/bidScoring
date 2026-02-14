@@ -1,0 +1,41 @@
+dimension: technical
+questions:
+  - id: TECHNICAL_001
+    dimension: technical
+    question: 关键技术参数是否给出明确指标值？
+    intent: 判断技术方案是否可验收、可量化
+    keywords: [技术参数, 指标, 性能, 规格]
+    expected_answer_type: text
+    scoring_rule:
+      kind: rubric
+      high: 存在可量化指标且边界清晰
+      medium: 有参数但缺少关键量化边界
+      low: 参数描述泛化
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: TECHNICAL_002
+    dimension: technical
+    question: 是否承诺核心性能阈值（如开机率）？
+    intent: 识别硬性性能承诺
+    keywords: [开机率, 性能阈值, 不低于]
+    expected_answer_type: boolean
+    scoring_rule:
+      kind: boolean
+      true_score: 90
+      false_score: 40
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active

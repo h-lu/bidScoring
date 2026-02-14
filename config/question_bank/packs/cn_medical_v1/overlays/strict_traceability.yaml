@@ -1,0 +1,6 @@
+name: strict_traceability
+policy:
+  require_verified_status: true
+  min_citations_override: 2
+  fail_open: true
+  warning_mode: strict

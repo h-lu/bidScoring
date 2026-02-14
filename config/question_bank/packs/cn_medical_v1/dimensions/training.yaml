@@ -1,0 +1,42 @@
+dimension: training
+questions:
+  - id: TRAINING_001
+    dimension: training
+    question: 培训总时长安排为几天？
+    intent: 判断培训投入是否充足
+    keywords: [培训, 时长, 天, 第1天, 第2天]
+    expected_answer_type: duration
+    scoring_rule:
+      kind: threshold_min
+      unit: day
+      excellent_gte: 3
+      good_gte: 2
+      medium_gte: 1
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
+  - id: TRAINING_002
+    dimension: training
+    question: 培训对象是否覆盖使用、管理和维护角色？
+    intent: 判断培训覆盖范围是否完整
+    keywords: [培训对象, 使用人员, 管理员, 维护人员]
+    expected_answer_type: enum
+    scoring_rule:
+      kind: enum_match
+      full_mark: [使用人员, 管理员, 维护人员]
+      partial_mark: [使用人员, 管理员]
+    evidence_requirements:
+      min_citations: 1
+      require_page_idx: true
+      require_bbox: true
+      require_verified_status: false
+    warning_policy:
+      on_missing_evidence: warn
+      on_partial_untraceable: warn
+    status: active
