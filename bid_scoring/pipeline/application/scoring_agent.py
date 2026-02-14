@@ -89,6 +89,8 @@ class OpenAIMcpAgentExecutor:
         self._max_chars = max(64, int(resolved_max_chars))
 
     def score(self, request: ScoringRequest) -> ScoringResult:
+        if _is_agent_mcp_disabled():
+            raise RuntimeError("agent_mcp_disabled")
         dimensions = _resolve_dimensions(request.dimensions)
         if not dimensions:
             raise RuntimeError("No valid scoring dimensions")
@@ -259,6 +261,11 @@ def _default_retrieve_fn(**kwargs: Any) -> dict[str, Any]:
     from mcp_servers.retrieval_server import retrieve_impl
 
     return retrieve_impl(**kwargs)
+
+
+def _is_agent_mcp_disabled() -> bool:
+    value = (os.getenv("BID_SCORING_AGENT_MCP_DISABLE") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _extract_message_content(response: Any) -> str:

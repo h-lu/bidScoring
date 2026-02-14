@@ -17,6 +17,7 @@ from .scoring_provider import (
 
 logger = logging.getLogger(__name__)
 _DEFAULT_HYBRID_PRIMARY_WEIGHT = 0.7
+_AGENT_DISABLE_ENV = "BID_SCORING_AGENT_MCP_DISABLE"
 
 
 def build_scoring_provider(
@@ -31,7 +32,8 @@ def build_scoring_provider(
         baseline = BidAnalyzerScoringProvider(analyzer=analyzer)
         return baseline
     if backend == "agent-mcp":
-        analyzer = build_bid_analyzer(conn, backend="agent-mcp")
+        analyzer_backend = "analyzer" if _is_agent_mcp_disabled() else "agent-mcp"
+        analyzer = build_bid_analyzer(conn, backend=analyzer_backend)
         baseline = BidAnalyzerScoringProvider(analyzer=analyzer)
         return AgentMcpScoringProvider(
             executor=OpenAIMcpAgentExecutor(),
@@ -39,7 +41,10 @@ def build_scoring_provider(
         )
     if backend == "hybrid":
         baseline_analyzer = build_bid_analyzer(conn, backend="analyzer")
-        mcp_analyzer = build_bid_analyzer(conn, backend="agent-mcp")
+        if _is_agent_mcp_disabled():
+            mcp_analyzer = baseline_analyzer
+        else:
+            mcp_analyzer = build_bid_analyzer(conn, backend="agent-mcp")
         resolved_weight = _resolve_hybrid_weight(hybrid_primary_weight)
         return HybridScoringProvider(
             primary=AgentMcpScoringProvider(
@@ -88,3 +93,8 @@ def _validate_hybrid_weight(weight: float) -> float:
         _DEFAULT_HYBRID_PRIMARY_WEIGHT,
     )
     return _DEFAULT_HYBRID_PRIMARY_WEIGHT
+
+
+def _is_agent_mcp_disabled() -> bool:
+    value = (os.getenv(_AGENT_DISABLE_ENV) or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
