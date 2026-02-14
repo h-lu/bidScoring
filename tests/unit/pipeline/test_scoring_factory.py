@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from bid_scoring.pipeline.application.scoring_factory import build_scoring_provider
-from bid_scoring.pipeline.application.scoring_provider import ScoringRequest
+from bid_scoring.pipeline.application.scoring_provider import (
+    ScoringRequest,
+    ScoringResult,
+)
 
 
 class _Analyzer:
@@ -30,6 +33,23 @@ class _Analyzer:
         )()
 
 
+class _AgentExecutor:
+    def score(self, request: ScoringRequest) -> ScoringResult:
+        _ = request
+        return ScoringResult(
+            status="completed",
+            overall_score=92.0,
+            risk_level="low",
+            total_risks=1,
+            total_benefits=3,
+            chunks_analyzed=4,
+            recommendations=["agent"],
+            evidence_warnings=[],
+            dimensions={},
+            warnings=[],
+        )
+
+
 def test_scoring_factory_returns_analyzer_provider(monkeypatch):
     monkeypatch.setattr(
         "bid_scoring.pipeline.application.scoring_factory.build_bid_analyzer",
@@ -52,6 +72,10 @@ def test_scoring_factory_agent_mcp_returns_real_provider(monkeypatch):
         "bid_scoring.pipeline.application.scoring_factory.build_bid_analyzer",
         lambda conn, backend: _Analyzer(),
     )
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.OpenAIMcpAgentExecutor",
+        _AgentExecutor,
+    )
     provider = build_scoring_provider("agent-mcp", conn=object())
     result = provider.score(
         ScoringRequest(
@@ -61,7 +85,8 @@ def test_scoring_factory_agent_mcp_returns_real_provider(monkeypatch):
         )
     )
     assert result.status == "completed"
-    assert "scoring_backend_agent_mcp_not_implemented" not in result.warnings
+    assert result.overall_score == 92.0
+    assert "scoring_backend_agent_mcp_fallback" not in result.warnings
 
 
 def test_scoring_factory_hybrid_builds_dual_backends(monkeypatch):
@@ -75,6 +100,10 @@ def test_scoring_factory_hybrid_builds_dual_backends(monkeypatch):
     monkeypatch.setattr(
         "bid_scoring.pipeline.application.scoring_factory.build_bid_analyzer",
         _fake_build_bid_analyzer,
+    )
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.OpenAIMcpAgentExecutor",
+        _AgentExecutor,
     )
     provider = build_scoring_provider("hybrid", conn=object())
     result = provider.score(
@@ -126,6 +155,10 @@ def test_scoring_factory_hybrid_applies_custom_weight(monkeypatch):
         "bid_scoring.pipeline.application.scoring_factory.build_bid_analyzer",
         _fake_build_bid_analyzer,
     )
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.OpenAIMcpAgentExecutor",
+        _AgentExecutor,
+    )
     provider = build_scoring_provider(
         "hybrid",
         conn=object(),
@@ -138,7 +171,7 @@ def test_scoring_factory_hybrid_applies_custom_weight(monkeypatch):
             project_name="示例项目",
         )
     )
-    assert result.overall_score == 90.0
+    assert result.overall_score == 82.8
 
 
 def test_scoring_factory_hybrid_reads_weight_from_env(monkeypatch):
@@ -177,6 +210,10 @@ def test_scoring_factory_hybrid_reads_weight_from_env(monkeypatch):
             100.0 if backend == "agent-mcp" else 0.0
         ),
     )
+    monkeypatch.setattr(
+        "bid_scoring.pipeline.application.scoring_factory.OpenAIMcpAgentExecutor",
+        _AgentExecutor,
+    )
     provider = build_scoring_provider("hybrid", conn=object())
     result = provider.score(
         ScoringRequest(
@@ -185,4 +222,4 @@ def test_scoring_factory_hybrid_reads_weight_from_env(monkeypatch):
             project_name="示例项目",
         )
     )
-    assert result.overall_score == 80.0
+    assert result.overall_score == 73.6

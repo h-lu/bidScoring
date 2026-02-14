@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from bid_scoring.pipeline.application.scoring_provider import (
+    AgentMcpScoringProvider,
     HybridScoringProvider,
     BidAnalyzerScoringProvider,
+    OpenAIMcpAgentExecutor,
     ScoringResult,
     ScoringRequest,
     WarningFallbackScoringProvider,
@@ -79,6 +81,23 @@ class _Provider:
         return self._result
 
 
+class _Executor:
+    def __init__(
+        self, result: ScoringResult | None = None, exc: Exception | None = None
+    ):
+        self._result = result
+        self._exc = exc
+        self.calls = 0
+
+    def score(self, request: ScoringRequest) -> ScoringResult:
+        _ = request
+        self.calls += 1
+        if self._exc is not None:
+            raise self._exc
+        assert self._result is not None
+        return self._result
+
+
 def test_hybrid_scoring_provider_blends_results():
     agent = _Provider(
         ScoringResult(
@@ -152,3 +171,178 @@ def test_hybrid_scoring_provider_blends_results():
     assert "missing_anchor_bbox" in result.evidence_warnings
     assert "missing_bbox" in result.evidence_warnings
     assert "scoring_backend_unknown" in result.warnings
+
+
+def test_agent_mcp_scoring_provider_prefers_executor_result():
+    executor = _Executor(
+        result=ScoringResult(
+            status="completed",
+            overall_score=92.0,
+            risk_level="low",
+            total_risks=1,
+            total_benefits=5,
+            chunks_analyzed=12,
+            recommendations=["agent"],
+            evidence_warnings=[],
+            dimensions={},
+            warnings=[],
+        )
+    )
+    fallback = _Provider(
+        ScoringResult(
+            status="completed",
+            overall_score=60.0,
+            risk_level="medium",
+            total_risks=3,
+            total_benefits=2,
+            chunks_analyzed=6,
+            recommendations=["fallback"],
+            evidence_warnings=[],
+            dimensions={},
+            warnings=[],
+        )
+    )
+    provider = AgentMcpScoringProvider(executor=executor, fallback=fallback)
+
+    result = provider.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+        )
+    )
+    assert executor.calls == 1
+    assert fallback.calls == 0
+    assert result.overall_score == 92.0
+
+
+def test_agent_mcp_scoring_provider_falls_back_and_marks_warning():
+    executor = _Executor(exc=RuntimeError("agent failed"))
+    fallback = _Provider(
+        ScoringResult(
+            status="completed",
+            overall_score=61.0,
+            risk_level="medium",
+            total_risks=3,
+            total_benefits=2,
+            chunks_analyzed=6,
+            recommendations=["fallback"],
+            evidence_warnings=[],
+            dimensions={},
+            warnings=[],
+        )
+    )
+    provider = AgentMcpScoringProvider(executor=executor, fallback=fallback)
+
+    result = provider.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+        )
+    )
+    assert executor.calls == 1
+    assert fallback.calls == 1
+    assert result.overall_score == 61.0
+    assert "scoring_backend_agent_mcp_fallback" in result.warnings
+
+
+def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence():
+    class _Message:
+        def __init__(self, content):
+            self.content = content
+
+    class _Choice:
+        def __init__(self, content):
+            self.message = _Message(content)
+
+    class _Response:
+        def __init__(self, content):
+            self.choices = [_Choice(content)]
+
+    class _Completions:
+        def create(self, **kwargs):
+            _ = kwargs
+            return _Response(
+                """
+                {
+                  "overall_score": 86,
+                  "risk_level": "medium",
+                  "total_risks": 2,
+                  "total_benefits": 4,
+                  "recommendations": ["优先核验商务条款"],
+                  "dimensions": {
+                    "warranty": {"score": 90, "risk_level": "low", "summary": "质保承诺明确"},
+                    "delivery": {"score": 70, "risk_level": "medium", "summary": "响应时效一般"}
+                  }
+                }
+                """
+            )
+
+    class _Chat:
+        def __init__(self):
+            self.completions = _Completions()
+
+    class _Client:
+        def __init__(self):
+            self.chat = _Chat()
+
+    def _fake_retrieve(**kwargs):
+        if kwargs["keywords"][0] == "质保":
+            return {
+                "warnings": ["missing_evidence_chain"],
+                "results": [
+                    {
+                        "chunk_id": "c-ok",
+                        "page_idx": 1,
+                        "bbox": [1, 2, 3, 4],
+                        "text": "免费质保 5 年",
+                        "evidence_status": "verified",
+                        "warnings": [],
+                    },
+                    {
+                        "chunk_id": "c-bad",
+                        "page_idx": 2,
+                        "bbox": None,
+                        "text": "无法定位",
+                        "evidence_status": "unverifiable",
+                        "warnings": ["missing_bbox"],
+                    },
+                ],
+            }
+        return {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "c-delivery",
+                    "page_idx": 5,
+                    "bbox": [2, 2, 8, 8],
+                    "text": "4小时内响应",
+                    "evidence_status": "verified",
+                    "warnings": [],
+                }
+            ],
+        }
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=_fake_retrieve,
+        client=_Client(),
+        model="test-model",
+    )
+
+    result = executor.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+            dimensions=["warranty", "delivery"],
+        )
+    )
+
+    assert result.overall_score == 86.0
+    assert result.chunks_analyzed == 2
+    assert result.dimensions["warranty"]["chunks_found"] == 1
+    assert result.dimensions["delivery"]["chunks_found"] == 1
+    assert "missing_evidence_chain" in result.evidence_warnings
+    assert "missing_bbox" in result.evidence_warnings
+    assert "unverifiable_evidence_for_scoring" in result.evidence_warnings
