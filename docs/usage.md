@@ -112,11 +112,11 @@ uv run bid-pipeline ingest-content-list \
 uv run bid-pipeline run-e2e --help
 ```
 
-测试模式（绕过 MinerU，直接喂 `content_list`）：
+生产推荐（PDF 直连）：
 
 ```bash
 uv run bid-pipeline run-e2e \
-  --context-list data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+  --pdf-path /path/to/bid.pdf \
   --project-id <PROJECT_UUID> \
   --document-id <DOCUMENT_UUID> \
   --version-id <VERSION_UUID> \
@@ -125,11 +125,25 @@ uv run bid-pipeline run-e2e \
   --project-name "示例项目"
 ```
 
-说明：
+预解析输入模式（`context_json` / `content_list`）：
 
-- `--context-list` 与 `--content-list` 是同一参数别名。
-- `run-e2e` 默认会执行向量化；可用 `--skip-embeddings` 跳过。
-- `--scoring-backend` 支持 `analyzer|agent-mcp|hybrid`，默认 `hybrid`。
+```bash
+uv run bid-pipeline run-e2e \
+  --context-json /path/to/context_list.json \
+  --project-id <PROJECT_UUID> \
+  --document-id <DOCUMENT_UUID> \
+  --version-id <VERSION_UUID> \
+  --document-title "示例投标文件" \
+  --bidder-name "投标方A" \
+  --project-name "示例项目"
+```
+
+说明（生产默认）：
+
+- 输入入口只建议两种：`--pdf-path` 或 `--context-json`（`--context-list/--content-list` 同义）。
+- 默认评分后端是 `hybrid`。
+- 默认问题集是 `cn_medical_v1`，默认策略是 `strict_traceability`。
+- `analyzer / agent-mcp / hybrid` 会统一使用问题集解析出的维度与关键词；不显式传 `--dimensions` 时使用问题集全部维度。
 - `agent-mcp` 使用 LLM + 检索 MCP 评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
 - `agent-mcp` 执行失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
@@ -137,9 +151,16 @@ uv run bid-pipeline run-e2e \
 - `run-e2e` 输出包含：
   - `traceability`：证据可追溯统计（覆盖率、可高亮 `chunk_ids`、告警码）
   - `observability.timings_ms`：`load/ingest/embeddings/scoring/total` 阶段耗时（毫秒）
-- `--hybrid-primary-weight` 可覆盖 `hybrid` 主后端权重（范围 `[0,1]`）。
 - `--pdf-path` 已支持直连 MinerU 并自动读取输出 `content_list.json`。
 - `--mineru-parser` 支持 `auto|cli|api`（默认 `auto`）。
+- 当配置了问题集参数时，结果会在 `observability.question_bank` 输出 `pack_id/overlay/question_count`。
+
+开发高级参数（保留扩展，不建议生产常用）：
+
+- `--scoring-backend`、`--hybrid-primary-weight`
+- `--skip-embeddings`
+- `--question-pack`、`--question-overlay`
+- `--mineru-output-dir`
 
 评分规则配置：
 
