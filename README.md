@@ -156,6 +156,12 @@ uv run python scripts/evaluate_scoring_backends.py \
   --summary-out data/eval/scoring_compare/summary.json
 ```
 
+Skill/策略一致性门禁：
+
+```bash
+uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```
+
 两次真实评分结果对比（baseline vs candidate）：
 
 ```bash

@@ -216,6 +216,19 @@ uv run python scripts/compare_scoring_runs.py \
 - 分维度得分差值：`delta.dimension_scores`
 - 告警变化：`warnings_added`、`warnings_removed`
 
+Skill 与策略一致性门禁：
+
+```bash
+uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```
+
+校验目标：
+
+- `config/agent_scoring_policy.yaml`
+- `.claude/skills/bid-analyze/prompt.md`
+
+若策略关键项（工具要求、基线分、风险规则、输出契约）未在 skill 模板体现，命令会返回非 0 退出码。
+
 ### 4.3 生成向量（vector/hybrid 必需）
 
 向量检索需要 `chunks.embedding` 有值。推荐用全量向量化脚本：

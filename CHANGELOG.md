@@ -42,6 +42,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `tests/unit/pipeline/test_scoring_agent_tool_loop.py`
 - Agent scoring single-source policy:
   - `config/agent_scoring_policy.yaml`
+- Skill/policy sync gate:
+  - `scripts/check_skill_policy_sync.py`
+  - `tests/unit/test_skill_policy_sync.py`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:
