@@ -75,6 +75,7 @@ def normalize_agent_result(
     evidence_payload: dict[str, list[dict[str, Any]]],
     dimension_warning_map: dict[str, list[str]],
     evidence_warnings: list[str],
+    backend_observability: dict[str, Any] | None = None,
 ) -> ScoringResult:
     raw_dimensions = agent_json.get("dimensions")
     raw_dimensions = raw_dimensions if isinstance(raw_dimensions, dict) else {}
@@ -136,6 +137,7 @@ def normalize_agent_result(
         evidence_citations=evidence_citations,
         dimensions=normalized_dimensions,
         warnings=warnings,
+        backend_observability=dict(backend_observability or {}),
     )
 
 

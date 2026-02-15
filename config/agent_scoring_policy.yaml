@@ -1,0 +1,24 @@
+version: "2026-02-15"
+constraints:
+  - "必须仅基于检索到的文档证据评分"
+  - "禁止使用外部知识和杜撰"
+  - "如证据不足，明确说明“证据不足”并触发中性评分"
+  - "risk_level 仅允许 low/medium/high"
+workflow:
+  tool_calling_required: true
+  max_turns_default: 8
+  required_tools:
+    - "retrieve_dimension_evidence"
+scoring:
+  baseline_score: 50
+  min_score: 0
+  max_score: 100
+  positive_evidence_delta_range: [5, 15]
+  risk_evidence_delta_range: [-20, -5]
+risk_rules:
+  high: "存在重大合规/履约风险，或高风险证据明显多于优势"
+  medium: "风险与优势并存，关键条款需澄清"
+  low: "证据完整，主要条款清晰且风险可控"
+output:
+  strict_json: true
+  schema_hint: "{overall_score,risk_level,total_risks,total_benefits,recommendations,dimensions}"

@@ -21,6 +21,9 @@ class ToolLoopResult:
     evidence_payload: dict[str, list[dict[str, Any]]]
     dimension_warning_map: dict[str, list[str]]
     evidence_warnings: list[str]
+    turns: int
+    tool_call_count: int
+    tool_names: list[str]
 
 
 def run_tool_calling_loop(
@@ -34,20 +37,26 @@ def run_tool_calling_loop(
     default_mode: str,
     max_chars: int,
     max_turns: int,
+    system_prompt: str,
 ) -> ToolLoopResult:
     evidence_payload: dict[str, list[dict[str, Any]]] = {key: [] for key in dimensions}
     dimension_warning_map: dict[str, list[str]] = {key: [] for key in dimensions}
     evidence_warnings: list[str] = []
 
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": _build_tool_calling_system_prompt()},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": json.dumps(request_payload, ensure_ascii=False),
         },
     ]
 
+    turns = 0
+    tool_call_count = 0
+    tool_name_seen: set[str] = set()
+
     for _ in range(max_turns):
+        turns += 1
         response = client.chat.completions.create(
             model=model,
             temperature=0,
@@ -60,6 +69,12 @@ def run_tool_calling_loop(
         assistant_content = extract_message_content(response)
 
         if parsed_tool_calls:
+            tool_call_count += len(parsed_tool_calls)
+            for tool_call in parsed_tool_calls:
+                function_payload = tool_call.get("function", {})
+                tool_name = function_payload.get("name")
+                if isinstance(tool_name, str) and tool_name:
+                    tool_name_seen.add(tool_name)
             messages.append(
                 {
                     "role": "assistant",
@@ -102,20 +117,12 @@ def run_tool_calling_loop(
             evidence_payload=evidence_payload,
             dimension_warning_map=dimension_warning_map,
             evidence_warnings=evidence_warnings,
+            turns=turns,
+            tool_call_count=tool_call_count,
+            tool_names=sorted(tool_name_seen),
         )
 
     raise RuntimeError("agent_mcp_tool_loop_max_turns_exceeded")
-
-
-def _build_tool_calling_system_prompt() -> str:
-    return (
-        "你是评标专家。必须先调用工具 retrieve_dimension_evidence 获取证据，再输出最终评分 JSON。"
-        "禁止使用文档外知识和杜撰。若证据不足，请明确说明“证据不足”。"
-        "最终输出严格 JSON："
-        "{overall_score,risk_level,total_risks,total_benefits,recommendations,dimensions}。"
-        "dimensions 是对象，key 为维度名，value 含 score/risk_level/summary。"
-        "risk_level 仅允许 low/medium/high。"
-    )
 
 
 def _build_retrieve_tool_schema() -> dict[str, Any]:

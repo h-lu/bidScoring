@@ -4,11 +4,13 @@ import json
 import logging
 import os
 from typing import Any
+from uuid import uuid4
 
 from openai import OpenAI
 
 from bid_scoring.config import load_settings
 
+from .scoring_agent_policy import AgentScoringPolicy, load_agent_scoring_policy
 from .scoring_agent_support import (
     normalize_agent_result,
     read_int_env,
@@ -65,6 +67,7 @@ class AgentMcpScoringProvider:
                 },
                 dimensions=dict(fallback.dimensions),
                 warnings=warnings,
+                backend_observability=dict(fallback.backend_observability),
             )
 
 
@@ -82,6 +85,7 @@ class OpenAIMcpAgentExecutor:
         max_chars: int | None = None,
         execution_mode: str | None = None,
         max_turns: int | None = None,
+        policy: AgentScoringPolicy | None = None,
     ) -> None:
         self._retrieve_fn = retrieve_fn or _default_retrieve_fn
         self._client = client
@@ -105,6 +109,7 @@ class OpenAIMcpAgentExecutor:
         if resolved_max_turns is None:
             resolved_max_turns = read_int_env("BID_SCORING_AGENT_MCP_MAX_TURNS", 8)
         self._max_turns = max(1, int(resolved_max_turns))
+        self._policy = policy or load_agent_scoring_policy()
 
     def score(self, request: ScoringRequest) -> ScoringResult:
         if _is_agent_mcp_disabled():
@@ -122,11 +127,23 @@ class OpenAIMcpAgentExecutor:
             raise RuntimeError("No valid scoring dimensions")
 
         if self._execution_mode == "bulk":
-            agent_json, evidence_payload, dimension_warning_map, evidence_warnings = (
+            (
+                agent_json,
+                evidence_payload,
+                dimension_warning_map,
+                evidence_warnings,
+                backend_observability,
+            ) = (
                 self._run_bulk_mode(request=request, dimensions=dimensions)
             )
         else:
-            agent_json, evidence_payload, dimension_warning_map, evidence_warnings = (
+            (
+                agent_json,
+                evidence_payload,
+                dimension_warning_map,
+                evidence_warnings,
+                backend_observability,
+            ) = (
                 self._run_tool_calling_mode(request=request, dimensions=dimensions)
             )
 
@@ -136,6 +153,10 @@ class OpenAIMcpAgentExecutor:
             evidence_payload=evidence_payload,
             dimension_warning_map=dimension_warning_map,
             evidence_warnings=evidence_warnings,
+            backend_observability={
+                **backend_observability,
+                "trace_id": f"agent-mcp-{uuid4()}",
+            },
         )
 
     def _run_bulk_mode(
@@ -148,6 +169,7 @@ class OpenAIMcpAgentExecutor:
         dict[str, list[dict[str, Any]]],
         dict[str, list[str]],
         list[str],
+        dict[str, Any],
     ]:
         evidence_payload: dict[str, list[dict[str, Any]]] = {}
         evidence_warnings: list[str] = []
@@ -219,7 +241,18 @@ class OpenAIMcpAgentExecutor:
             dimensions=dimensions,
             evidence_payload=evidence_payload,
         )
-        return agent_json, evidence_payload, dimension_warning_map, evidence_warnings
+        return (
+            agent_json,
+            evidence_payload,
+            dimension_warning_map,
+            evidence_warnings,
+            {
+                "execution_mode": "bulk",
+                "turns": 1,
+                "tool_call_count": 0,
+                "tool_names": [],
+            },
+        )
 
     def _run_tool_calling_mode(
         self,
@@ -231,6 +264,7 @@ class OpenAIMcpAgentExecutor:
         dict[str, list[dict[str, Any]]],
         dict[str, list[str]],
         list[str],
+        dict[str, Any],
     ]:
         client = self._client or _build_openai_client()
         payload = {
@@ -255,12 +289,19 @@ class OpenAIMcpAgentExecutor:
             default_mode=self._mode,
             max_chars=self._max_chars,
             max_turns=self._max_turns,
+            system_prompt=self._policy.tool_calling_system_prompt(),
         )
         return (
             loop_result.agent_json,
             loop_result.evidence_payload,
             loop_result.dimension_warning_map,
             loop_result.evidence_warnings,
+            {
+                "execution_mode": "tool-calling",
+                "turns": loop_result.turns,
+                "tool_call_count": loop_result.tool_call_count,
+                "tool_names": list(loop_result.tool_names),
+            },
         )
 
     def _call_agent_bulk(
@@ -291,16 +332,7 @@ class OpenAIMcpAgentExecutor:
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "你是评标专家。必须仅基于给定证据评分，禁止使用外部知识和杜撰。"
-                        "若证据不足，请明确说明“证据不足”。"
-                        "输出严格 JSON："
-                        "{overall_score,risk_level,total_risks,total_benefits,"
-                        "recommendations,dimensions}。"
-                        "dimensions 是对象，key 为维度名，"
-                        "value 含 score/risk_level/summary。"
-                        "risk_level 仅允许 low/medium/high。"
-                    ),
+                    "content": self._policy.bulk_system_prompt(),
                 },
                 {
                     "role": "user",

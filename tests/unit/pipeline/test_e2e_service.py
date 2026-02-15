@@ -81,6 +81,31 @@ class _ScoringProvider:
         )
 
 
+class _ScoringProviderWithAgentMeta(_ScoringProvider):
+    def score(self, request):
+        base = super().score(request)
+        return ScoringResult(
+            status=base.status,
+            overall_score=base.overall_score,
+            risk_level=base.risk_level,
+            total_risks=base.total_risks,
+            total_benefits=base.total_benefits,
+            chunks_analyzed=base.chunks_analyzed,
+            recommendations=list(base.recommendations),
+            evidence_warnings=list(base.evidence_warnings),
+            evidence_citations=dict(base.evidence_citations),
+            dimensions=dict(base.dimensions),
+            warnings=list(base.warnings),
+            backend_observability={
+                "execution_mode": "tool-calling",
+                "turns": 2,
+                "tool_call_count": 3,
+                "tool_names": ["retrieve_dimension_evidence"],
+                "trace_id": "agent-mcp-test-trace",
+            },
+        )
+
+
 class _Resolver:
     def __init__(self):
         self.calls = []
@@ -255,3 +280,22 @@ def test_e2e_service_can_resolve_question_context_via_injected_resolver(
     assert scoring_provider.last_request.question_context.pack_id == "cn_medical_v1"
     assert scoring_provider.last_request.dimensions == ["warranty"]
     assert result.observability["question_bank"]["pack_id"] == "cn_medical_v1"
+
+
+def test_e2e_service_emits_agent_observability_when_available(
+    tmp_path: Path, fixed_ids
+):
+    events: list[str] = []
+    service = E2EPipelineService(
+        content_source=_ContentSource(events),
+        pipeline_service=_PipelineService(events),
+        index_builder=_IndexBuilder(events),
+        scoring_provider=_ScoringProviderWithAgentMeta(events),
+    )
+
+    result = service.run(_request(tmp_path, fixed_ids), conn=object())
+
+    assert result.observability["agent"]["execution_mode"] == "tool-calling"
+    assert result.observability["agent"]["turns"] == 2
+    assert result.observability["agent"]["tool_call_count"] == 3
+    assert result.observability["agent"]["trace_id"] == "agent-mcp-test-trace"

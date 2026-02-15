@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A.json`
 - Agent/MCP tool-calling test coverage:
   - `tests/unit/pipeline/test_scoring_agent_tool_loop.py`
+- Agent scoring single-source policy:
+  - `config/agent_scoring_policy.yaml`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:
@@ -61,6 +63,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `agent-mcp` 执行路径升级为默认 `tool-calling`（保留 `bulk` 回退）：
   - 新增 `BID_SCORING_AGENT_MCP_EXECUTION_MODE` 与 `BID_SCORING_AGENT_MCP_MAX_TURNS`
   - 引入 `scoring_agent_support.py` 与 `scoring_agent_tool_loop.py`，拆分证据归一化与工具循环逻辑
+- `agent-mcp` 新增策略加载层：
+  - `scoring_agent_policy.py` 从 `config/agent_scoring_policy.yaml` 加载约束/risk/output 口径
+- E2E observability 增补 agent 运行元信息：
+  - `observability.agent.execution_mode/turns/tool_call_count/tool_names/trace_id`
 
 ### Removed
 - Legacy MinerU coordinator chain:

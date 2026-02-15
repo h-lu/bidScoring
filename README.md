@@ -110,6 +110,7 @@ uv run bid-pipeline run-prod \
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K`、`BID_SCORING_AGENT_MCP_MODE`、`BID_SCORING_AGENT_MCP_MAX_CHARS`。
 - `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）。
 - `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS`（默认 `8`）。
+- `agent-mcp` 评分策略单源：`BID_SCORING_AGENT_MCP_POLICY_PATH`（默认 `config/agent_scoring_policy.yaml`）。
 - MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
 - MinerU 通用输出根目录：`MINERU_OUTPUT_ROOT`，CLI 超时：`MINERU_PDF_TIMEOUT_SECONDS`（默认 `1800`）。
 - MinerU API 模式使用：`MINERU_API_URL`、`MINERU_API_KEY`。

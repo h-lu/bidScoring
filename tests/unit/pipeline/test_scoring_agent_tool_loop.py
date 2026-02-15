@@ -105,6 +105,8 @@ def test_openai_mcp_agent_executor_defaults_to_tool_calling(monkeypatch):
     assert completions.calls[0]["tools"][0]["function"]["name"] == "retrieve_dimension_evidence"
     assert "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
     assert result.dimensions["warranty"]["score"] == 50.0
+    assert result.backend_observability["execution_mode"] == "tool-calling"
+    assert result.backend_observability["tool_call_count"] == 0
 
 
 def test_openai_mcp_agent_executor_tool_loop_collects_evidence():
@@ -185,6 +187,11 @@ def test_openai_mcp_agent_executor_tool_loop_collects_evidence():
     assert result.chunks_analyzed == 1
     assert result.evidence_citations["warranty"][0]["chunk_id"] == "chunk-1"
     assert "agent_mcp_dimension_no_verifiable_evidence:warranty" not in result.warnings
+    assert result.backend_observability["execution_mode"] == "tool-calling"
+    assert result.backend_observability["tool_call_count"] == 1
+    assert result.backend_observability["tool_names"] == ["retrieve_dimension_evidence"]
+    assert result.backend_observability["turns"] == 2
+    assert str(result.backend_observability["trace_id"]).startswith("agent-mcp-")
     assert any(
         isinstance(msg, dict) and msg.get("role") == "tool"
         for msg in completions.calls[1]["messages"]

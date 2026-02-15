@@ -51,6 +51,7 @@ class WarningFallbackScoringProvider:
             },
             dimensions=dict(base.dimensions),
             warnings=warnings,
+            backend_observability=dict(base.backend_observability),
         )
 
 

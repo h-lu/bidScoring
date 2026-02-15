@@ -173,6 +173,7 @@ uv run bid-pipeline run-prod \
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K=8`、`BID_SCORING_AGENT_MCP_MODE=hybrid`、`BID_SCORING_AGENT_MCP_MAX_CHARS=320`
 - `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）
 - `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS=8`
+- `agent-mcp` 策略文件：`BID_SCORING_AGENT_MCP_POLICY_PATH=config/agent_scoring_policy.yaml`
 - MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
 - MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`
 - MinerU 输出目录：`MINERU_OUTPUT_ROOT=.mineru-output`

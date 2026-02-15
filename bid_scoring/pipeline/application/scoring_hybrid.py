@@ -71,6 +71,11 @@ class HybridScoringProvider:
                 primary_result.warnings,
                 secondary_result.warnings,
             ),
+            backend_observability={
+                "execution_mode": "hybrid",
+                "primary": dict(primary_result.backend_observability),
+                "secondary": dict(secondary_result.backend_observability),
+            },
         )
 
 
