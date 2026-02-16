@@ -1,0 +1,137 @@
+{
+  "baseline_file": "data/eval/claude_code_runs/2026-02-15-203118-claude-full-6d/summary.json",
+  "candidate_file": "data/eval/claude_code_runs/2026-02-16-092024-claude-full-6d-v2/summary.json",
+  "baseline": {
+    "run_id": "2026-02-15-203118-claude-full-6d",
+    "version_id": "3ea2532c-6209-41bb-a91f-efc5d5cd9712",
+    "overall_score": 63,
+    "risk_level": "medium",
+    "total_risks": 2,
+    "total_benefits": 5,
+    "dimension_scores": [
+      {
+        "key": "warranty",
+        "score": 80,
+        "risk_level": "low"
+      },
+      {
+        "key": "delivery",
+        "score": 65,
+        "risk_level": "low"
+      },
+      {
+        "key": "training",
+        "score": 60,
+        "risk_level": "medium"
+      },
+      {
+        "key": "financial",
+        "score": 50,
+        "risk_level": "high"
+      },
+      {
+        "key": "technical",
+        "score": 75,
+        "risk_level": "low"
+      },
+      {
+        "key": "compliance",
+        "score": 65,
+        "risk_level": "low"
+      }
+    ],
+    "warnings": [
+      "evidence_insufficient:financial:缺失付款方式、付款节点、结算周期等关键财务条款",
+      "training_plan_incomplete:未明确每批培训人数上限与具体课时数"
+    ]
+  },
+  "candidate": {
+    "version_id": "5d872d53-cbd5-4e78-baba-972059cc27e1",
+    "overall_score": 66,
+    "risk_level": "low",
+    "total_risks": 0,
+    "total_benefits": 7,
+    "dimension_scores": [
+      {
+        "key": "warranty",
+        "score": 65,
+        "risk_level": "low"
+      },
+      {
+        "key": "delivery",
+        "score": 60,
+        "risk_level": "low"
+      },
+      {
+        "key": "training",
+        "score": 60,
+        "risk_level": "low"
+      },
+      {
+        "key": "financial",
+        "score": 55,
+        "risk_level": "medium"
+      },
+      {
+        "key": "technical",
+        "score": 60,
+        "risk_level": "low"
+      },
+      {
+        "key": "compliance",
+        "score": 60,
+        "risk_level": "low"
+      }
+    ],
+    "warnings": []
+  },
+  "deltas": {
+    "overall_score": 3,
+    "total_risks": -2,
+    "total_benefits": 2,
+    "dimension_scores": [
+      {
+        "key": "warranty",
+        "baseline_score": 80,
+        "candidate_score": 65,
+        "delta": -15,
+        "candidate_risk_level": "low"
+      },
+      {
+        "key": "delivery",
+        "baseline_score": 65,
+        "candidate_score": 60,
+        "delta": -5,
+        "candidate_risk_level": "low"
+      },
+      {
+        "key": "training",
+        "baseline_score": 60,
+        "candidate_score": 60,
+        "delta": 0,
+        "candidate_risk_level": "low"
+      },
+      {
+        "key": "financial",
+        "baseline_score": 50,
+        "candidate_score": 55,
+        "delta": 5,
+        "candidate_risk_level": "medium"
+      },
+      {
+        "key": "technical",
+        "baseline_score": 75,
+        "candidate_score": 60,
+        "delta": -15,
+        "candidate_risk_level": "low"
+      },
+      {
+        "key": "compliance",
+        "baseline_score": 65,
+        "candidate_score": 60,
+        "delta": -5,
+        "candidate_risk_level": "low"
+      }
+    ]
+  }
+}
