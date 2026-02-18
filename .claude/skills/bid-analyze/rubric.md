@@ -1,7 +1,9 @@
 # 评分规则（Rubric）
 
 策略来源：
-1. `config/agent_scoring_policy.yaml`
+1. `config/policy/packs/cn_medical_v1/base.yaml`
+2. `config/policy/packs/cn_medical_v1/overlays/strict_traceability.yaml`
+3. （可选运行时产物）`artifacts/policy/cn_medical_v1/strict_traceability/runtime_policy.json`
 
 维度与权重：
 1. `warranty`: 0.25

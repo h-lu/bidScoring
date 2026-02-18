@@ -1,39 +1,19 @@
-# Claude Agent Team 协作模式（先定模式）
+# Claude Agent Team 协作模式
 
-## 官方能力拆分
+## 1. 模式
 
-1. Subagents（单会话内多代理）
-   - 适合：一条审核链路内分工协作
-   - 文档：[https://code.claude.com/docs/en/sub-agents](https://code.claude.com/docs/en/sub-agents)
-2. Agent Teams（多会话协作）
-   - 适合：多任务并行和长流程项目
-   - 文档：[https://code.claude.com/docs/en/agent-teams](https://code.claude.com/docs/en/agent-teams)
+- `single-pass`：单轮汇总，速度优先
+- `staged`：分 retrieval/scoring/traceability 多阶段
 
-## 本项目确定模式（当前阶段）
+当前推荐 `staged`，便于审计和复盘。
 
-采用 **Mode-A: Lead + Subagents（单会话）**。
+## 2. 交互规范
 
-原因：
-1. 与现有 MCP 与评分链路耦合最小。
-2. 易于控制证据一致性与输出契约。
-3. 对实验阶段最稳，便于快速迭代。
+- 每个阶段输出结构化中间结果
+- 阶段间只传必要字段，避免信息泄漏与漂移
+- 失败阶段必须输出 machine-readable warning code
 
-## 协作拓扑
+## 3. 质量门禁
 
-1. `bid-team-orchestrator`（总控）
-2. `bid-team-evidence`（取证）
-3. `bid-team-scoring`（评分）
-4. `bid-team-traceability`（追溯审核）
-
-执行顺序：
-1. Retrieval
-2. Scoring
-3. Traceability
-4. Merge
-
-## 升级路径（后续）
-
-若进入批量评审生产阶段，再升级 **Mode-B: Agent Teams（多会话）**：
-1. Team Lead 会话：任务分发与汇总
-2. Bidder 会话：按投标方并行取证评分
-3. Audit 会话：统一追溯审计与排名复核
+- 无可定位证据不得输出高置信结论
+- 缺失关键字段时必须降级并告警

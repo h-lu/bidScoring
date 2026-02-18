@@ -1,10 +1,27 @@
-# Claude 团队目录说明
+# .claude 目录说明
 
-该目录是本项目在 Claude Code 中的本地插件工作区（投标审核）。
+本目录用于定义 Agent Team 与 Skill，在 Claude Code 中执行证据优先评标流程。
 
-主要组成：
-1. `agents/`：总控与专职子代理。
-2. `commands/`：可复用的团队执行命令。
-3. `hooks/`：运行期守卫（重点是 MCP 参数类型防错）。
-4. `skills/`：评分口径与输出契约。
-5. `.claude-plugin/plugin.json`：插件清单，用于校验与发布准备。
+## 1. 目录结构
+
+- `agents/`：团队角色定义
+- `skills/bid-analyze/`：主技能（流程、评分、样例、提示词）
+- `commands/`：团队化命令入口
+
+## 2. 设计原则
+
+- 先检索再评分
+- 只基于证据输出结论
+- 输出必须可回溯到 `chunk_id/page_idx/bbox`
+
+## 3. 与策略配置关系
+
+`.claude/skills/bid-analyze/prompt.md` 必须与策略包保持同步：
+- `config/policy/packs/cn_medical_v1/base.yaml`
+- `config/policy/packs/cn_medical_v1/overlays/strict_traceability.yaml`
+
+同步检查命令：
+
+```bash
+uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```

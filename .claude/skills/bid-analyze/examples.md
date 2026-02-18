@@ -1,13 +1,27 @@
 # Examples
 
-## 单文档审核
-`/bid-review-team <version_id>`
+## 示例 1：单文档评分
 
-## 多文档对比
-`/bid-compare-team <version_id_A> <version_id_B> [version_id_C]`
+输入：
+- `version_id=<VERSION_UUID>`
+- `dimensions=[financial,compliance,delivery]`
 
-## 错误恢复
-当 MCP 参数校验错误时：
-1. 保持同一工具与同一意图。
-2. 仅修正参数类型。
-3. 重试一次。
+执行：
+1. 按维度调用 `retrieve_dimension_evidence`
+2. 汇总可定位证据
+3. 输出 `scoring_pack`
+
+预期：
+- 每个维度都包含证据引用
+- 若证据不足，维度给 `50` 并写入 warning
+
+## 示例 2：争议条款复核
+
+输入：
+- 同一文档
+- 聚焦 `compliance`
+
+执行：
+1. 检索法规/资质相关条款
+2. 验证引用位置可定位
+3. 给出风险等级和改进建议

@@ -1,26 +1,14 @@
----
-description: "通过强制多代理协作执行单文档投标审核"
-argument-hint: "<version_id> [bidder_name] [project_name]"
----
+# /bid-review-team
 
-# 投标审核团队（单文档）
+用途：执行完整团队评审流程（retrieval -> scoring -> traceability）。
 
-本任务使用 `bid-team-orchestrator`：
+执行规范：
+1. 必须先触发 evidence 阶段
+2. scoring 只能消费 evidence 输出
+3. traceability 必须在最终输出前执行
 
-`$ARGUMENTS`
-
-执行要求：
-1. 如果缺少 `version_id`，先向用户索取。
-2. 必须执行协作三阶段：
-   - 阶段一：`bid-team-evidence`
-   - 阶段二：`bid-team-scoring`
-   - 阶段三：`bid-team-traceability`
-3. 三阶段完成前不得返回最终结果。
-4. 最终仅返回单个严格 JSON 对象。
-
-JSON 最低字段要求：
+输入建议：
 - `version_id`
-- `overall_score`
-- `risk_level`
-- `dimensions`
-- `warnings`
+- `bidder_name`
+- `project_name`
+- `dimensions`（可选）
