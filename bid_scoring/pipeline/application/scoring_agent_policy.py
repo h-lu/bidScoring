@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-_POLICY_PATH_ENV = "BID_SCORING_AGENT_MCP_POLICY_PATH"
+from bid_scoring.policy import (
+    PolicyLoadError,
+    load_policy_bundle_from_artifact,
+    load_policy_bundle_from_env,
+)
 
 
 @dataclass(frozen=True)
@@ -16,9 +17,34 @@ class AgentScoringPolicy:
     risk_rules: dict[str, str]
     output_schema_hint: str
     tool_calling_required: bool
+    required_tools: list[str]
+    max_turns_default: int
+    retrieval_default_mode: str
+    retrieval_default_top_k: int
+    retrieval_dimension_overrides: dict[str, dict[str, Any]]
+    retrieval_evaluation_thresholds: dict[str, dict[str, float]]
+    evidence_default_min_citations: int
+    evidence_require_page_idx: bool
+    evidence_require_bbox: bool
+    evidence_require_quote: bool
+
+    def resolve_dimension_defaults(
+        self,
+        dimension: str,
+        *,
+        fallback_mode: str,
+        fallback_top_k: int,
+    ) -> tuple[str, int]:
+        override = self.retrieval_dimension_overrides.get(dimension, {})
+        mode = override.get("mode") if isinstance(override, dict) else None
+        top_k = override.get("top_k") if isinstance(override, dict) else None
+        resolved_mode = mode if mode in {"hybrid", "keyword", "vector"} else fallback_mode
+        resolved_top_k = int(top_k) if isinstance(top_k, int) and top_k > 0 else fallback_top_k
+        return resolved_mode, resolved_top_k
 
     def tool_calling_system_prompt(self) -> str:
         constraints = "；".join(self.constraints)
+        required_tools = ", ".join(self.required_tools)
         risk = "；".join(
             [
                 f"high={self.risk_rules.get('high', '')}",
@@ -27,7 +53,7 @@ class AgentScoringPolicy:
             ]
         )
         workflow = (
-            "必须先调用工具 retrieve_dimension_evidence 获取证据，再输出最终评分 JSON。"
+            f"必须先调用工具 {required_tools} 获取证据，再输出最终评分 JSON。"
             if self.tool_calling_required
             else "可直接输出评分 JSON。"
         )
@@ -62,65 +88,36 @@ class AgentScoringPolicy:
 
 
 def load_agent_scoring_policy(path: str | Path | None = None) -> AgentScoringPolicy:
-    policy_path = _resolve_policy_path(path)
-    if not policy_path.exists():
+    try:
+        if path is not None:
+            bundle = load_policy_bundle_from_artifact(Path(path))
+        else:
+            bundle = load_policy_bundle_from_env()
+    except PolicyLoadError:
         return _default_policy()
-    raw = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        return _default_policy()
-
-    constraints = _normalize_str_list(raw.get("constraints"))
-    risk_rules_raw = raw.get("risk_rules")
-    risk_rules: dict[str, str] = {}
-    if isinstance(risk_rules_raw, dict):
-        for key in ("high", "medium", "low"):
-            value = risk_rules_raw.get(key)
-            if isinstance(value, str) and value.strip():
-                risk_rules[key] = value.strip()
-
-    output_raw = raw.get("output")
-    output_schema_hint = "{overall_score,risk_level,total_risks,total_benefits,recommendations,dimensions}"
-    if isinstance(output_raw, dict):
-        candidate = output_raw.get("schema_hint")
-        if isinstance(candidate, str) and candidate.strip():
-            output_schema_hint = candidate.strip()
-
-    workflow_raw = raw.get("workflow")
-    tool_calling_required = True
-    if isinstance(workflow_raw, dict):
-        flag = workflow_raw.get("tool_calling_required")
-        if isinstance(flag, bool):
-            tool_calling_required = flag
 
     return AgentScoringPolicy(
-        constraints=constraints or _default_policy().constraints,
-        risk_rules=risk_rules or _default_policy().risk_rules,
-        output_schema_hint=output_schema_hint,
-        tool_calling_required=tool_calling_required,
+        constraints=list(bundle.constraints),
+        risk_rules=dict(bundle.risk_rules),
+        output_schema_hint=bundle.output.schema_hint,
+        tool_calling_required=bundle.workflow.tool_calling_required,
+        required_tools=list(bundle.workflow.required_tools),
+        max_turns_default=int(bundle.workflow.max_turns_default),
+        retrieval_default_mode=bundle.retrieval.default_mode,
+        retrieval_default_top_k=int(bundle.retrieval.default_top_k),
+        retrieval_dimension_overrides={
+            key: {"mode": value.mode, "top_k": value.top_k}
+            for key, value in bundle.retrieval.dimension_overrides.items()
+        },
+        retrieval_evaluation_thresholds={
+            method: dict(metrics)
+            for method, metrics in bundle.retrieval.evaluation_thresholds.items()
+        },
+        evidence_default_min_citations=bundle.evidence_gate.default_min_citations,
+        evidence_require_page_idx=bundle.evidence_gate.require_page_idx,
+        evidence_require_bbox=bundle.evidence_gate.require_bbox,
+        evidence_require_quote=bundle.evidence_gate.require_quote,
     )
-
-
-def _resolve_policy_path(path: str | Path | None) -> Path:
-    if path is not None:
-        return Path(path)
-    env_value = os.getenv(_POLICY_PATH_ENV)
-    if env_value:
-        return Path(env_value)
-    return Path(__file__).resolve().parents[3] / "config" / "agent_scoring_policy.yaml"
-
-
-def _normalize_str_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    output: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            continue
-        normalized = item.strip()
-        if not normalized:
-            continue
-        output.append(normalized)
-    return output
 
 
 def _default_policy() -> AgentScoringPolicy:
@@ -140,4 +137,14 @@ def _default_policy() -> AgentScoringPolicy:
             "{overall_score,risk_level,total_risks,total_benefits,recommendations,dimensions}"
         ),
         tool_calling_required=True,
+        required_tools=["retrieve_dimension_evidence"],
+        max_turns_default=8,
+        retrieval_default_mode="hybrid",
+        retrieval_default_top_k=8,
+        retrieval_dimension_overrides={},
+        retrieval_evaluation_thresholds={},
+        evidence_default_min_citations=1,
+        evidence_require_page_idx=True,
+        evidence_require_bbox=True,
+        evidence_require_quote=True,
     )

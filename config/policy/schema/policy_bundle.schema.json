@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bid-scoring.local/schemas/policy_bundle.schema.json",
+  "title": "Bid Scoring Policy Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "constraints",
+    "workflow",
+    "scoring",
+    "risk_rules",
+    "output",
+    "retrieval",
+    "evidence_gate"
+  ],
+  "properties": {
+    "constraints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool_calling_required", "max_turns_default", "required_tools"],
+      "properties": {
+        "tool_calling_required": { "type": "boolean" },
+        "max_turns_default": { "type": "integer", "minimum": 1 },
+        "required_tools": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_score",
+        "min_score",
+        "max_score",
+        "positive_evidence_delta_range",
+        "risk_evidence_delta_range"
+      ],
+      "properties": {
+        "baseline_score": { "type": "number" },
+        "min_score": { "type": "number" },
+        "max_score": { "type": "number" },
+        "positive_evidence_delta_range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "number" }
+        },
+        "risk_evidence_delta_range": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "risk_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["high", "medium", "low"],
+      "properties": {
+        "high": { "type": "string", "minLength": 1 },
+        "medium": { "type": "string", "minLength": 1 },
+        "low": { "type": "string", "minLength": 1 }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strict_json", "schema_hint"],
+      "properties": {
+        "strict_json": { "type": "boolean" },
+        "schema_hint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_mode", "default_top_k", "dimension_overrides"],
+      "properties": {
+        "default_mode": { "type": "string", "enum": ["hybrid", "keyword", "vector"] },
+        "default_top_k": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "dimension_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": { "type": "string", "enum": ["hybrid", "keyword", "vector"] },
+              "top_k": { "type": "integer", "minimum": 1, "maximum": 100 }
+            }
+          }
+        },
+        "evaluation_thresholds": {
+          "type": "object",
+          "propertyNames": { "enum": ["hybrid", "keyword", "vector"] },
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "evidence_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_min_citations",
+        "require_page_idx",
+        "require_bbox",
+        "require_quote"
+      ],
+      "properties": {
+        "default_min_citations": { "type": "integer", "minimum": 1 },
+        "require_page_idx": { "type": "boolean" },
+        "require_bbox": { "type": "boolean" },
+        "require_quote": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ from .config import DEFAULT_CONFIG_PATH, build_synonym_index, load_retrieval_con
 from .db import HAS_CONNECTION_POOL
 from .evaluation_gate import ThresholdViolation, check_metric_thresholds
 from .hybrid import DEFAULT_HNSW_EF_SEARCH, MAX_SEARCH_WORKERS, HybridRetriever
+from .policy_thresholds import evaluate_retrieval_summary, extract_retrieval_thresholds
 from .rerankers import HAS_COLBERT_RERANKER, HAS_RERANKER, ColBERTReranker, Reranker
 from .rrf import DEFAULT_RRF_K, ReciprocalRankFusion
 from .types import RetrievalResult
@@ -32,5 +33,7 @@ __all__ = [
     "ThresholdViolation",
     "build_synonym_index",
     "check_metric_thresholds",
+    "evaluate_retrieval_summary",
+    "extract_retrieval_thresholds",
     "load_retrieval_config",
 ]

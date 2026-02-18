@@ -39,10 +39,41 @@ def resolve_dimensions(
 
 
 def is_verifiable_item(item: dict[str, Any]) -> bool:
+    is_valid, _warnings = evaluate_evidence_item(
+        item,
+        require_page_idx=False,
+        require_bbox=True,
+        require_quote=False,
+    )
+    return is_valid
+
+
+def evaluate_evidence_item(
+    item: dict[str, Any],
+    *,
+    require_page_idx: bool,
+    require_bbox: bool,
+    require_quote: bool,
+) -> tuple[bool, list[str]]:
+    warnings: list[str] = []
+
     if item.get("evidence_status") not in {"verified", "verified_with_warnings"}:
-        return False
-    bbox = item.get("bbox")
-    return isinstance(bbox, list) and len(bbox) == 4
+        warnings.append("unverifiable_evidence_for_scoring")
+
+    if require_bbox:
+        bbox = item.get("bbox")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            warnings.append("missing_bbox")
+
+    if require_page_idx and not isinstance(item.get("page_idx"), int):
+        warnings.append("missing_page_idx")
+
+    if require_quote:
+        quote = str(item.get("text", "")).strip()
+        if not quote:
+            warnings.append("missing_quote_text")
+
+    return (len(warnings) == 0), warnings
 
 
 def extract_message_content(response: Any) -> str:

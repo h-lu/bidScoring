@@ -12,6 +12,7 @@ from bid_scoring.config import load_settings
 
 from .scoring_agent_policy import AgentScoringPolicy, load_agent_scoring_policy
 from .scoring_agent_support import (
+    evaluate_evidence_item,
     normalize_agent_result,
     read_int_env,
     resolve_dimensions,
@@ -90,13 +91,20 @@ class OpenAIMcpAgentExecutor:
         self._retrieve_fn = retrieve_fn or _default_retrieve_fn
         self._client = client
         self._model = model or os.getenv("BID_SCORING_AGENT_MCP_MODEL", "gpt-5-mini")
+        self._policy = policy or load_agent_scoring_policy()
 
         resolved_top_k = top_k
         if resolved_top_k is None:
-            resolved_top_k = read_int_env("BID_SCORING_AGENT_MCP_TOP_K", 8)
+            resolved_top_k = read_int_env(
+                "BID_SCORING_AGENT_MCP_TOP_K",
+                self._policy.retrieval_default_top_k,
+            )
         self._top_k = max(1, int(resolved_top_k))
 
-        self._mode = mode or os.getenv("BID_SCORING_AGENT_MCP_MODE", "hybrid")
+        resolved_mode = mode or os.getenv("BID_SCORING_AGENT_MCP_MODE")
+        if resolved_mode not in {"hybrid", "keyword", "vector"}:
+            resolved_mode = self._policy.retrieval_default_mode
+        self._mode = str(resolved_mode)
 
         resolved_max_chars = max_chars
         if resolved_max_chars is None:
@@ -107,9 +115,11 @@ class OpenAIMcpAgentExecutor:
 
         resolved_max_turns = max_turns
         if resolved_max_turns is None:
-            resolved_max_turns = read_int_env("BID_SCORING_AGENT_MCP_MAX_TURNS", 8)
+            resolved_max_turns = read_int_env(
+                "BID_SCORING_AGENT_MCP_MAX_TURNS",
+                self._policy.max_turns_default,
+            )
         self._max_turns = max(1, int(resolved_max_turns))
-        self._policy = policy or load_agent_scoring_policy()
 
     def score(self, request: ScoringRequest) -> ScoringResult:
         if _is_agent_mcp_disabled():
@@ -174,13 +184,18 @@ class OpenAIMcpAgentExecutor:
         evidence_payload: dict[str, list[dict[str, Any]]] = {}
         evidence_warnings: list[str] = []
         dimension_warning_map: dict[str, list[str]] = {}
+        dimension_default_options = self._build_dimension_default_options(dimensions)
 
         for dim_key, dim in dimensions.items():
+            dim_options = dimension_default_options.get(
+                dim_key,
+                {"mode": self._mode, "top_k": self._top_k},
+            )
             response = self._retrieve_fn(
                 version_id=request.version_id,
                 query=" ".join(dim.keywords),
-                top_k=self._top_k,
-                mode=self._mode,
+                top_k=int(dim_options["top_k"]),
+                mode=str(dim_options["mode"]),
                 keywords=dim.keywords,
                 include_text=True,
                 max_chars=self._max_chars,
@@ -199,32 +214,23 @@ class OpenAIMcpAgentExecutor:
                     merged_dimension_warnings,
                     list(item.get("warnings", [])),
                 )
-                if item.get("evidence_status") not in {
-                    "verified",
-                    "verified_with_warnings",
-                }:
+                is_verifiable, verifiability_warnings = evaluate_evidence_item(
+                    item,
+                    require_page_idx=self._policy.evidence_require_page_idx,
+                    require_bbox=self._policy.evidence_require_bbox,
+                    require_quote=self._policy.evidence_require_quote,
+                )
+                if not is_verifiable:
                     merged_dimension_warnings = merge_unique_warnings(
                         merged_dimension_warnings,
-                        ["unverifiable_evidence_for_scoring"],
-                    )
-                    if item.get("bbox") is None:
-                        merged_dimension_warnings = merge_unique_warnings(
-                            merged_dimension_warnings,
-                            ["missing_bbox"],
-                        )
-                    continue
-                bbox = item.get("bbox")
-                if not isinstance(bbox, list) or len(bbox) != 4:
-                    merged_dimension_warnings = merge_unique_warnings(
-                        merged_dimension_warnings,
-                        ["missing_bbox"],
+                        verifiability_warnings,
                     )
                     continue
                 verifiable_items.append(
                     {
                         "chunk_id": item.get("chunk_id"),
                         "page_idx": item.get("page_idx"),
-                        "bbox": bbox,
+                        "bbox": item.get("bbox"),
                         "text": str(item.get("text", "")),
                     }
                 )
@@ -279,6 +285,7 @@ class OpenAIMcpAgentExecutor:
                 for key, dim in dimensions.items()
             },
         }
+        dimension_default_options = self._build_dimension_default_options(dimensions)
         loop_result = run_tool_calling_loop(
             client=client,
             model=self._model,
@@ -287,6 +294,10 @@ class OpenAIMcpAgentExecutor:
             retrieve_fn=self._retrieve_fn,
             default_top_k=self._top_k,
             default_mode=self._mode,
+            dimension_default_options=dimension_default_options,
+            require_page_idx=self._policy.evidence_require_page_idx,
+            require_bbox=self._policy.evidence_require_bbox,
+            require_quote=self._policy.evidence_require_quote,
             max_chars=self._max_chars,
             max_turns=self._max_turns,
             system_prompt=self._policy.tool_calling_system_prompt(),
@@ -301,6 +312,7 @@ class OpenAIMcpAgentExecutor:
                 "turns": loop_result.turns,
                 "tool_call_count": loop_result.tool_call_count,
                 "tool_names": list(loop_result.tool_names),
+                "dimension_default_options": dimension_default_options,
             },
         )
 
@@ -350,6 +362,20 @@ class OpenAIMcpAgentExecutor:
         if not isinstance(parsed, dict):
             raise RuntimeError("agent_mcp_invalid_payload")
         return parsed
+
+    def _build_dimension_default_options(
+        self,
+        dimensions: dict[str, Any],
+    ) -> dict[str, dict[str, int | str]]:
+        output: dict[str, dict[str, int | str]] = {}
+        for dimension in dimensions:
+            mode, top_k = self._policy.resolve_dimension_defaults(
+                dimension,
+                fallback_mode=self._mode,
+                fallback_top_k=self._top_k,
+            )
+            output[dimension] = {"mode": mode, "top_k": top_k}
+        return output
 
 
 def _build_openai_client() -> OpenAI:

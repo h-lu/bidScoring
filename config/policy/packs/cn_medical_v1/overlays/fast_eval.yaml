@@ -1,0 +1,10 @@
+name: fast_eval
+
+policy:
+  workflow:
+    max_turns_default: 4
+  retrieval:
+    default_mode: keyword
+    default_top_k: 5
+  evidence_gate:
+    default_min_citations: 1

@@ -6,8 +6,8 @@ from typing import Any, Callable
 
 from .scoring_common import merge_unique_warnings
 from .scoring_agent_support import (
+    evaluate_evidence_item,
     extract_message_content,
-    is_verifiable_item,
     safe_int,
     sanitize_keywords,
 )
@@ -35,6 +35,10 @@ def run_tool_calling_loop(
     retrieve_fn: Callable[..., dict[str, Any]],
     default_top_k: int,
     default_mode: str,
+    dimension_default_options: dict[str, dict[str, int | str]],
+    require_page_idx: bool,
+    require_bbox: bool,
+    require_quote: bool,
     max_chars: int,
     max_turns: int,
     system_prompt: str,
@@ -90,6 +94,10 @@ def run_tool_calling_loop(
                     version_id=str(request_payload.get("version_id", "")),
                     default_top_k=default_top_k,
                     default_mode=default_mode,
+                    dimension_default_options=dimension_default_options,
+                    require_page_idx=require_page_idx,
+                    require_bbox=require_bbox,
+                    require_quote=require_quote,
                     max_chars=max_chars,
                     evidence_payload=evidence_payload,
                     dimension_warning_map=dimension_warning_map,
@@ -183,6 +191,10 @@ def _execute_retrieve_tool(
     version_id: str,
     default_top_k: int,
     default_mode: str,
+    dimension_default_options: dict[str, dict[str, int | str]],
+    require_page_idx: bool,
+    require_bbox: bool,
+    require_quote: bool,
     max_chars: int,
     evidence_payload: dict[str, list[dict[str, Any]]],
     dimension_warning_map: dict[str, list[str]],
@@ -215,16 +227,27 @@ def _execute_retrieve_tool(
     if not isinstance(query, str) or not query.strip():
         query = " ".join(dim_config.keywords)
 
+    dimension_defaults = dimension_default_options.get(dimension, {})
+    dimension_default_top_k = safe_int(
+        dimension_defaults.get("top_k"),
+        default=default_top_k,
+    )
+    if dimension_default_top_k <= 0:
+        dimension_default_top_k = default_top_k
+    dimension_default_mode = dimension_defaults.get("mode")
+    if dimension_default_mode not in {"hybrid", "keyword", "vector"}:
+        dimension_default_mode = default_mode
+
     top_k_raw = args.get("top_k")
     top_k = (
-        min(max(1, safe_int(top_k_raw, default=default_top_k)), 50)
+        min(max(1, safe_int(top_k_raw, default=dimension_default_top_k)), 50)
         if top_k_raw is not None
-        else default_top_k
+        else dimension_default_top_k
     )
 
     mode = args.get("mode")
     if mode not in {"hybrid", "keyword", "vector"}:
-        mode = default_mode
+        mode = str(dimension_default_mode)
 
     keywords = args.get("keywords")
     if isinstance(keywords, list):
@@ -258,14 +281,17 @@ def _execute_retrieve_tool(
             merged_dimension_warnings,
             list(item.get("warnings", [])),
         )
-        if not is_verifiable_item(item):
+        is_verifiable, verifiability_warnings = evaluate_evidence_item(
+            item,
+            require_page_idx=require_page_idx,
+            require_bbox=require_bbox,
+            require_quote=require_quote,
+        )
+        if not is_verifiable:
             merged_dimension_warnings = merge_unique_warnings(
-                merged_dimension_warnings, ["unverifiable_evidence_for_scoring"]
+                merged_dimension_warnings,
+                verifiability_warnings,
             )
-            if item.get("bbox") is None:
-                merged_dimension_warnings = merge_unique_warnings(
-                    merged_dimension_warnings, ["missing_bbox"]
-                )
             continue
         verifiable_items.append(
             {
