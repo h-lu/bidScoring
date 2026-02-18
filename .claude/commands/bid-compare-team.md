@@ -1,22 +1,16 @@
----
-description: "通过强制多代理协作执行多投标方对比审核"
-argument-hint: "<version_id_A> <version_id_B> [version_id_C ...]"
----
+# /bid-compare-team
 
-# 投标审核团队（多文档对比）
+用途：比较两个运行结果（baseline/candidate）并输出差异报告。
 
-本任务使用 `bid-team-orchestrator`：
+建议输入：
+- baseline 结果文件路径
+- candidate 结果文件路径
 
-`$ARGUMENTS`
+推荐命令：
 
-执行要求：
-1. 至少提供两个 `version_id`。
-2. 每个投标方使用同一评分口径完成取证与评分。
-3. 排序前必须执行跨版本追溯审计。
-4. 最终仅返回单个严格 JSON 对象。
-
-JSON 最低字段要求：
-- `ranking`
-- `bidders`
-- `cross_bid_findings`
-- `warnings`
+```bash
+uv run python scripts/compare_scoring_runs.py \
+  --baseline data/eval/scoring_compare/runs/<baseline>.json \
+  --candidate data/eval/scoring_compare/runs/<candidate>.json \
+  --output data/eval/scoring_compare/runs/<report>.json
+```

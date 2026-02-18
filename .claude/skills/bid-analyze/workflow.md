@@ -1,22 +1,19 @@
-# 工作流
+# Workflow
 
-## 阶段一：取证
-1. 校验 `version_id`。
-2. 生成各维度查询词。
-3. 通过 MCP 检索并核验证据。
-4. 产出 `evidence_pack`。
+## 阶段 1：Retrieval
 
-## 阶段二：评分
-1. 消费 `evidence_pack`。
-2. 应用 rubric 和策略规则。
-3. 产出 `scoring_pack`。
+1. 明确要评估的维度
+2. 逐维度调用 `retrieve_dimension_evidence`
+3. 汇总证据与来源位置
 
-## 阶段三：追溯审核
-1. 审计 `scoring_pack` 的引用完整性。
-2. 校验高亮可用性。
-3. 产出 `traceability_pack`。
+## 阶段 2：Scoring
 
-## 参数类型防错
-1. `page_idx`: int or int[].
-2. `page_range`: [start, end] array.
-3. 数组参数禁止字符串化。
+1. 依据 `rubric.md` 计算维度分
+2. 聚合总分并给风险等级
+3. 对证据不足维度保持中性分
+
+## 阶段 3：Traceability
+
+1. 检查每条引用是否包含 `chunk_id/page_idx/bbox`
+2. 统计 `citation_coverage_ratio`
+3. 输出 `warnings` 与 `highlight_ready_chunk_ids`

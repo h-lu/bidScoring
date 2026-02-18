@@ -1,36 +1,40 @@
----
-name: bid-analyze
-description: 在投标评审场景使用，要求证据优先评分并强制总控与专职代理协作。
----
+# bid-analyze Skill
 
-# 投标分析 Skill
+## 1. Skill 目标
 
-## 协作模式
-本 skill 强制使用多代理协作：
-1. `bid-team-orchestrator`（总控）
-2. `bid-team-evidence`
-3. `bid-team-scoring`
-4. `bid-team-traceability`
+在投标文档分析中执行 evidence-first 流程：
+- 先取证
+- 再评分
+- 最后追溯校验
 
-执行顺序：
-1. 取证
-2. 评分
-3. 追溯审核
-4. 汇总最终 JSON
+## 2. 输入
 
-## 硬规则
-1. 未取证前禁止评分。
-2. 禁止使用 MCP 证据之外的外部事实。
-3. 证据不足时该维度给 `50` 分并加 warning。
-4. 每条被采纳结论必须可追溯到 PDF 字段：
-   - `version_id`
-   - `chunk_id`
-   - `page_idx`
-   - `bbox`
-   - `quote`
+- `version_id`
+- 维度列表（可选）
+- 项目上下文（`bidder_name`、`project_name`）
 
-## 参考文件
-1. `workflow.md`
-2. `rubric.md`
-3. `prompt.md`
-4. `examples.md`
+## 3. 输出
+
+- `scoring_pack`（总分、维度分、风险、建议）
+- `evidence_pack`（按维度证据）
+- `traceability_pack`（可定位率、告警、可高亮 chunk）
+
+## 4. 硬约束
+
+- 必须先调用检索工具
+- 禁止使用文档外知识
+- 证据不足时给中性分并告警
+- 风险等级只允许 `low/medium/high`
+
+## 5. 执行流程
+
+1. 按 `workflow.md` 先做 retrieval
+2. 按 `rubric.md` 做评分
+3. 按 traceability 规则做证据校验
+4. 生成结构化 JSON 输出
+
+## 6. 同步校验
+
+```bash
+uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```
