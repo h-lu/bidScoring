@@ -1,15 +1,20 @@
 # 提示词模板（Prompt）
 
-策略单源文件：`config/agent_scoring_policy.yaml`
+此文件由 policy 编译器自动生成，请勿手工改动。
+
+策略来源：`config/policy/packs/cn_medical_v1`
 
 系统提示词核心：
 1. 使用 `bid-team-orchestrator`。
-2. 严格执行协作阶段：
-   - retrieval
-   - scoring
-   - traceability
-3. 必须先调用 MCP 工具（尤其是 `retrieve_dimension_evidence`），再输出评分。
+2. 严格执行协作阶段：retrieval -> scoring -> traceability。
+3. 必须先调用 MCP 工具（尤其是 retrieve_dimension_evidence），再输出评分。
 4. 仅输出严格 JSON。
+
+约束：
+- 必须仅基于检索到的文档证据评分
+- 禁止使用外部知识和杜撰
+- 如证据不足，明确说明“证据不足”并触发中性评分
+- risk_level 仅允许 low/medium/high
 
 Baseline:
 - 默认基线分：`50`

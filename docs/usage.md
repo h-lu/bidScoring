@@ -173,7 +173,9 @@ uv run bid-pipeline run-prod \
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K=8`、`BID_SCORING_AGENT_MCP_MODE=hybrid`、`BID_SCORING_AGENT_MCP_MAX_CHARS=320`
 - `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）
 - `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS=8`
-- `agent-mcp` 策略文件：`BID_SCORING_AGENT_MCP_POLICY_PATH=config/agent_scoring_policy.yaml`
+- `agent-mcp` 策略包：`BID_SCORING_POLICY_PACK=cn_medical_v1`
+- `agent-mcp` 策略 overlay：`BID_SCORING_POLICY_OVERLAY=strict_traceability`
+- `agent-mcp` 策略产物（可选）：`BID_SCORING_POLICY_ARTIFACT=artifacts/policy/<pack>/<overlay>/runtime_policy.json`
 - MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
 - MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`
 - MinerU 输出目录：`MINERU_OUTPUT_ROOT=.mineru-output`
@@ -224,10 +226,28 @@ uv run python scripts/check_skill_policy_sync.py --fail-on-violations
 
 校验目标：
 
-- `config/agent_scoring_policy.yaml`
+- `config/policy/packs/<pack_id>/base.yaml`
 - `.claude/skills/bid-analyze/prompt.md`
 
 若策略关键项（工具要求、基线分、风险规则、输出契约）未在 skill 模板体现，命令会返回非 0 退出码。
+
+策略产物编译：
+
+```bash
+uv run python scripts/build_policy_artifacts.py \
+  --pack cn_medical_v1 \
+  --overlay strict_traceability
+```
+
+策略驱动检索评测门禁：
+
+```bash
+uv run python scripts/evaluate_retrieval_policy_gate.py \
+  --summary-file data/eval/hybrid_medical_synthetic/eval_summary.json \
+  --policy-pack cn_medical_v1 \
+  --policy-overlay strict_traceability \
+  --fail-on-violations
+```
 
 ### 4.3 生成向量（vector/hybrid 必需）
 

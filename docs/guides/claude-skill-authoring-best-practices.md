@@ -48,7 +48,7 @@
 
 ## 4. 质量门禁（必须保留）
 
-策略单源：`config/agent_scoring_policy.yaml`  
+策略单源：`config/policy/packs/<pack_id>/base.yaml`（按 overlay 叠加）  
 一致性校验：
 
 ```bash

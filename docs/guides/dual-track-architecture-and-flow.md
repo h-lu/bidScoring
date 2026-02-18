@@ -128,7 +128,7 @@
 
 1. 日常生产：`run-prod`（默认 `hybrid`）。
 2. 争议条款复核/深挖：Claude Skill + MCP。
-3. 新策略定稿后，再回灌到 `agent_scoring_policy.yaml` 与系统代码。
+3. 新策略定稿后，直接更新 `config/policy/packs/<pack_id>/base.yaml` 与 overlay，并重新编译策略产物。
 
 ---
 
@@ -180,4 +180,3 @@
 1. `agent-mcp` 在不同样本上仍有分数波动，稳定性需继续优化。
 2. `agent-mcp` 当前是“按维度评分”，不是“逐题逐问执行器”。
 3. 若需完全 question-level 评分，需要单独落地“题目执行器层”。
-

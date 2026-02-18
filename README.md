@@ -113,7 +113,9 @@ uv run bid-pipeline run-prod \
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K`、`BID_SCORING_AGENT_MCP_MODE`、`BID_SCORING_AGENT_MCP_MAX_CHARS`。
 - `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）。
 - `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS`（默认 `8`）。
-- `agent-mcp` 评分策略单源：`BID_SCORING_AGENT_MCP_POLICY_PATH`（默认 `config/agent_scoring_policy.yaml`）。
+- `agent-mcp` 策略包：`BID_SCORING_POLICY_PACK`（默认 `cn_medical_v1`）。
+- `agent-mcp` 策略 overlay：`BID_SCORING_POLICY_OVERLAY`（默认 `strict_traceability`）。
+- `agent-mcp` 运行时策略产物（可选）：`BID_SCORING_POLICY_ARTIFACT=artifacts/policy/<pack>/<overlay>/runtime_policy.json`。
 - `agent-mcp` 运行时 trace：`BID_SCORING_AGENT_MCP_TRACE_STDOUT=1`。
 - `agent-mcp` trace 落盘：`BID_SCORING_AGENT_MCP_TRACE_SAVE=1`、`BID_SCORING_AGENT_MCP_TRACE_DIR=<DIR>`。
 - MinerU CLI 模式可通过 `MINERU_PDF_COMMAND` 自定义命令模板（占位符：`{pdf_path}`、`{output_dir}`）。
@@ -239,6 +241,24 @@ Skill/策略一致性门禁：
 
 ```bash
 uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```
+
+策略产物编译：
+
+```bash
+uv run python scripts/build_policy_artifacts.py \
+  --pack cn_medical_v1 \
+  --overlay strict_traceability
+```
+
+策略驱动检索评测门禁（读取 policy 的 `retrieval.evaluation_thresholds`）：
+
+```bash
+uv run python scripts/evaluate_retrieval_policy_gate.py \
+  --summary-file data/eval/hybrid_medical_synthetic/eval_summary.json \
+  --policy-pack cn_medical_v1 \
+  --policy-overlay strict_traceability \
+  --fail-on-violations
 ```
 
 两次真实评分结果对比（baseline vs candidate）：
