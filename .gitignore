@@ -34,6 +34,7 @@ Thumbs.db
 .serena/memories/
 *.pdf
 !data/**/*.pdf
+artifacts/
 tmp/
 temp/
 
