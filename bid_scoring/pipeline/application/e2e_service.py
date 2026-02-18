@@ -194,6 +194,9 @@ class E2EPipelineService:
             "scoring_backend": request.scoring_backend,
             "embeddings_enabled": request.build_embeddings,
         }
+        backend_obs = scoring_result.get("backend_observability")
+        if isinstance(backend_obs, dict) and backend_obs:
+            observability["agent"] = dict(backend_obs)
         if resolved_question.question_context is not None:
             observability["question_bank"] = {
                 "pack_id": resolved_question.question_context.pack_id,

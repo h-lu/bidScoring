@@ -24,6 +24,7 @@ venv/
 *.swo
 # .claude  # Allow skill files to be committed
 .deepeval
+.claude/logs/
 
 # OS
 .DS_Store
@@ -33,6 +34,7 @@ Thumbs.db
 .serena/memories/
 *.pdf
 !data/**/*.pdf
+artifacts/
 tmp/
 temp/
 

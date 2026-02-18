@@ -32,6 +32,7 @@ class ScoringResult:
     evidence_citations: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     dimensions: dict[str, dict[str, Any]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    backend_observability: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class ScoringResult:
             },
             "dimensions": dict(self.dimensions),
             "warnings": list(self.warnings),
+            "backend_observability": dict(self.backend_observability),
         }
 
 

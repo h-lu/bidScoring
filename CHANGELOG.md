@@ -38,6 +38,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - compares baseline/candidate outputs and reports metric deltas + warning diffs
 - First archived real run output:
   - `data/eval/scoring_compare/runs/2026-02-14-run-prod-hybrid-synthetic-bidder-A.json`
+- Agent/MCP tool-calling test coverage:
+  - `tests/unit/pipeline/test_scoring_agent_tool_loop.py`
+- Agent scoring policy pack system:
+  - `config/policy/packs/<pack_id>/base.yaml`
+  - `config/policy/packs/<pack_id>/overlays/*.yaml`
+  - `scripts/build_policy_artifacts.py`
+- Skill/policy sync gate:
+  - `scripts/check_skill_policy_sync.py`
+  - `tests/unit/test_skill_policy_sync.py`
 
 ### Changed
 - Retrieval MCP server refactored into modular operations:
@@ -53,6 +62,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Documentation updated in `docs/usage.md` and MCP docs.
 - `run-e2e` default scoring backend changed to `hybrid`.
 - CI workflow now runs scoring backend regression gate.
+- `agent-mcp` 默认模型调整为 `gpt-5-mini`（可通过 `BID_SCORING_AGENT_MCP_MODEL` 覆盖）。
+- `agent-mcp` 提示词约束增强（仅基于证据、证据不足需明确说明）。
+- `agent-mcp` 在维度无可验证证据时改为中性评分并追加告警（warning-first）。
+- `agent-mcp` 执行路径升级为默认 `tool-calling`（保留 `bulk` 回退）：
+  - 新增 `BID_SCORING_AGENT_MCP_EXECUTION_MODE` 与 `BID_SCORING_AGENT_MCP_MAX_TURNS`
+  - 引入 `scoring_agent_support.py` 与 `scoring_agent_tool_loop.py`，拆分证据归一化与工具循环逻辑
+- `agent-mcp` 新增策略加载层：
+  - `scoring_agent_policy.py` 从 policy pack/artifact 加载约束/risk/output/retrieval/evidence gate 口径
+- E2E observability 增补 agent 运行元信息：
+  - `observability.agent.execution_mode/turns/tool_call_count/tool_names/trace_id`
 
 ### Removed
 - Legacy MinerU coordinator chain:

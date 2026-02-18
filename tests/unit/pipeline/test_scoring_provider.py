@@ -441,6 +441,7 @@ def test_openai_mcp_agent_executor_parses_json_and_filters_unverifiable_evidence
         retrieve_fn=_fake_retrieve,
         client=_Client(),
         model="test-model",
+        execution_mode="bulk",
     )
 
     result = executor.score(
@@ -501,3 +502,153 @@ def test_openai_mcp_agent_executor_can_be_disabled_by_env(monkeypatch):
 
     # Ensure test does not leak env mutation if monkeypatch behavior changes.
     assert os.getenv("BID_SCORING_AGENT_MCP_DISABLE") == "1"
+
+
+def test_openai_mcp_agent_executor_default_model_is_gpt5_mini(monkeypatch):
+    monkeypatch.delenv("BID_SCORING_AGENT_MCP_MODEL", raising=False)
+
+    captured_create_kwargs: dict[str, object] = {}
+
+    class _Message:
+        def __init__(self, content):
+            self.content = content
+
+    class _Choice:
+        def __init__(self, content):
+            self.message = _Message(content)
+
+    class _Response:
+        def __init__(self, content):
+            self.choices = [_Choice(content)]
+
+    class _Completions:
+        def create(self, **kwargs):
+            captured_create_kwargs.update(kwargs)
+            return _Response(
+                """
+                {
+                  "overall_score": 80,
+                  "risk_level": "medium",
+                  "total_risks": 1,
+                  "total_benefits": 1,
+                  "recommendations": [],
+                  "dimensions": {
+                    "warranty": {"score": 80, "risk_level": "medium", "summary": "ok"}
+                  }
+                }
+                """
+            )
+
+    class _Chat:
+        def __init__(self):
+            self.completions = _Completions()
+
+    class _Client:
+        def __init__(self):
+            self.chat = _Chat()
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=lambda **kwargs: {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "c1",
+                    "page_idx": 0,
+                    "bbox": [1, 2, 3, 4],
+                    "text": "质保条款",
+                    "evidence_status": "verified",
+                    "warnings": [],
+                }
+            ],
+        },
+        client=_Client(),
+    )
+
+    _ = executor.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+            dimensions=["warranty"],
+        )
+    )
+
+    assert captured_create_kwargs["model"] == "gpt-5-mini"
+    assert (
+        captured_create_kwargs["tools"][0]["function"]["name"]
+        == "retrieve_dimension_evidence"
+    )
+
+
+def test_openai_mcp_agent_executor_applies_neutral_score_when_no_verifiable_evidence():
+    class _Message:
+        def __init__(self, content):
+            self.content = content
+
+    class _Choice:
+        def __init__(self, content):
+            self.message = _Message(content)
+
+    class _Response:
+        def __init__(self, content):
+            self.choices = [_Choice(content)]
+
+    class _Completions:
+        def create(self, **kwargs):
+            _ = kwargs
+            return _Response(
+                """
+                {
+                  "overall_score": 95,
+                  "risk_level": "low",
+                  "total_risks": 0,
+                  "total_benefits": 2,
+                  "recommendations": [],
+                  "dimensions": {
+                    "warranty": {"score": 95, "risk_level": "low", "summary": "模型高分"}
+                  }
+                }
+                """
+            )
+
+    class _Chat:
+        def __init__(self):
+            self.completions = _Completions()
+
+    class _Client:
+        def __init__(self):
+            self.chat = _Chat()
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=lambda **kwargs: {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "c-no-bbox",
+                    "page_idx": 1,
+                    "bbox": None,
+                    "text": "无法定位证据",
+                    "evidence_status": "unverifiable",
+                    "warnings": ["missing_bbox"],
+                }
+            ],
+        },
+        client=_Client(),
+        model="test-model",
+        execution_mode="bulk",
+    )
+
+    result = executor.score(
+        ScoringRequest(
+            version_id="33333333-3333-3333-3333-333333333333",
+            bidder_name="A公司",
+            project_name="示例项目",
+            dimensions=["warranty"],
+        )
+    )
+
+    assert "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
+    assert result.dimensions["warranty"]["score"] == 50.0
+    assert result.dimensions["warranty"]["risk_level"] == "medium"
+    assert result.dimensions["warranty"]["chunks_found"] == 0
+    assert result.dimensions["warranty"]["summary"] == "证据不足，按中性评分处理"

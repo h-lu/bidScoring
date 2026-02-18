@@ -1,0 +1,40 @@
+{
+  "version_id": "5d872d53-cbd5-4e78-baba-972059cc27e1",
+  "overall_score": 66,
+  "risk_level": "low",
+  "total_risks": 0,
+  "total_benefits": 7,
+  "dimension_scores": [
+    {
+      "key": "warranty",
+      "score": 65,
+      "risk_level": "low"
+    },
+    {
+      "key": "delivery",
+      "score": 60,
+      "risk_level": "low"
+    },
+    {
+      "key": "training",
+      "score": 60,
+      "risk_level": "low"
+    },
+    {
+      "key": "financial",
+      "score": 55,
+      "risk_level": "medium"
+    },
+    {
+      "key": "technical",
+      "score": 60,
+      "risk_level": "low"
+    },
+    {
+      "key": "compliance",
+      "score": 60,
+      "risk_level": "low"
+    }
+  ],
+  "warnings": []
+}

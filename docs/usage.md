@@ -145,6 +145,7 @@ uv run bid-pipeline run-prod \
 - 默认问题集是 `cn_medical_v1`，默认策略是 `strict_traceability`。
 - `analyzer / agent-mcp / hybrid` 会统一使用问题集解析出的维度与关键词；不显式传 `--dimensions` 时使用问题集全部维度。
 - `agent-mcp` 使用 LLM + 检索 MCP 评分，且仅基于可定位证据（不可定位内容会告警且不参与打分）。
+- `agent-mcp` 默认执行模式是 `tool-calling`：模型先调用检索工具逐步探索证据，再输出评分 JSON。
 - `agent-mcp` 执行失败会自动降级到基线评分，并追加告警：`scoring_backend_agent_mcp_fallback`。
 - `hybrid` 会融合 `agent-mcp`（主）与 `analyzer`（辅）结果，输出综合评分与合并告警。
 - 评分输出包含 `evidence_citations`，按维度提供 `chunk_id/page_idx/bbox`，用于事实追溯与 PDF 高亮。
@@ -168,8 +169,13 @@ uv run bid-pipeline run-prod \
 - 默认文件：`config/scoring_rules.yaml`
 - 自定义路径：设置环境变量 `BID_SCORING_RULES_PATH=/path/to/scoring_rules.yaml`
 - `hybrid` 权重：`BID_SCORING_HYBRID_PRIMARY_WEIGHT=0.7`（可被 CLI 参数覆盖）
-- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL=gpt-4o-mini`
+- `agent-mcp` 模型：`BID_SCORING_AGENT_MCP_MODEL=gpt-5-mini`
 - `agent-mcp` 检索参数：`BID_SCORING_AGENT_MCP_TOP_K=8`、`BID_SCORING_AGENT_MCP_MODE=hybrid`、`BID_SCORING_AGENT_MCP_MAX_CHARS=320`
+- `agent-mcp` 执行模式：`BID_SCORING_AGENT_MCP_EXECUTION_MODE=tool-calling|bulk`（默认 `tool-calling`）
+- `agent-mcp` 最大探索轮次：`BID_SCORING_AGENT_MCP_MAX_TURNS=8`
+- `agent-mcp` 策略包：`BID_SCORING_POLICY_PACK=cn_medical_v1`
+- `agent-mcp` 策略 overlay：`BID_SCORING_POLICY_OVERLAY=strict_traceability`
+- `agent-mcp` 策略产物（可选）：`BID_SCORING_POLICY_ARTIFACT=artifacts/policy/<pack>/<overlay>/runtime_policy.json`
 - MinerU 解析模式：`MINERU_PDF_PARSER=auto|cli|api`
 - MinerU 命令模板（CLI 模式）：`MINERU_PDF_COMMAND=\"magic-pdf -p {pdf_path} -o {output_dir}\"`
 - MinerU 输出目录：`MINERU_OUTPUT_ROOT=.mineru-output`
@@ -211,6 +217,37 @@ uv run python scripts/compare_scoring_runs.py \
 - 核心指标差值：`overall_score`、`coverage_ratio`、`citation_count_total`、`chunks_analyzed`
 - 分维度得分差值：`delta.dimension_scores`
 - 告警变化：`warnings_added`、`warnings_removed`
+
+Skill 与策略一致性门禁：
+
+```bash
+uv run python scripts/check_skill_policy_sync.py --fail-on-violations
+```
+
+校验目标：
+
+- `config/policy/packs/<pack_id>/base.yaml`
+- `.claude/skills/bid-analyze/prompt.md`
+
+若策略关键项（工具要求、基线分、风险规则、输出契约）未在 skill 模板体现，命令会返回非 0 退出码。
+
+策略产物编译：
+
+```bash
+uv run python scripts/build_policy_artifacts.py \
+  --pack cn_medical_v1 \
+  --overlay strict_traceability
+```
+
+策略驱动检索评测门禁：
+
+```bash
+uv run python scripts/evaluate_retrieval_policy_gate.py \
+  --summary-file data/eval/hybrid_medical_synthetic/eval_summary.json \
+  --policy-pack cn_medical_v1 \
+  --policy-overlay strict_traceability \
+  --fail-on-violations
+```
 
 ### 4.3 生成向量（vector/hybrid 必需）
 

@@ -1,0 +1,45 @@
+你现在在本项目中执行投标评分，必须使用 bid-analyze skill，并调用 bid-scoring MCP 工具完成先取证后评分。
+
+任务：对 version_id=3ea2532c-6209-41bb-a91f-efc5d5cd9712 做完整 6 维评分：
+- warranty
+- delivery
+- training
+- financial
+- technical
+- compliance
+
+硬性要求：
+1) 必须先调用 MCP 工具检索证据，再输出评分。
+2) 每个维度至少输出 1 条 evidence；若证据不足，该维度 score=50 并写 warning。
+3) 每条 evidence 必须包含：version_id, chunk_id, page_idx, bbox, quote。
+4) 禁止杜撰、禁止文档外知识。
+5) 仅输出一个严格 JSON 对象，不要 markdown 代码块，不要额外解释。
+
+输出 schema：
+{
+  "version_id": "string",
+  "overall_score": 0,
+  "risk_level": "low|medium|high",
+  "total_risks": 0,
+  "total_benefits": 0,
+  "recommendations": ["string"],
+  "dimensions": [
+    {
+      "key": "warranty|delivery|training|financial|technical|compliance",
+      "score": 0,
+      "risk_level": "low|medium|high",
+      "reasoning": "string",
+      "evidence": [
+        {
+          "version_id": "string",
+          "chunk_id": "string",
+          "page_idx": 0,
+          "bbox": [0,0,0,0],
+          "quote": "string"
+        }
+      ],
+      "warnings": ["string"]
+    }
+  ],
+  "warnings": ["string"]
+}

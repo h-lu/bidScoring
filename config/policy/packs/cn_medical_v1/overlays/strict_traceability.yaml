@@ -1,0 +1,9 @@
+name: strict_traceability
+
+policy:
+  workflow:
+    max_turns_default: 10
+  retrieval:
+    default_top_k: 10
+  evidence_gate:
+    default_min_citations: 2

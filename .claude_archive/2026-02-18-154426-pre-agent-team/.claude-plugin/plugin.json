@@ -1,0 +1,21 @@
+{
+  "name": "bid-review-team",
+  "version": "0.1.0",
+  "description": "Agent-team plugin for evidence-first tender review using bid-scoring MCP.",
+  "author": {
+    "name": "bidScoring",
+    "email": "maintainer@bid-scoring.local",
+    "url": "https://github.com/h-lu/bidScoring"
+  },
+  "homepage": "https://github.com/h-lu/bidScoring",
+  "repository": "https://github.com/h-lu/bidScoring",
+  "license": "MIT",
+  "keywords": [
+    "bid",
+    "tender",
+    "evaluation",
+    "mcp",
+    "agent-team",
+    "traceability"
+  ]
+}

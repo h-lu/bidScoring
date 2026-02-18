@@ -4,11 +4,20 @@ import json
 import logging
 import os
 from typing import Any
+from uuid import uuid4
 
 from openai import OpenAI
 
 from bid_scoring.config import load_settings
 
+from .scoring_agent_policy import AgentScoringPolicy, load_agent_scoring_policy
+from .scoring_agent_support import (
+    evaluate_evidence_item,
+    normalize_agent_result,
+    read_int_env,
+    resolve_dimensions,
+)
+from .scoring_agent_tool_loop import run_tool_calling_loop
 from .scoring_common import merge_unique_warnings
 from .scoring_types import (
     AgentMcpExecutor,
@@ -59,11 +68,12 @@ class AgentMcpScoringProvider:
                 },
                 dimensions=dict(fallback.dimensions),
                 warnings=warnings,
+                backend_observability=dict(fallback.backend_observability),
             )
 
 
 class OpenAIMcpAgentExecutor:
-    """Score bids with LLM over evidence retrieved via retrieval MCP."""
+    """Score bids with LLM over retrieval MCP evidence."""
 
     def __init__(
         self,
@@ -74,24 +84,48 @@ class OpenAIMcpAgentExecutor:
         top_k: int | None = None,
         mode: str | None = None,
         max_chars: int | None = None,
+        execution_mode: str | None = None,
+        max_turns: int | None = None,
+        policy: AgentScoringPolicy | None = None,
     ) -> None:
         self._retrieve_fn = retrieve_fn or _default_retrieve_fn
         self._client = client
-        self._model = model or os.getenv("BID_SCORING_AGENT_MCP_MODEL", "gpt-4o-mini")
+        self._model = model or os.getenv("BID_SCORING_AGENT_MCP_MODEL", "gpt-5-mini")
+        self._policy = policy or load_agent_scoring_policy()
+
         resolved_top_k = top_k
         if resolved_top_k is None:
-            resolved_top_k = _read_int_env("BID_SCORING_AGENT_MCP_TOP_K", 8)
+            resolved_top_k = read_int_env(
+                "BID_SCORING_AGENT_MCP_TOP_K",
+                self._policy.retrieval_default_top_k,
+            )
         self._top_k = max(1, int(resolved_top_k))
-        self._mode = mode or os.getenv("BID_SCORING_AGENT_MCP_MODE", "hybrid")
+
+        resolved_mode = mode or os.getenv("BID_SCORING_AGENT_MCP_MODE")
+        if resolved_mode not in {"hybrid", "keyword", "vector"}:
+            resolved_mode = self._policy.retrieval_default_mode
+        self._mode = str(resolved_mode)
+
         resolved_max_chars = max_chars
         if resolved_max_chars is None:
-            resolved_max_chars = _read_int_env("BID_SCORING_AGENT_MCP_MAX_CHARS", 320)
+            resolved_max_chars = read_int_env("BID_SCORING_AGENT_MCP_MAX_CHARS", 320)
         self._max_chars = max(64, int(resolved_max_chars))
+
+        self._execution_mode = _resolve_execution_mode(execution_mode)
+
+        resolved_max_turns = max_turns
+        if resolved_max_turns is None:
+            resolved_max_turns = read_int_env(
+                "BID_SCORING_AGENT_MCP_MAX_TURNS",
+                self._policy.max_turns_default,
+            )
+        self._max_turns = max(1, int(resolved_max_turns))
 
     def score(self, request: ScoringRequest) -> ScoringResult:
         if _is_agent_mcp_disabled():
             raise RuntimeError("agent_mcp_disabled")
-        dimensions = _resolve_dimensions(
+
+        dimensions = resolve_dimensions(
             request.dimensions,
             keyword_overrides=(
                 request.question_context.keywords_by_dimension
@@ -102,16 +136,62 @@ class OpenAIMcpAgentExecutor:
         if not dimensions:
             raise RuntimeError("No valid scoring dimensions")
 
+        if self._execution_mode == "bulk":
+            (
+                agent_json,
+                evidence_payload,
+                dimension_warning_map,
+                evidence_warnings,
+                backend_observability,
+            ) = self._run_bulk_mode(request=request, dimensions=dimensions)
+        else:
+            (
+                agent_json,
+                evidence_payload,
+                dimension_warning_map,
+                evidence_warnings,
+                backend_observability,
+            ) = self._run_tool_calling_mode(request=request, dimensions=dimensions)
+
+        return normalize_agent_result(
+            agent_json=agent_json,
+            dimensions=dimensions,
+            evidence_payload=evidence_payload,
+            dimension_warning_map=dimension_warning_map,
+            evidence_warnings=evidence_warnings,
+            backend_observability={
+                **backend_observability,
+                "trace_id": f"agent-mcp-{uuid4()}",
+            },
+        )
+
+    def _run_bulk_mode(
+        self,
+        *,
+        request: ScoringRequest,
+        dimensions: dict[str, Any],
+    ) -> tuple[
+        dict[str, Any],
+        dict[str, list[dict[str, Any]]],
+        dict[str, list[str]],
+        list[str],
+        dict[str, Any],
+    ]:
         evidence_payload: dict[str, list[dict[str, Any]]] = {}
         evidence_warnings: list[str] = []
         dimension_warning_map: dict[str, list[str]] = {}
+        dimension_default_options = self._build_dimension_default_options(dimensions)
 
         for dim_key, dim in dimensions.items():
+            dim_options = dimension_default_options.get(
+                dim_key,
+                {"mode": self._mode, "top_k": self._top_k},
+            )
             response = self._retrieve_fn(
                 version_id=request.version_id,
                 query=" ".join(dim.keywords),
-                top_k=self._top_k,
-                mode=self._mode,
+                top_k=int(dim_options["top_k"]),
+                mode=str(dim_options["mode"]),
                 keywords=dim.keywords,
                 include_text=True,
                 max_chars=self._max_chars,
@@ -126,23 +206,22 @@ class OpenAIMcpAgentExecutor:
             for item in raw_results:
                 if not isinstance(item, dict):
                     continue
-                item_warnings = list(item.get("warnings", []))
                 merged_dimension_warnings = merge_unique_warnings(
                     merged_dimension_warnings,
-                    item_warnings,
+                    list(item.get("warnings", [])),
                 )
-
-                if not _is_verifiable_item(item):
+                is_verifiable, verifiability_warnings = evaluate_evidence_item(
+                    item,
+                    require_page_idx=self._policy.evidence_require_page_idx,
+                    require_bbox=self._policy.evidence_require_bbox,
+                    require_quote=self._policy.evidence_require_quote,
+                )
+                if not is_verifiable:
                     merged_dimension_warnings = merge_unique_warnings(
                         merged_dimension_warnings,
-                        ["unverifiable_evidence_for_scoring"],
+                        verifiability_warnings,
                     )
-                    if item.get("bbox") is None:
-                        merged_dimension_warnings = merge_unique_warnings(
-                            merged_dimension_warnings, ["missing_bbox"]
-                        )
                     continue
-
                 verifiable_items.append(
                     {
                         "chunk_id": item.get("chunk_id"),
@@ -159,20 +238,81 @@ class OpenAIMcpAgentExecutor:
                 merged_dimension_warnings,
             )
 
-        agent_json = self._call_agent(
+        agent_json = self._call_agent_bulk(
             request=request,
             dimensions=dimensions,
             evidence_payload=evidence_payload,
         )
-        return _normalize_agent_result(
-            agent_json=agent_json,
-            dimensions=dimensions,
-            evidence_payload=evidence_payload,
-            dimension_warning_map=dimension_warning_map,
-            evidence_warnings=evidence_warnings,
+        return (
+            agent_json,
+            evidence_payload,
+            dimension_warning_map,
+            evidence_warnings,
+            {
+                "execution_mode": "bulk",
+                "turns": 1,
+                "tool_call_count": 0,
+                "tool_names": [],
+            },
         )
 
-    def _call_agent(
+    def _run_tool_calling_mode(
+        self,
+        *,
+        request: ScoringRequest,
+        dimensions: dict[str, Any],
+    ) -> tuple[
+        dict[str, Any],
+        dict[str, list[dict[str, Any]]],
+        dict[str, list[str]],
+        list[str],
+        dict[str, Any],
+    ]:
+        client = self._client or _build_openai_client()
+        payload = {
+            "version_id": request.version_id,
+            "bidder_name": request.bidder_name,
+            "project_name": request.project_name,
+            "dimensions": {
+                key: {
+                    "display_name": dim.display_name,
+                    "keywords": dim.keywords,
+                }
+                for key, dim in dimensions.items()
+            },
+        }
+        dimension_default_options = self._build_dimension_default_options(dimensions)
+        loop_result = run_tool_calling_loop(
+            client=client,
+            model=self._model,
+            request_payload=payload,
+            dimensions=dimensions,
+            retrieve_fn=self._retrieve_fn,
+            default_top_k=self._top_k,
+            default_mode=self._mode,
+            dimension_default_options=dimension_default_options,
+            require_page_idx=self._policy.evidence_require_page_idx,
+            require_bbox=self._policy.evidence_require_bbox,
+            require_quote=self._policy.evidence_require_quote,
+            max_chars=self._max_chars,
+            max_turns=self._max_turns,
+            system_prompt=self._policy.tool_calling_system_prompt(),
+        )
+        return (
+            loop_result.agent_json,
+            loop_result.evidence_payload,
+            loop_result.dimension_warning_map,
+            loop_result.evidence_warnings,
+            {
+                "execution_mode": "tool-calling",
+                "turns": loop_result.turns,
+                "tool_call_count": loop_result.tool_call_count,
+                "tool_names": list(loop_result.tool_names),
+                "dimension_default_options": dimension_default_options,
+            },
+        )
+
+    def _call_agent_bulk(
         self,
         *,
         request: ScoringRequest,
@@ -200,13 +340,7 @@ class OpenAIMcpAgentExecutor:
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "你是评标专家。必须仅基于给定证据评分；"
-                        "禁止杜撰。输出严格 JSON："
-                        "{overall_score,risk_level,total_risks,total_benefits,"
-                        "recommendations,dimensions}。"
-                        "dimensions 是对象，key 为维度名，value 含 score/risk_level/summary。"
-                    ),
+                    "content": self._policy.bulk_system_prompt(),
                 },
                 {
                     "role": "user",
@@ -225,44 +359,19 @@ class OpenAIMcpAgentExecutor:
             raise RuntimeError("agent_mcp_invalid_payload")
         return parsed
 
-
-def _resolve_dimensions(
-    selected: list[str] | None,
-    *,
-    keyword_overrides: dict[str, list[str]] | None = None,
-) -> dict[str, Any]:
-    from mcp_servers.bid_analysis.models import ANALYSIS_DIMENSIONS, AnalysisDimension
-
-    if selected is None:
-        selected_names = list(ANALYSIS_DIMENSIONS.keys())
-    else:
-        selected_names = list(selected)
-
-    resolved: dict[str, Any] = {}
-    for name in selected_names:
-        dim = ANALYSIS_DIMENSIONS.get(name)
-        if dim is None:
-            continue
-        if keyword_overrides and name in keyword_overrides:
-            keywords = _sanitize_keywords(keyword_overrides.get(name, []))
-            if keywords:
-                dim = AnalysisDimension(
-                    name=dim.name,
-                    display_name=dim.display_name,
-                    weight=dim.weight,
-                    keywords=keywords,
-                    extract_patterns=dim.extract_patterns,
-                    risk_thresholds=dim.risk_thresholds,
-                )
-        resolved[name] = dim
-    return resolved
-
-
-def _is_verifiable_item(item: dict[str, Any]) -> bool:
-    if item.get("evidence_status") not in {"verified", "verified_with_warnings"}:
-        return False
-    bbox = item.get("bbox")
-    return isinstance(bbox, list) and len(bbox) == 4
+    def _build_dimension_default_options(
+        self,
+        dimensions: dict[str, Any],
+    ) -> dict[str, dict[str, int | str]]:
+        output: dict[str, dict[str, int | str]] = {}
+        for dimension in dimensions:
+            mode, top_k = self._policy.resolve_dimension_defaults(
+                dimension,
+                fallback_mode=self._mode,
+                fallback_top_k=self._top_k,
+            )
+            output[dimension] = {"mode": mode, "top_k": top_k}
+        return output
 
 
 def _build_openai_client() -> OpenAI:
@@ -291,138 +400,19 @@ def _is_agent_mcp_disabled() -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def _extract_message_content(response: Any) -> str:
-    choices = getattr(response, "choices", None)
-    if not choices:
-        return ""
-    message = getattr(choices[0], "message", None)
-    if message is None:
-        return ""
-    content = getattr(message, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict) and isinstance(item.get("text"), str):
-                parts.append(item["text"])
-            elif hasattr(item, "text"):
-                text_val = getattr(item, "text")
-                if isinstance(text_val, str):
-                    parts.append(text_val)
-        return "".join(parts)
-    return ""
-
-
-def _normalize_agent_result(
-    *,
-    agent_json: dict[str, Any],
-    dimensions: dict[str, Any],
-    evidence_payload: dict[str, list[dict[str, Any]]],
-    dimension_warning_map: dict[str, list[str]],
-    evidence_warnings: list[str],
-) -> ScoringResult:
-    raw_dimensions = agent_json.get("dimensions")
-    raw_dimensions = raw_dimensions if isinstance(raw_dimensions, dict) else {}
-    normalized_dimensions: dict[str, dict[str, Any]] = {}
-    warnings: list[str] = []
-    evidence_citations: dict[str, list[dict[str, Any]]] = {}
-
-    for dim_key in dimensions:
-        dim_payload = raw_dimensions.get(dim_key)
-        if not isinstance(dim_payload, dict):
-            warnings = merge_unique_warnings(
-                warnings, [f"agent_mcp_dimension_missing:{dim_key}"]
-            )
-            dim_payload = {}
-        citations = [
-            {
-                "chunk_id": item.get("chunk_id"),
-                "page_idx": item.get("page_idx"),
-                "bbox": item.get("bbox"),
-            }
-            for item in evidence_payload.get(dim_key, [])
-        ]
-        evidence_citations[dim_key] = citations
-        normalized_dimensions[dim_key] = {
-            "score": _safe_float(dim_payload.get("score"), default=50.0),
-            "risk_level": _safe_risk_level(dim_payload.get("risk_level")),
-            "chunks_found": len(evidence_payload.get(dim_key, [])),
-            "summary": str(dim_payload.get("summary", "")),
-            "evidence_warnings": list(dimension_warning_map.get(dim_key, [])),
-            "evidence_citations": citations,
-        }
-
-    return ScoringResult(
-        status="completed",
-        overall_score=_safe_float(agent_json.get("overall_score"), default=50.0),
-        risk_level=_safe_risk_level(agent_json.get("risk_level")),
-        total_risks=_safe_int(agent_json.get("total_risks"), default=0),
-        total_benefits=_safe_int(agent_json.get("total_benefits"), default=0),
-        chunks_analyzed=sum(len(items) for items in evidence_payload.values()),
-        recommendations=_safe_str_list(agent_json.get("recommendations")),
-        evidence_warnings=evidence_warnings,
-        evidence_citations=evidence_citations,
-        dimensions=normalized_dimensions,
-        warnings=warnings,
+def _resolve_execution_mode(explicit_mode: str | None) -> str:
+    raw = explicit_mode or os.getenv("BID_SCORING_AGENT_MCP_EXECUTION_MODE")
+    mode = (raw or "tool-calling").strip().lower()
+    if mode in {"tool-calling", "bulk"}:
+        return mode
+    logger.warning(
+        "Unknown BID_SCORING_AGENT_MCP_EXECUTION_MODE='%s', fallback='tool-calling'",
+        raw,
     )
+    return "tool-calling"
 
 
-def _safe_float(value: Any, *, default: float) -> float:
-    try:
-        parsed = float(value)
-    except Exception:
-        parsed = default
-    return max(0.0, min(100.0, parsed))
+def _extract_message_content(response: Any) -> str:
+    from .scoring_agent_support import extract_message_content
 
-
-def _safe_int(value: Any, *, default: int) -> int:
-    try:
-        return int(value)
-    except Exception:
-        return default
-
-
-def _safe_risk_level(value: Any) -> str:
-    if isinstance(value, str) and value in {"low", "medium", "high"}:
-        return value
-    return "medium"
-
-
-def _safe_str_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    output: list[str] = []
-    for item in value:
-        if isinstance(item, str) and item:
-            output.append(item)
-    return output
-
-
-def _read_int_env(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        parsed = int(raw)
-    except ValueError:
-        return default
-    if parsed <= 0:
-        return default
-    return parsed
-
-
-def _sanitize_keywords(values: list[str]) -> list[str]:
-    deduplicated: list[str] = []
-    seen: set[str] = set()
-    for item in values:
-        if not isinstance(item, str):
-            continue
-        normalized = item.strip()
-        if not normalized:
-            continue
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        deduplicated.append(normalized)
-    return deduplicated
+    return extract_message_content(response)

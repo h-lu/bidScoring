@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(open:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr view:*)",
+      "Bash(git fetch:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "mcp__bid-scoring__list_available_versions",
+      "mcp__bid-scoring__get_document_outline",
+      "mcp__bid-scoring__retrieve",
+      "mcp__bid-scoring__search_chunks",
+      "mcp__bid-scoring__get_chunk_with_context",
+      "mcp__bid-scoring__extract_key_value",
+      "mcp__bid-scoring__compare_across_versions",
+      "mcp__bid-scoring__get_page_metadata",
+      "mcp__bid-scoring__prepare_highlight_targets",
+      "mcp__bid-scoring__highlight_pdf",
+      "mcp__bid-scoring__get_unit_evidence",
+      "mcp__bid-scoring__search_by_heading"
+    ]
+  }
+}
