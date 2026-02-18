@@ -1,51 +1,36 @@
 ---
 name: bid-analyze
-description: Evaluates bidding documents with evidence-first scoring and PDF-traceable citations. Use when users ask for bidder scoring, comparison, risk review, or recommendation ranking.
+description: 在投标评审场景使用，要求证据优先评分并强制总控与专职代理协作。
 ---
 
-# Bid Analyze Skill
+# 投标分析 Skill
 
-## Goal
-先取证，再评分。所有结论必须可追溯到 PDF 原始位置。
+## 协作模式
+本 skill 强制使用多代理协作：
+1. `bid-team-orchestrator`（总控）
+2. `bid-team-evidence`
+3. `bid-team-scoring`
+4. `bid-team-traceability`
 
-## Use When
-- 需要对单个 `version_id` 做投标评分
-- 需要比较多个投标方并给出排序建议
-- 需要解释“为什么这个分数成立”
-- 需要确保结论可定位高亮回原始 PDF
+执行顺序：
+1. 取证
+2. 评分
+3. 追溯审核
+4. 汇总最终 JSON
 
-## Non-Negotiable Rules
-1. 必须先调用 MCP 工具拿证据，再给分。
-2. 每条证据必须包含 `chunk_id/page_idx/bbox`，缺一不可。
-3. 证据不足时不拒答：写入 `warnings`，该维度给中性分 `50`。
-4. 不得使用文档外知识或杜撰内容。
-5. 输出必须是结构化 JSON，方便系统回收和审计。
+## 硬规则
+1. 未取证前禁止评分。
+2. 禁止使用 MCP 证据之外的外部事实。
+3. 证据不足时该维度给 `50` 分并加 warning。
+4. 每条被采纳结论必须可追溯到 PDF 字段：
+   - `version_id`
+   - `chunk_id`
+   - `page_idx`
+   - `bbox`
+   - `quote`
 
-## Runbook
-1. 先读 `workflow.md`，按固定流程执行工具探索。
-2. 再读 `rubric.md`，按统一口径计算维度分与总分。
-3. 用 `prompt.md` 作为可粘贴模板（系统提示 + 输出契约）。
-4. 输出格式偏离时，对照 `examples.md` 修正后再提交结果。
-
-## Output Contract
-顶层必须包含：
-- `overall_score`
-- `risk_level`
-- `total_risks`
-- `total_benefits`
-- `recommendations`
-- `dimensions`
-- `warnings`
-
-每个 `dimensions[i]` 必须包含：
-- `key`
-- `score`
-- `risk_level`
-- `reasoning`
-- `evidence[]`（每条带 `version_id/chunk_id/page_idx/bbox/quote`）
-- `warnings[]`
-
-## Maintenance
-- 评分策略单源：`config/agent_scoring_policy.yaml`
-- 策略模板：`prompt.md`（需与策略单源保持同步）
-- 一致性校验：`uv run python scripts/check_skill_policy_sync.py --fail-on-violations`
+## 参考文件
+1. `workflow.md`
+2. `rubric.md`
+3. `prompt.md`
+4. `examples.md`

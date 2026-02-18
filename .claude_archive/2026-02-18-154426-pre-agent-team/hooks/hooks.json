@@ -1,0 +1,28 @@
+{
+  "description": "Hooks for bid-review-team plugin automation",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__bid-scoring__get_page_metadata|mcp__bid-scoring__search_chunks",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/mcp-param-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "bid-review-team",
+  "version": "1.0.0",
+  "description": "用于投标文件事实优先审核的 agent-team 工作流。",
+  "author": {
+    "name": "bidScoring",
+    "email": "maintainer@bid-scoring.local",
+    "url": "https://github.com/h-lu/bidScoring"
+  },
+  "homepage": "https://github.com/h-lu/bidScoring",
+  "repository": "https://github.com/h-lu/bidScoring",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "agent-team",
+    "bid-review",
+    "mcp",
+    "traceability"
+  ]
+}

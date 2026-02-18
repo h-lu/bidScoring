@@ -208,3 +208,28 @@ D. 输出最终 JSON（不要输出额外解释文本）。
 请输出每个维度的“加分证据/扣分证据”及对应引用，说明最终分数形成过程。
 ```
 
+### Q4: MCP 参数校验报错（validation error）
+
+这类报错通常是“把数组写成了字符串”。
+
+高频错误与修复：
+
+1. `get_page_metadata.page_idx`
+   - 错误：`page_idx: "[0, 1, 2, 3]"`
+   - 正确：`page_idx: [0, 1, 2, 3]`
+2. `search_chunks.page_range`
+   - 错误：`page_range: "[3, 8]"`
+   - 正确：`page_range: [3, 8]`
+3. `search_chunks.element_types`
+   - 错误：`element_types: "[\"text\",\"table\"]"`
+   - 正确：`element_types: ["text", "table"]`
+
+可直接给 Claude 的纠错提示：
+
+```text
+你上一轮 MCP 调用参数类型错误。请按工具签名重试：
+- 数组/列表请传原生数组，不要加引号
+- page_idx 用 int 或 int[]
+- page_range 用 [start, end]
+仅修正参数类型并重试同一工具调用。
+```

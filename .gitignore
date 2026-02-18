@@ -24,6 +24,7 @@ venv/
 *.swo
 # .claude  # Allow skill files to be committed
 .deepeval
+.claude/logs/
 
 # OS
 .DS_Store

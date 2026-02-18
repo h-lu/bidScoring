@@ -260,6 +260,8 @@ uv run python scripts/compare_scoring_runs.py \
 - `docs/guides/claude-code-bid-analyze-playbook.md`: Claude Code 实操手册（MCP 安装 + 可直接粘贴 Prompt）
 - `docs/guides/claude-skill-authoring-best-practices.md`: Claude Skill 官方最佳实践与本仓库落地约定
 - `docs/guides/claude-scoring-run-comparison-2026-02-16.md`: 两次 Claude 全流程评分结果对比示例
+- `docs/guides/claude-agent-team-plugin.md`: 标准 plugin 架构（skills/agents/hooks/commands）与安装使用说明
+- `docs/guides/claude-agent-team-collaboration-mode.md`: 官方能力对照与当前协作模式决策（Mode-A）
 - `tests/unit/`: 当前有效的单元测试基线
 
 ## 接下来建议做什么

@@ -1,0 +1,28 @@
+{
+  "description": "Hook guards for bid-review team workflow",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__bid-scoring__get_page_metadata|mcp__bid-scoring__search_chunks|mcp__bid-scoring__get_chunk_with_context",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/mcp-param-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
