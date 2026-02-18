@@ -70,6 +70,18 @@ jobs:
           --fail-on-thresholds \
           --summary-out /tmp/scoring_ci_summary.json
 
+    - name: Skill/policy sync gate
+      run: |
+        python scripts/check_skill_policy_sync.py --fail-on-violations
+
+    - name: Retrieval policy gate
+      run: |
+        python scripts/evaluate_retrieval_policy_gate.py \
+          --summary-file data/eval/hybrid_medical_synthetic/eval_summary.json \
+          --policy-pack cn_medical_v1 \
+          --policy-overlay strict_traceability \
+          --fail-on-violations
+
     - name: Run tests
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bid_scoring_test
