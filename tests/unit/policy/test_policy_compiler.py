@@ -21,12 +21,16 @@ def test_compile_policy_artifacts_outputs_runtime_json_and_prompt(tmp_path: Path
     assert artifacts.agent_prompt_path.exists()
     assert artifacts.policy_hash
 
-    runtime_payload = json.loads(artifacts.runtime_policy_path.read_text(encoding="utf-8"))
+    runtime_payload = json.loads(
+        artifacts.runtime_policy_path.read_text(encoding="utf-8")
+    )
     assert runtime_payload["meta"]["pack_id"] == "cn_medical_v1"
     assert runtime_payload["meta"]["overlay"] == "strict_traceability"
     assert runtime_payload["meta"]["policy_hash"] == artifacts.policy_hash
     assert runtime_payload["workflow"]["tool_calling_required"] is True
-    assert "retrieve_dimension_evidence" in runtime_payload["workflow"]["required_tools"]
+    assert (
+        "retrieve_dimension_evidence" in runtime_payload["workflow"]["required_tools"]
+    )
     assert "evaluation_thresholds" in runtime_payload["retrieval"]
 
     prompt_text = artifacts.agent_prompt_path.read_text(encoding="utf-8")

@@ -143,9 +143,7 @@ class OpenAIMcpAgentExecutor:
                 dimension_warning_map,
                 evidence_warnings,
                 backend_observability,
-            ) = (
-                self._run_bulk_mode(request=request, dimensions=dimensions)
-            )
+            ) = self._run_bulk_mode(request=request, dimensions=dimensions)
         else:
             (
                 agent_json,
@@ -153,9 +151,7 @@ class OpenAIMcpAgentExecutor:
                 dimension_warning_map,
                 evidence_warnings,
                 backend_observability,
-            ) = (
-                self._run_tool_calling_mode(request=request, dimensions=dimensions)
-            )
+            ) = self._run_tool_calling_mode(request=request, dimensions=dimensions)
 
         return normalize_agent_result(
             agent_json=agent_json,

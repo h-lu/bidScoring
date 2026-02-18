@@ -38,8 +38,12 @@ class AgentScoringPolicy:
         override = self.retrieval_dimension_overrides.get(dimension, {})
         mode = override.get("mode") if isinstance(override, dict) else None
         top_k = override.get("top_k") if isinstance(override, dict) else None
-        resolved_mode = mode if mode in {"hybrid", "keyword", "vector"} else fallback_mode
-        resolved_top_k = int(top_k) if isinstance(top_k, int) and top_k > 0 else fallback_top_k
+        resolved_mode = (
+            mode if mode in {"hybrid", "keyword", "vector"} else fallback_mode
+        )
+        resolved_top_k = (
+            int(top_k) if isinstance(top_k, int) and top_k > 0 else fallback_top_k
+        )
         return resolved_mode, resolved_top_k
 
     def tool_calling_system_prompt(self) -> str:

@@ -196,7 +196,9 @@ def _to_policy_bundle(payload: dict[str, Any], *, meta: PolicyMeta) -> PolicyBun
     )
 
     evidence_gate = EvidenceGatePolicy(
-        default_min_citations=_required_int(gate_raw, "default_min_citations", minimum=1),
+        default_min_citations=_required_int(
+            gate_raw, "default_min_citations", minimum=1
+        ),
         require_page_idx=_required_bool(gate_raw, "require_page_idx"),
         require_bbox=_required_bool(gate_raw, "require_bbox"),
         require_quote=_required_bool(gate_raw, "require_quote"),
@@ -236,11 +238,7 @@ def _load_yaml_object(path: Path) -> dict[str, Any]:
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     merged: dict[str, Any] = dict(base)
     for key, value in overlay.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
             continue
         merged[key] = value
@@ -352,9 +350,7 @@ def _optional_metric_thresholds(
                 )
             threshold_value = float(threshold)
             if threshold_value < 0:
-                raise PolicyLoadError(
-                    f"{key}.{method}.{metric} threshold must be >= 0"
-                )
+                raise PolicyLoadError(f"{key}.{method}.{metric} threshold must be >= 0")
             metric_output[metric.strip()] = threshold_value
         output[method] = metric_output
     return output

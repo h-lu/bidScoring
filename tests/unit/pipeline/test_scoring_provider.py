@@ -574,7 +574,10 @@ def test_openai_mcp_agent_executor_default_model_is_gpt5_mini(monkeypatch):
     )
 
     assert captured_create_kwargs["model"] == "gpt-5-mini"
-    assert captured_create_kwargs["tools"][0]["function"]["name"] == "retrieve_dimension_evidence"
+    assert (
+        captured_create_kwargs["tools"][0]["function"]["name"]
+        == "retrieve_dimension_evidence"
+    )
 
 
 def test_openai_mcp_agent_executor_applies_neutral_score_when_no_verifiable_evidence():
@@ -644,9 +647,7 @@ def test_openai_mcp_agent_executor_applies_neutral_score_when_no_verifiable_evid
         )
     )
 
-    assert (
-        "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
-    )
+    assert "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
     assert result.dimensions["warranty"]["score"] == 50.0
     assert result.dimensions["warranty"]["risk_level"] == "medium"
     assert result.dimensions["warranty"]["chunks_found"] == 0

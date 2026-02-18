@@ -76,9 +76,7 @@ def _policy_with_override() -> AgentScoringPolicy:
         max_turns_default=8,
         retrieval_default_mode="hybrid",
         retrieval_default_top_k=8,
-        retrieval_dimension_overrides={
-            "warranty": {"mode": "vector", "top_k": 3}
-        },
+        retrieval_dimension_overrides={"warranty": {"mode": "vector", "top_k": 3}},
         retrieval_evaluation_thresholds={},
         evidence_default_min_citations=1,
         evidence_require_page_idx=True,
@@ -124,7 +122,10 @@ def test_openai_mcp_agent_executor_defaults_to_tool_calling(monkeypatch):
 
     result = executor.score(_request())
 
-    assert completions.calls[0]["tools"][0]["function"]["name"] == "retrieve_dimension_evidence"
+    assert (
+        completions.calls[0]["tools"][0]["function"]["name"]
+        == "retrieve_dimension_evidence"
+    )
     assert "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
     assert result.dimensions["warranty"]["score"] == 50.0
     assert result.backend_observability["execution_mode"] == "tool-calling"
