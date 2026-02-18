@@ -12,12 +12,17 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 
 check_sync = _MODULE.check_sync
-_load_yaml = _MODULE._load_yaml
+_load_policy = _MODULE._load_policy
 
 
 def test_skill_prompt_and_policy_are_in_sync():
     root = Path(__file__).resolve().parents[2]
-    policy = _load_yaml(root / "config" / "agent_scoring_policy.yaml")
+    policy = _load_policy(
+        policy_pack="cn_medical_v1",
+        policy_overlay="strict_traceability",
+        policy_packs_root=root / "config" / "policy" / "packs",
+        policy_artifact=None,
+    )
     prompt = (root / ".claude" / "skills" / "bid-analyze" / "prompt.md").read_text(
         encoding="utf-8"
     )
@@ -29,6 +34,7 @@ def test_skill_prompt_and_policy_are_in_sync():
 
 def test_sync_check_detects_missing_required_tool():
     policy = {
+        "meta": {"pack_id": "cn_medical_v1"},
         "workflow": {
             "tool_calling_required": True,
             "required_tools": ["retrieve_dimension_evidence"],
@@ -47,3 +53,4 @@ def test_sync_check_detects_missing_required_tool():
 
     assert "missing_required_tool:retrieve_dimension_evidence" in violations
     assert "missing_output_schema_hint" in violations
+    assert "missing_policy_pack_reference" in violations

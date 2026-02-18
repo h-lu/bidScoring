@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from bid_scoring.pipeline.application.scoring_provider import OpenAIMcpAgentExecutor
+from bid_scoring.pipeline.application.scoring_agent_policy import AgentScoringPolicy
 from bid_scoring.pipeline.application.scoring_types import ScoringRequest
 
 
@@ -62,6 +63,27 @@ def _request() -> ScoringRequest:
         bidder_name="A公司",
         project_name="示例项目",
         dimensions=["warranty"],
+    )
+
+
+def _policy_with_override() -> AgentScoringPolicy:
+    return AgentScoringPolicy(
+        constraints=["必须仅基于证据评分"],
+        risk_rules={"high": "高", "medium": "中", "low": "低"},
+        output_schema_hint="{overall_score,dimensions}",
+        tool_calling_required=True,
+        required_tools=["retrieve_dimension_evidence"],
+        max_turns_default=8,
+        retrieval_default_mode="hybrid",
+        retrieval_default_top_k=8,
+        retrieval_dimension_overrides={
+            "warranty": {"mode": "vector", "top_k": 3}
+        },
+        retrieval_evaluation_thresholds={},
+        evidence_default_min_citations=1,
+        evidence_require_page_idx=True,
+        evidence_require_bbox=True,
+        evidence_require_quote=True,
     )
 
 
@@ -196,3 +218,125 @@ def test_openai_mcp_agent_executor_tool_loop_collects_evidence():
         isinstance(msg, dict) and msg.get("role") == "tool"
         for msg in completions.calls[1]["messages"]
     )
+
+
+def test_openai_mcp_agent_executor_tool_loop_uses_dimension_policy_defaults():
+    tool_call = _ToolCall(
+        call_id="call_1",
+        name="retrieve_dimension_evidence",
+        arguments=json.dumps({"dimension": "warranty"}, ensure_ascii=False),
+    )
+    completions = _Completions(
+        responses=[
+            _Response(_Message(content="", tool_calls=[tool_call])),
+            _Response(
+                _Message(
+                    json.dumps(
+                        {
+                            "overall_score": 82,
+                            "risk_level": "medium",
+                            "total_risks": 1,
+                            "total_benefits": 1,
+                            "recommendations": [],
+                            "dimensions": {
+                                "warranty": {
+                                    "score": 82,
+                                    "risk_level": "medium",
+                                    "summary": "ok",
+                                }
+                            },
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            ),
+        ]
+    )
+
+    captured_retrieve: list[dict[str, object]] = []
+
+    def _fake_retrieve(**kwargs):
+        captured_retrieve.append(kwargs)
+        return {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "chunk-1",
+                    "page_idx": 8,
+                    "bbox": [1, 2, 3, 4],
+                    "text": "原厂免费质保5年",
+                    "evidence_status": "verified",
+                    "warnings": [],
+                }
+            ],
+        }
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=_fake_retrieve,
+        client=_Client(completions),
+        model="test-model",
+        execution_mode="tool-calling",
+        max_turns=4,
+        policy=_policy_with_override(),
+    )
+
+    result = executor.score(_request())
+
+    assert result.overall_score == 82.0
+    assert len(captured_retrieve) == 1
+    assert captured_retrieve[0]["mode"] == "vector"
+    assert captured_retrieve[0]["top_k"] == 3
+
+
+def test_openai_mcp_agent_executor_bulk_mode_respects_quote_gate():
+    completions = _Completions(
+        responses=[
+            _Response(
+                _Message(
+                    json.dumps(
+                        {
+                            "overall_score": 86,
+                            "risk_level": "low",
+                            "total_risks": 0,
+                            "total_benefits": 1,
+                            "recommendations": [],
+                            "dimensions": {
+                                "warranty": {
+                                    "score": 86,
+                                    "risk_level": "low",
+                                    "summary": "模型输出",
+                                }
+                            },
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            )
+        ]
+    )
+
+    executor = OpenAIMcpAgentExecutor(
+        retrieve_fn=lambda **kwargs: {
+            "warnings": [],
+            "results": [
+                {
+                    "chunk_id": "chunk-1",
+                    "page_idx": 2,
+                    "bbox": [1, 2, 3, 4],
+                    "text": "",
+                    "evidence_status": "verified",
+                    "warnings": [],
+                }
+            ],
+        },
+        client=_Client(completions),
+        model="test-model",
+        execution_mode="bulk",
+        policy=_policy_with_override(),
+    )
+
+    result = executor.score(_request())
+
+    assert "missing_quote_text" in result.evidence_warnings
+    assert "agent_mcp_dimension_no_verifiable_evidence:warranty" in result.warnings
+    assert result.dimensions["warranty"]["score"] == 50.0
