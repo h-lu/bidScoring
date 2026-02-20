@@ -222,7 +222,7 @@ def test_cli_run_prod_uses_context_json_with_production_defaults(
     assert request.build_embeddings is True
     assert request.question_context is not None
     assert request.question_context.pack_id == "cn_medical_v1"
-    assert request.question_context.overlay == "strict_traceability"
+    assert request.question_context.overlay == "fast_eval"
 
 
 def test_cli_run_prod_supports_pdf_path(tmp_path: Path, fixed_ids):
@@ -252,6 +252,64 @@ def test_cli_run_prod_supports_pdf_path(tmp_path: Path, fixed_ids):
     assert request.pdf_path == pdf_path
     assert request.mineru_parser == "api"
     assert request.scoring_backend == "hybrid"
+
+
+def test_cli_run_prod_quality_mode_strict_switches_overlay(tmp_path: Path, fixed_ids):
+    content_path = tmp_path / "context_list.json"
+    content_path.write_text(json.dumps([{"type": "text", "text": "hello"}]), "utf-8")
+
+    service = _FakeService()
+    code = cli.main(
+        [
+            "run-prod",
+            "--context-json",
+            str(content_path),
+            "--project-id",
+            fixed_ids["project_id"],
+            "--document-id",
+            fixed_ids["document_id"],
+            "--version-id",
+            fixed_ids["version_id"],
+            "--quality-mode",
+            "strict",
+        ],
+        service=service,
+    )
+
+    assert code == 0
+    assert service.run_calls[0].question_context is not None
+    assert service.run_calls[0].question_context.overlay == "strict_traceability"
+
+
+def test_cli_run_prod_explicit_overlay_overrides_quality_mode(
+    tmp_path: Path, fixed_ids
+):
+    content_path = tmp_path / "context_list.json"
+    content_path.write_text(json.dumps([{"type": "text", "text": "hello"}]), "utf-8")
+
+    service = _FakeService()
+    code = cli.main(
+        [
+            "run-prod",
+            "--context-json",
+            str(content_path),
+            "--project-id",
+            fixed_ids["project_id"],
+            "--document-id",
+            fixed_ids["document_id"],
+            "--version-id",
+            fixed_ids["version_id"],
+            "--quality-mode",
+            "fast",
+            "--question-overlay",
+            "strict_traceability",
+        ],
+        service=service,
+    )
+
+    assert code == 0
+    assert service.run_calls[0].question_context is not None
+    assert service.run_calls[0].question_context.overlay == "strict_traceability"
 
 
 def test_cli_run_e2e_accepts_scoring_backend_option(tmp_path: Path, fixed_ids):
