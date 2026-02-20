@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any, Protocol, Sequence
 
@@ -22,7 +23,16 @@ from bid_scoring.pipeline.infrastructure.postgres_repository import (
 )
 
 DEFAULT_PROD_QUESTION_PACK = "cn_medical_v1"
-DEFAULT_PROD_QUESTION_OVERLAY = "strict_traceability"
+DEFAULT_QUESTION_OVERLAY_STRICT = "strict_traceability"
+DEFAULT_QUESTION_OVERLAY_FAST = "fast_eval"
+_PROD_QUALITY_MODE_ENV = "BID_SCORING_PROD_QUALITY_MODE"
+_POLICY_PACK_ENV = "BID_SCORING_POLICY_PACK"
+_POLICY_OVERLAY_ENV = "BID_SCORING_POLICY_OVERLAY"
+_POLICY_ARTIFACT_ENV = "BID_SCORING_POLICY_ARTIFACT"
+_QUALITY_TO_OVERLAY = {
+    "fast": DEFAULT_QUESTION_OVERLAY_FAST,
+    "strict": DEFAULT_QUESTION_OVERLAY_STRICT,
+}
 
 
 class QuestionContextResolverLike(Protocol):
@@ -45,6 +55,31 @@ def _hybrid_weight_arg(value: str) -> float:
     if parsed < 0.0 or parsed > 1.0:
         raise argparse.ArgumentTypeError("hybrid weight must be within [0, 1]")
     return parsed
+
+
+def _resolve_default_prod_quality_mode() -> str:
+    raw = (os.getenv(_PROD_QUALITY_MODE_ENV) or "fast").strip().lower()
+    if raw in _QUALITY_TO_OVERLAY:
+        return raw
+    return "fast"
+
+
+def _resolve_prod_question_overlay(
+    *,
+    quality_mode: str | None,
+    explicit_overlay: str | None,
+) -> str:
+    if explicit_overlay:
+        return explicit_overlay
+    mode = (quality_mode or _resolve_default_prod_quality_mode()).strip().lower()
+    return _QUALITY_TO_OVERLAY.get(mode, DEFAULT_QUESTION_OVERLAY_FAST)
+
+
+def _apply_policy_profile_env(*, pack: str, overlay: str) -> None:
+    if os.getenv(_POLICY_ARTIFACT_ENV):
+        return
+    os.environ[_POLICY_PACK_ENV] = pack
+    os.environ[_POLICY_OVERLAY_ENV] = overlay
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,8 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--question-overlay",
-        default=DEFAULT_PROD_QUESTION_OVERLAY,
-        help=f"Question overlay strategy (default: {DEFAULT_PROD_QUESTION_OVERLAY})",
+        default=DEFAULT_QUESTION_OVERLAY_STRICT,
+        help=f"Question overlay strategy (default: {DEFAULT_QUESTION_OVERLAY_STRICT})",
     )
     run.add_argument("--output")
 
@@ -137,6 +172,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_prod.add_argument("--bidder-name", default="Unknown")
     run_prod.add_argument("--project-name", default="Unknown Project")
     run_prod.add_argument(
+        "--quality-mode",
+        choices=["fast", "strict"],
+        default=_resolve_default_prod_quality_mode(),
+        help="Production quality mode (fast: lower latency, strict: higher traceability)",
+    )
+    run_prod.add_argument(
         "--mineru-parser",
         choices=["auto", "cli", "api"],
         default="auto",
@@ -149,8 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_prod.add_argument(
         "--question-overlay",
-        default=DEFAULT_PROD_QUESTION_OVERLAY,
-        help=f"Question overlay strategy (default: {DEFAULT_PROD_QUESTION_OVERLAY})",
+        default=None,
+        help=(
+            "Question overlay strategy. Defaults by --quality-mode "
+            "(fast->fast_eval, strict->strict_traceability)."
+        ),
     )
     run_prod.add_argument("--output")
     run_prod.set_defaults(
@@ -234,10 +278,19 @@ def _run_e2e(
     service: Any | None = None,
     question_context_resolver: QuestionContextResolverLike | None = None,
 ) -> int:
+    question_pack = args.question_pack
+    question_overlay = args.question_overlay
+    if args.command == "run-prod":
+        question_overlay = _resolve_prod_question_overlay(
+            quality_mode=getattr(args, "quality_mode", None),
+            explicit_overlay=args.question_overlay,
+        )
+        _apply_policy_profile_env(pack=question_pack, overlay=question_overlay)
+
     resolver = question_context_resolver or QuestionContextResolver()
     resolved = resolver.resolve(
-        question_pack=args.question_pack,
-        question_overlay=args.question_overlay,
+        question_pack=question_pack,
+        question_overlay=question_overlay,
         requested_dimensions=list(args.dimensions) if args.dimensions else None,
     )
 
@@ -261,8 +314,8 @@ def _run_e2e(
         scoring_backend=args.scoring_backend,
         hybrid_primary_weight=args.hybrid_primary_weight,
         question_context=resolved.question_context,
-        question_pack=args.question_pack,
-        question_overlay=args.question_overlay,
+        question_pack=question_pack,
+        question_overlay=question_overlay,
     )
 
     if service is not None:

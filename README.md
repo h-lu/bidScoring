@@ -23,7 +23,7 @@
 - 执行入口：`bid-pipeline run-prod`
 - 高级入口：`bid-pipeline run-e2e`
 - 策略来源：`config/policy/packs/<pack_id>`
-- 评分默认策略：`cn_medical_v1 + strict_traceability`
+- 生产默认策略：`run-prod` 默认 `quality-mode=fast`（`cn_medical_v1 + fast_eval`）
 
 ## 3. 快速开始
 
@@ -59,6 +59,17 @@ uv run bid-pipeline run-prod \
   --project-name "示例项目"
 ```
 
+高精度模式（可追溯要求更严格）：
+
+```bash
+uv run bid-pipeline run-prod \
+  --quality-mode strict \
+  --context-json data/eval/hybrid_medical_synthetic/content_list.synthetic_bidder_A.json \
+  --project-id <PROJECT_UUID> \
+  --document-id <DOCUMENT_UUID> \
+  --version-id <VERSION_UUID>
+```
+
 ## 4. 策略配置（可调、可扩展）
 
 策略目录：
@@ -70,6 +81,7 @@ uv run bid-pipeline run-prod \
 - `BID_SCORING_POLICY_PACK`
 - `BID_SCORING_POLICY_OVERLAY`
 - `BID_SCORING_POLICY_ARTIFACT`（可选）
+- `BID_SCORING_PROD_QUALITY_MODE=fast|strict`（`run-prod` 默认行为）
 
 编译策略产物：
 
@@ -109,5 +121,5 @@ uv run python scripts/evaluate_retrieval_policy_gate.py \
 ## 8. 当前状态
 
 - 已完成：policy-as-config 重构与检索门禁接线
-- 当前默认生产策略：`cn_medical_v1 + strict_traceability`
+- 当前默认生产策略：`run-prod` 使用 `cn_medical_v1 + fast_eval`
 - 建议下一步：基于真实业务样本扩大评测集并固化 CI 门禁

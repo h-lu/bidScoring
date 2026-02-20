@@ -13,7 +13,8 @@ uv run bid-pipeline run-prod --help
 要点：
 - 输入二选一：`--context-json` 或 `--pdf-path`
 - 默认评分后端：`hybrid`
-- 默认问题集：`cn_medical_v1 + strict_traceability`
+- 默认质量模式：`--quality-mode fast`（对应 `cn_medical_v1 + fast_eval`）
+- 高精度模式：`--quality-mode strict`（对应 `cn_medical_v1 + strict_traceability`）
 
 示例：
 
@@ -59,6 +60,7 @@ uv run bid-pipeline ingest-content-list --help
 - `BID_SCORING_POLICY_PACK=cn_medical_v1`
 - `BID_SCORING_POLICY_OVERLAY=strict_traceability`
 - `BID_SCORING_POLICY_ARTIFACT=artifacts/policy/<pack>/<overlay>/runtime_policy.json`
+- `BID_SCORING_PROD_QUALITY_MODE=fast|strict`
 
 ### 2.3 评分相关
 
